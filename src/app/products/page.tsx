@@ -15,6 +15,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import ProductListingSkeleton from "@/components/skeletons/ProductListingSkeleton";
+import { formatPrice } from "@/lib/format";
 
 interface IProduct {
   _id: string;
@@ -252,15 +253,15 @@ function ProductsContent() {
                       {p.discountPrice ? (
                         <div className="flex items-baseline gap-1.5">
                           <span className="text-base font-black text-slate-900 dark:text-white">
-                            ${p.discountPrice.toFixed(2)}
+                            {formatPrice(p.discountPrice)}
                           </span>
                           <span className="text-xs text-slate-400 line-through">
-                            ${p.price.toFixed(2)}
+                            {formatPrice(p.price)}
                           </span>
                         </div>
                       ) : (
                         <span className="text-base font-black text-slate-900 dark:text-white">
-                          ${p.price.toFixed(2)}
+                          {formatPrice(p.price)}
                         </span>
                       )}
                     </div>

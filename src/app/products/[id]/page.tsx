@@ -21,6 +21,8 @@ import {
   Lock,
 } from "lucide-react";
 import ProductDetailSkeleton from "@/components/skeletons/ProductDetailSkeleton";
+import { useCart } from "@/context/CartContext";
+import { formatPrice } from "@/lib/format";
 
 interface IProduct {
   _id: string;
@@ -105,10 +107,16 @@ export default function ProductDetailPage() {
     }
   }, [idOrSlug]);
 
-  const handleAddToCart = () => {
+  const { addToCart } = useCart();
+
+  const handleAddToCart = async () => {
     if (isRestrictedItem && !ageConfirmed) return;
-    setAddedToCartToast(true);
-    setTimeout(() => setAddedToCartToast(false), 3000);
+    if (!product) return;
+    const success = await addToCart(product, quantity);
+    if (success) {
+      setAddedToCartToast(true);
+      setTimeout(() => setAddedToCartToast(false), 3000);
+    }
   };
 
   if (loading) {
@@ -245,18 +253,18 @@ export default function ProductDetailPage() {
             {product.discountPrice ? (
               <>
                 <span className="text-3xl font-black text-slate-900 dark:text-white">
-                  ${product.discountPrice.toFixed(2)}
+                  {formatPrice(product.discountPrice)}
                 </span>
                 <span className="text-lg font-semibold text-slate-400 line-through">
-                  ${product.price.toFixed(2)}
+                  {formatPrice(product.price)}
                 </span>
                 <span className="text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/50 px-2 py-0.5 rounded-md">
-                  Save ${(product.price - product.discountPrice).toFixed(2)}
+                  Save {formatPrice(product.price - product.discountPrice)}
                 </span>
               </>
             ) : (
               <span className="text-3xl font-black text-slate-900 dark:text-white">
-                ${product.price.toFixed(2)}
+                {formatPrice(product.price)}
               </span>
             )}
           </div>
