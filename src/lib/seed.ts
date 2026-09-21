@@ -6,7 +6,9 @@ import { Product } from "@/models/Product";
 import { Order } from "@/models/Order";
 import { OrderItem } from "@/models/OrderItem";
 import { Invoice } from "@/models/Invoice";
+import { NotificationLog } from "@/models/NotificationLog";
 import { createInvoiceForOrder } from "./invoice";
+import { NotificationService } from "./notifications";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
 
@@ -318,6 +320,23 @@ export async function seedStoreData() {
         logger.error("Error seeding invoice for #KF100001:", { error: String(invErr) });
       }
     }
+  }
+
+  // Ensure WhatsApp notifications exist for reference order #KF100001
+  try {
+    const kf = await Order.findOne({ orderNumber: "KF100001" });
+    if (kf) {
+      const existingNotifs = await NotificationLog.countDocuments({ orderNumber: "KF100001" });
+      if (existingNotifs === 0) {
+        await NotificationService.sendOrderConfirmation(kf);
+        await NotificationService.sendPaymentConfirmation(kf);
+        await NotificationService.sendInvoice(kf);
+        await NotificationService.sendDispatchDetails(kf);
+        logger.info("Seeded WhatsApp notifications for reference order #KF100001");
+      }
+    }
+  } catch (notifErr) {
+    logger.error("Error seeding WhatsApp notifications for #KF100001:", { error: String(notifErr) });
   }
 
   return {

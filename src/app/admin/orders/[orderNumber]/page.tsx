@@ -27,6 +27,9 @@ import {
   FileText,
   Send,
   Download,
+  MessageSquare,
+  CheckCheck,
+  Smartphone,
 } from "lucide-react";
 import { formatPrice } from "@/lib/format";
 
@@ -174,6 +177,51 @@ export default function AdminOrderDetailPage() {
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
   const [sendingInvoice, setSendingInvoice] = useState(false);
 
+  // WhatsApp Notifications State (Sprint 11)
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [sendingNotification, setSendingNotification] = useState(false);
+
+  const fetchNotifications = useCallback(async () => {
+    if (!rawOrderNumber) return;
+    setLoadingNotifications(true);
+    try {
+      const res = await fetch(`/api/admin/orders/${encodeURIComponent(rawOrderNumber)}/notifications`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setNotifications(json.data.notifications || []);
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingNotifications(false);
+    }
+  }, [rawOrderNumber]);
+
+  const handleSendNotification = async (type: string, customMessage?: string) => {
+    setSendingNotification(true);
+    try {
+      const res = await fetch(`/api/admin/orders/${encodeURIComponent(rawOrderNumber)}/notifications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, customMessage }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setToastMessage({ type: "success", text: `WhatsApp ${type} dispatched successfully!` });
+        await fetchNotifications();
+      } else {
+        setToastMessage({ type: "error", text: json.message || "Failed to send WhatsApp message." });
+      }
+    } catch {
+      setToastMessage({ type: "error", text: "Network error sending WhatsApp message." });
+    } finally {
+      setSendingNotification(false);
+    }
+  };
+
   const fetchOrderDetail = useCallback(async () => {
     if (!rawOrderNumber) return;
     setLoading(true);
@@ -205,7 +253,8 @@ export default function AdminOrderDetailPage() {
 
   useEffect(() => {
     fetchOrderDetail();
-  }, [fetchOrderDetail]);
+    fetchNotifications();
+  }, [fetchOrderDetail, fetchNotifications]);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -995,6 +1044,172 @@ export default function AdminOrderDetailPage() {
                 </button>
               </div>
             )}
+          </div>
+
+          {/* WhatsApp Business Card (Sprint 11) */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+                  <MessageSquare className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <span>WhatsApp Business</span>
+                    <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  </h2>
+                  <p className="text-[11px] text-slate-500">Automated & Direct Messaging</p>
+                </div>
+              </div>
+              <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300">
+                {notifications.length} {notifications.length === 1 ? "MESSAGE" : "MESSAGES"}
+              </span>
+            </div>
+
+            {/* Direct Customer WhatsApp Link */}
+            {order.shippingAddress?.phone ? (
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-3 dark:border-emerald-950/50 dark:bg-emerald-950/20 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Smartphone className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="font-mono text-xs font-bold text-emerald-950 dark:text-emerald-200">
+                    {order.shippingAddress.phone}
+                  </span>
+                </div>
+                <a
+                  href={`https://wa.me/${order.shippingAddress.phone.replace(/\D/g, "")}?text=${encodeURIComponent(`Hello ${order.shippingAddress.fullName}, regarding your FiguresWorld order #${order.orderNumber}:`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-500 transition shadow-xs"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  <span>Open Chat</span>
+                </a>
+              </div>
+            ) : null}
+
+            {/* Quick WhatsApp Action Triggers */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                Trigger WhatsApp Notification:
+              </span>
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
+                <button
+                  onClick={() => handleSendNotification("ORDER_CONFIRMATION")}
+                  disabled={sendingNotification}
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition disabled:opacity-50 text-left truncate dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300"
+                >
+                  📦 Confirmation
+                </button>
+                <button
+                  onClick={() => handleSendNotification("PAYMENT_CONFIRMATION")}
+                  disabled={sendingNotification}
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition disabled:opacity-50 text-left truncate dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300"
+                >
+                  💰 Payment Recv
+                </button>
+                <button
+                  onClick={() => handleSendNotification("INVOICE")}
+                  disabled={sendingNotification}
+                  className="rounded-xl border border-indigo-200 bg-indigo-50/60 px-2.5 py-1.5 font-medium text-indigo-700 hover:bg-indigo-100 transition disabled:opacity-50 text-left truncate dark:border-indigo-900/40 dark:bg-indigo-950/30 dark:text-indigo-300"
+                >
+                  📄 Send Invoice
+                </button>
+                <button
+                  onClick={() => handleSendNotification("DISPATCH")}
+                  disabled={sendingNotification}
+                  className="rounded-xl border border-blue-200 bg-blue-50/60 px-2.5 py-1.5 font-medium text-blue-700 hover:bg-blue-100 transition disabled:opacity-50 text-left truncate dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300"
+                >
+                  🚀 Dispatch Alert
+                </button>
+                <button
+                  onClick={() => handleSendNotification("DELIVERY")}
+                  disabled={sendingNotification}
+                  className="col-span-2 rounded-xl border border-emerald-200 bg-emerald-50/60 px-2.5 py-1.5 font-medium text-emerald-700 hover:bg-emerald-100 transition disabled:opacity-50 text-center truncate dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300"
+                >
+                  🎉 Delivery Notice ("Thank you for shopping")
+                </button>
+              </div>
+            </div>
+
+            {/* Notification History Timeline */}
+            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Dispatch History:
+                </span>
+                <button
+                  onClick={fetchNotifications}
+                  disabled={loadingNotifications}
+                  className="text-[10px] text-emerald-600 hover:underline flex items-center gap-1"
+                >
+                  <RefreshCw className={`h-2.5 w-2.5 ${loadingNotifications ? "animate-spin" : ""}`} />
+                  <span>Refresh</span>
+                </button>
+              </div>
+
+              {notifications.length === 0 ? (
+                <p className="text-[11px] text-slate-400 py-2 text-center">
+                  No WhatsApp messages dispatched yet.
+                </p>
+              ) : (
+                <div className="max-h-60 overflow-y-auto space-y-2 pr-1 text-xs">
+                  {notifications.map((n: any, idx: number) => (
+                    <div
+                      key={n._id || idx}
+                      className="rounded-xl border border-slate-100 bg-slate-50/60 p-2.5 space-y-1.5 dark:border-slate-800 dark:bg-slate-800/40"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="rounded font-bold text-[10px] px-1.5 py-0.5 bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
+                          {n.notificationType}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {n.status === "READ" ? (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600">
+                              <CheckCheck className="h-3 w-3" /> READ
+                            </span>
+                          ) : n.status === "DELIVERED" ? (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-teal-600">
+                              <Check className="h-3 w-3" /> DELIVERED
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-blue-600">
+                              {n.status}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {n.body && (
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300 whitespace-pre-line line-clamp-3">
+                          {n.body}
+                        </p>
+                      )}
+
+                      {n.documentUrl && (
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-mono truncate max-w-[150px]">
+                            📎 {n.filename || "invoice.pdf"}
+                          </span>
+                          <a
+                            href={n.documentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] font-bold text-indigo-600 hover:underline shrink-0"
+                          >
+                            View Document
+                          </a>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between text-[9px] text-slate-400 pt-0.5 border-t border-slate-100 dark:border-slate-800/60">
+                        <span>To: +{n.recipientPhone}</span>
+                        <span>{new Date(n.sentAt || n.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

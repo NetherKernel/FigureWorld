@@ -9,6 +9,7 @@ import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
 import { createInvoiceForOrder } from "@/lib/invoice";
+import { NotificationService } from "@/lib/notifications";
 
 const updateStatusSchema = z.object({
   status: z.enum([
@@ -126,6 +127,11 @@ export async function PATCH(
           order.codDetails.dispatchedAt = new Date();
         }
       }
+      try {
+        await NotificationService.sendDispatchDetails(order);
+      } catch (notifErr) {
+        console.error("WhatsApp dispatch notification error:", notifErr);
+      }
     } else if (targetStatus === "DELIVERED") {
       if (!order.shipmentDetails) {
         order.shipmentDetails = {};
@@ -134,6 +140,11 @@ export async function PATCH(
       // If COD and payment was PENDING, doorstep delivery means cash collected
       if (order.paymentMethod === "COD" && order.paymentStatus === "PENDING") {
         order.paymentStatus = "PAID";
+      }
+      try {
+        await NotificationService.sendDeliveryUpdate(order);
+      } catch (notifErr) {
+        console.error("WhatsApp delivery notification error:", notifErr);
       }
     } else if (targetStatus === "CONFIRMED") {
       if (order.codDetails && order.codDetails.codStatus === "PENDING_VERIFICATION") {
@@ -146,6 +157,12 @@ export async function PATCH(
         await createInvoiceForOrder(order.orderNumber);
       } catch (invErr) {
         console.error("Invoice auto-generation error:", invErr);
+      }
+      try {
+        await NotificationService.sendOrderConfirmation(order);
+        await NotificationService.sendInvoice(order);
+      } catch (notifErr) {
+        console.error("WhatsApp confirmation notification error:", notifErr);
       }
     }
 

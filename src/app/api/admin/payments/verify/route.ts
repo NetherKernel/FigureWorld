@@ -8,6 +8,7 @@ import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
 import { createInvoiceForOrder } from "@/lib/invoice";
+import { NotificationService } from "@/lib/notifications";
 
 const verifyPaymentSchema = z.object({
   orderNumber: z.string().optional(),
@@ -107,6 +108,13 @@ export async function POST(req: Request) {
         await createInvoiceForOrder(order.orderNumber);
       } catch (invErr) {
         console.error("Invoice auto-generation error:", invErr);
+      }
+      try {
+        await NotificationService.sendPaymentConfirmation(order);
+        await NotificationService.sendOrderConfirmation(order);
+        await NotificationService.sendInvoice(order);
+      } catch (notifErr) {
+        console.error("WhatsApp notification error:", notifErr);
       }
     }
 

@@ -8,6 +8,7 @@ import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
 import { createInvoiceForOrder } from "@/lib/invoice";
+import { NotificationService } from "@/lib/notifications";
 
 const codActionSchema = z.object({
   orderNumber: z.string().optional(),
@@ -156,6 +157,18 @@ export async function POST(req: Request) {
         await createInvoiceForOrder(order.orderNumber);
       } catch (invErr) {
         console.error("Invoice auto-generation error on COD accept:", invErr);
+      }
+      try {
+        await NotificationService.sendOrderConfirmation(order);
+        await NotificationService.sendInvoice(order);
+      } catch (notifErr) {
+        console.error("WhatsApp notification error on COD accept:", notifErr);
+      }
+    } else if (data.action === "DISPATCH") {
+      try {
+        await NotificationService.sendDispatchDetails(order);
+      } catch (notifErr) {
+        console.error("WhatsApp notification error on COD dispatch:", notifErr);
       }
     }
 

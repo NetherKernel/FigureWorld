@@ -10,3 +10,4 @@ export * from "./Invoice";
 export * from "./Shipment";
 export * from "./Coupon";
 export * from "./Result";
+export * from "./NotificationLog";

@@ -6,6 +6,7 @@ import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
+import { NotificationService } from "@/lib/notifications";
 
 const updateShipmentSchema = z.object({
   courier: z.string().min(2, "Courier name is required"),
@@ -101,6 +102,13 @@ export async function PATCH(
     }
 
     await order.save();
+
+    // Trigger dispatch notification via NotificationService
+    try {
+      await NotificationService.sendDispatchDetails(order);
+    } catch (notifErr) {
+      console.error("WhatsApp dispatch notification error:", notifErr);
+    }
 
     return apiSuccess(
       {
