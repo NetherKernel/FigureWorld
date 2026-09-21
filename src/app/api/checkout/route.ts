@@ -10,6 +10,12 @@ import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { ValidationError, ConflictError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
+import {
+  buildUpiUri,
+  generateUpiQrDataUrl,
+  MERCHANT_UPI_ID,
+  MERCHANT_NAME,
+} from "@/lib/upi";
 
 const customerAddressSchema = z.object({
   fullName: z.string().min(2, "Full name is required (at least 2 characters)"),
@@ -44,7 +50,7 @@ export async function POST(req: Request) {
   try {
     const data = await validateRequestBody(req, checkoutSchema);
 
-    // If UPI selected, ensure valid UPI ID
+    // Strict validation for UPI payment method
     if (data.paymentMethod === "UPI") {
       if (!data.upiId || !data.upiId.includes("@")) {
         throw new ValidationError("Valid UPI ID (e.g. user@bank or mobile@upi) is required for UPI payment.");
@@ -87,7 +93,6 @@ export async function POST(req: Request) {
         }
 
         // Destination restrictions verification
-        // Get category compliance restrictions as well
         const categoryDoc = await Category.findById(product.category);
         const prohibitedRegions: string[] = [
           ...(product.shippingRestrictions || []),
@@ -167,7 +172,22 @@ export async function POST(req: Request) {
     // 4. Generate Unique Order Number
     const orderNumber = `FW-${Date.now().toString().slice(-6)}-${crypto.randomBytes(2).toString("hex").toUpperCase()}`;
 
-    // 5. Create Order Record
+    // 5. UPI QR Code & Intent generation
+    let qrPayload = "";
+    let qrDataUrl = "";
+    if (data.paymentMethod === "UPI") {
+      qrPayload = buildUpiUri({
+        pa: MERCHANT_UPI_ID,
+        pn: MERCHANT_NAME,
+        am: grandTotal,
+        tn: `Order_${orderNumber}`,
+      });
+      qrDataUrl = await generateUpiQrDataUrl(qrPayload);
+    }
+
+    // 6. Create Order Record with Canonical Payment Status State Machine
+    // For UPI: Payment starts as PENDING and Order starts as pending (unconfirmed until verified)
+    // For COD: Payment starts as PENDING (doorstep) and Order is confirmed
     const newOrder = await Order.create({
       orderNumber,
       customer: currentUser?.userId || undefined,
@@ -183,14 +203,25 @@ export async function POST(req: Request) {
       },
       shippingAddress: shippingAddress._id,
       paymentMethod: data.paymentMethod,
-      paymentStatus: data.paymentMethod === "UPI" ? "paid" : "pending",
-      orderStatus: "processing",
+      paymentStatus: "PENDING",
+      orderStatus: data.paymentMethod === "UPI" ? "pending" : "confirmed",
+      paymentDetails:
+        data.paymentMethod === "UPI"
+          ? {
+              merchantUpiId: MERCHANT_UPI_ID,
+              customerUpiId: data.upiId,
+              qrPayload,
+            }
+          : undefined,
       complianceVerified: containsRestrictedGoods,
-      notes: data.paymentMethod === "UPI" ? `Paid via UPI ID: ${data.upiId}` : "Cash on Delivery",
+      notes:
+        data.paymentMethod === "UPI"
+          ? `Direct UPI checkout. Customer VPA: ${data.upiId}`
+          : "Cash on Delivery",
       placedAt: new Date(),
     });
 
-    // 6. Create OrderItems linked to newOrder
+    // 7. Create OrderItems linked to newOrder
     const orderItemIds = [];
     for (const itemData of orderItemsData) {
       const orderItem = await OrderItem.create({
@@ -207,7 +238,7 @@ export async function POST(req: Request) {
       });
       orderItemIds.push(orderItem._id);
 
-      // 7. Inventory stock decrement
+      // 8. Inventory stock decrement
       itemData.productDoc.stock = Math.max(0, itemData.productDoc.stock - itemData.quantity);
       await itemData.productDoc.save();
     }
@@ -215,7 +246,7 @@ export async function POST(req: Request) {
     newOrder.items = orderItemIds;
     await newOrder.save();
 
-    // 8. Estimate delivery timeline (3-5 business days)
+    // 9. Estimate delivery timeline (3-5 business days)
     const deliveryDate = new Date();
     deliveryDate.setDate(deliveryDate.getDate() + 4);
     const estimatedDeliveryFormatted = deliveryDate.toLocaleDateString("en-IN", {
@@ -233,6 +264,13 @@ export async function POST(req: Request) {
         paymentMethod: newOrder.paymentMethod,
         paymentStatus: newOrder.paymentStatus,
         orderStatus: newOrder.orderStatus,
+        paymentDetails: {
+          merchantUpiId: MERCHANT_UPI_ID,
+          merchantName: MERCHANT_NAME,
+          customerUpiId: data.upiId,
+          qrPayload,
+          qrDataUrl,
+        },
         shippingAddress: {
           fullName: shippingAddress.fullName,
           phone: shippingAddress.phone,

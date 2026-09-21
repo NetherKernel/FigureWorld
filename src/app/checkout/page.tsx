@@ -20,6 +20,12 @@ import {
   Building,
   Navigation,
   Check,
+  Clock,
+  Copy,
+  ExternalLink,
+  QrCode,
+  RefreshCw,
+  XCircle,
 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
@@ -37,6 +43,19 @@ interface IPlacedOrder {
   paymentMethod: "UPI" | "COD";
   paymentStatus: string;
   orderStatus: string;
+  paymentDetails?: {
+    merchantUpiId?: string;
+    merchantName?: string;
+    customerUpiId?: string;
+    transactionRef?: string;
+    upiApp?: string;
+    qrPayload?: string;
+    qrDataUrl?: string;
+    submittedAt?: string;
+    verifiedAt?: string;
+    verificationNotes?: string;
+    rejectionReason?: string;
+  };
   shippingAddress: {
     fullName: string;
     phone: string;
@@ -90,6 +109,8 @@ const INDIAN_STATES = [
   "Delhi",
 ];
 
+const UPI_APPS = ["Google Pay", "PhonePe", "Paytm", "BHIM UPI", "Cred", "Other UPI App"];
+
 export default function CheckoutPage() {
   const router = useRouter();
   const { items, summary, clearCart } = useCart();
@@ -117,6 +138,14 @@ export default function CheckoutPage() {
   const [error, setError] = useState<string | null>(null);
   const [placedOrder, setPlacedOrder] = useState<IPlacedOrder | null>(null);
 
+  // Sprint 7: UPI Reference Submission & Polling State
+  const [inputUtr, setInputUtr] = useState("");
+  const [selectedUpiApp, setSelectedUpiApp] = useState("Google Pay");
+  const [submittingUtr, setSubmittingUtr] = useState(false);
+  const [utrError, setUtrError] = useState<string | null>(null);
+  const [pollingStatus, setPollingStatus] = useState(false);
+  const [copiedVpa, setCopiedVpa] = useState(false);
+
   // Auto-fill logged in user info
   useEffect(() => {
     if (user) {
@@ -124,7 +153,6 @@ export default function CheckoutPage() {
       if (!email) setEmail(user.email || "");
       if (user.phone && !mobileNumber) setMobileNumber(user.phone);
 
-      // If user has saved addresses, fetch default
       async function loadSavedAddress() {
         try {
           const res = await fetch("/api/user/addresses");
@@ -203,7 +231,7 @@ export default function CheckoutPage() {
         clearCart();
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
-        setError(data.message || "Checkout failed. Please check your information.");
+        setError(data.message || data.error?.message || "Checkout failed. Please check your information.");
       }
     } catch (err: any) {
       setError(err.message || "Network error occurred during checkout.");
@@ -212,17 +240,320 @@ export default function CheckoutPage() {
     }
   };
 
-  // If order was successfully placed, render Order Confirmation View
+  // Submit UTR Reference ID (moves payment to UNDER_REVIEW)
+  const handleSubmitUtr = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!placedOrder) return;
+    setUtrError(null);
+
+    const ref = inputUtr.trim();
+    if (!ref || ref.length < 6) {
+      setUtrError("Please enter a valid 12-digit UTR or transaction reference number (minimum 6 digits).");
+      return;
+    }
+
+    setSubmittingUtr(true);
+    try {
+      const res = await fetch(`/api/orders/${placedOrder.orderNumber}/payment-reference`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionRef: ref,
+          upiApp: selectedUpiApp,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setPlacedOrder((prev) =>
+          prev
+            ? {
+                ...prev,
+                paymentStatus: data.data.paymentStatus,
+                orderStatus: data.data.orderStatus,
+                paymentDetails: {
+                  ...prev.paymentDetails,
+                  transactionRef: data.data.transactionRef,
+                  submittedAt: data.data.submittedAt,
+                  upiApp: selectedUpiApp,
+                },
+              }
+            : null
+        );
+      } else {
+        setUtrError(data.error?.message || data.message || "Failed to submit reference ID.");
+      }
+    } catch (err: any) {
+      setUtrError(err.message || "Network error submitting reference ID.");
+    } finally {
+      setSubmittingUtr(false);
+    }
+  };
+
+  // Poll / Refresh live order status
+  const handleCheckStatus = async () => {
+    if (!placedOrder) return;
+    setPollingStatus(true);
+    try {
+      const res = await fetch(`/api/orders/${placedOrder.orderNumber}`);
+      const data = await res.json();
+      if (res.ok && data.success && data.data) {
+        setPlacedOrder((prev) => ({
+          ...prev!,
+          paymentStatus: data.data.paymentStatus,
+          orderStatus: data.data.orderStatus,
+          paymentDetails: data.data.paymentDetails,
+        }));
+      }
+    } catch {
+      // Ignore
+    } finally {
+      setPollingStatus(false);
+    }
+  };
+
+  const copyMerchantVpa = (vpa: string) => {
+    navigator.clipboard.writeText(vpa);
+    setCopiedVpa(true);
+    setTimeout(() => setCopiedVpa(false), 2500);
+  };
+
+  // If order was placed, check whether we show the UPI Payment Gateway or Confirmed Order
   if (placedOrder) {
+    const isUpi = placedOrder.paymentMethod === "UPI";
+    const paymentStatusNormalized = (placedOrder.paymentStatus || "").toUpperCase();
+    const isPaid = paymentStatusNormalized === "PAID";
+    const isUnderReview = paymentStatusNormalized === "UNDER_REVIEW";
+    const isFailed = paymentStatusNormalized === "FAILED";
+
+    // 1. UPI Payment Gateway (PENDING or UNDER_REVIEW or FAILED)
+    if (isUpi && !isPaid) {
+      const merchantVpa = placedOrder.paymentDetails?.merchantUpiId || "figuresworld@icici";
+      const qrDataUrl = placedOrder.paymentDetails?.qrDataUrl;
+      const qrPayload = placedOrder.paymentDetails?.qrPayload;
+
+      return (
+        <main className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8 space-y-8 animate-fade-in text-xs">
+          {/* Header Progress */}
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 px-3 py-1 font-bold text-indigo-700 dark:text-indigo-300 text-[11px]">
+              <QrCode className="h-3.5 w-3.5" />
+              <span>Sprint 7 Direct UPI Payment</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+              Complete Your UPI Transfer
+            </h1>
+            <p className="text-slate-500">
+              Order Reference: <strong className="font-mono text-slate-900 dark:text-white">{placedOrder.orderNumber}</strong>
+            </p>
+          </div>
+
+          {/* Under Review Notice */}
+          {isUnderReview && (
+            <div className="rounded-3xl border-2 border-amber-300 bg-amber-50/90 p-6 sm:p-8 dark:border-amber-800/80 dark:bg-amber-950/30 space-y-4 animate-fade-in text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-lg shadow-amber-500/30 animate-pulse">
+                <Clock className="h-7 w-7" />
+              </div>
+              <div>
+                <span className="rounded-full bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 px-3 py-0.5 font-bold uppercase tracking-wider text-[10px]">
+                  Payment Status: UNDER_REVIEW
+                </span>
+                <h2 className="text-xl font-extrabold text-slate-900 dark:text-white mt-2">
+                  Transaction Reference Submitted!
+                </h2>
+                <p className="text-slate-600 dark:text-slate-300 mt-1 max-w-lg mx-auto leading-relaxed">
+                  We have received your UTR Reference{" "}
+                  <strong className="font-mono text-amber-800 dark:text-amber-300">
+                    {placedOrder.paymentDetails?.transactionRef}
+                  </strong>
+                  . Our verification team is verifying your payment with our merchant bank. The order will be confirmed as soon as payment is confirmed.
+                </p>
+              </div>
+
+              <div className="pt-2 flex items-center justify-center gap-3">
+                <button
+                  onClick={handleCheckStatus}
+                  disabled={pollingStatus}
+                  className="rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold px-5 py-2.5 transition shadow-sm flex items-center gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${pollingStatus ? "animate-spin" : ""}`} />
+                  Check Verification Status
+                </button>
+                <Link
+                  href="/products"
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+                >
+                  Continue Shopping
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* Failed Notice */}
+          {isFailed && (
+            <div className="rounded-3xl border-2 border-rose-300 bg-rose-50/90 p-6 dark:border-rose-900/60 dark:bg-rose-950/30 space-y-3 animate-fade-in text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-600 text-white shadow-md">
+                <XCircle className="h-6 w-6" />
+              </div>
+              <h2 className="text-lg font-bold text-rose-900 dark:text-rose-200">
+                Payment Verification Failed
+              </h2>
+              <p className="text-rose-700 dark:text-rose-300 max-w-md mx-auto">
+                {placedOrder.paymentDetails?.rejectionReason ||
+                  "The submitted reference ID could not be matched with bank deposit records."}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Please verify your UTR number from your payment app receipt and resubmit below.
+              </p>
+            </div>
+          )}
+
+          {/* Payment Card (QR Code & Merchant VPA) */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pb-6 border-b border-slate-100 dark:border-slate-800 text-center sm:text-left">
+              <div>
+                <span className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider">
+                  Total Payable Amount
+                </span>
+                <p className="text-3xl font-black text-indigo-600 dark:text-indigo-400 mt-0.5">
+                  {formatPrice(placedOrder.pricing.grandTotal)}
+                </p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Includes Items ({formatPrice(placedOrder.pricing.subtotal)}) + Standard Delivery (₹100)
+                </p>
+              </div>
+
+              {/* Merchant VPA Pill */}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3.5 dark:border-slate-800 dark:bg-slate-950 text-left">
+                <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider block">
+                  FiguresWorld Merchant UPI ID
+                </span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="font-mono text-sm font-bold text-slate-900 dark:text-white">
+                    {merchantVpa}
+                  </span>
+                  <button
+                    onClick={() => copyMerchantVpa(merchantVpa)}
+                    className="p-1 rounded-md text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition"
+                    title="Copy UPI ID"
+                  >
+                    {copiedVpa ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* QR Code + Intent Section */}
+            <div className="flex flex-col items-center justify-center space-y-4 text-center">
+              <div className="rounded-3xl border-2 border-indigo-100 bg-white p-4 shadow-md dark:border-indigo-950 dark:bg-slate-950 inline-block">
+                {qrDataUrl ? (
+                  <img
+                    src={qrDataUrl}
+                    alt="Scan UPI QR Code to Pay"
+                    className="h-48 w-48 rounded-xl object-contain mx-auto"
+                  />
+                ) : (
+                  <div className="h-48 w-48 flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-xl">
+                    <QrCode className="h-16 w-16 text-slate-400" />
+                  </div>
+                )}
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mt-2">
+                  Scan with GPay, PhonePe, Paytm, or BHIM
+                </span>
+              </div>
+
+              {qrPayload && (
+                <a
+                  href={qrPayload}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 text-xs shadow-sm transition"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>Open in UPI App</span>
+                </a>
+              )}
+            </div>
+
+            {/* Step-by-Step Instructions */}
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/40 space-y-2">
+              <p className="font-bold text-slate-900 dark:text-white">How to complete your payment:</p>
+              <ol className="list-decimal list-inside space-y-1 text-slate-600 dark:text-slate-300">
+                <li>Scan the QR code or transfer {formatPrice(placedOrder.pricing.grandTotal)} to <strong className="font-mono">{merchantVpa}</strong>.</li>
+                <li>In your UPI app receipt, locate the <strong>12-digit UTR</strong> or <strong>UPI Reference Number</strong>.</li>
+                <li>Enter the reference ID below and click <strong>Submit Reference for Verification</strong>.</li>
+              </ol>
+            </div>
+
+            {/* Reference ID Submission Form */}
+            {(!isUnderReview || isFailed) && (
+              <form onSubmit={handleSubmitUtr} className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  Submit Transaction Reference ID
+                </h3>
+
+                {utrError && (
+                  <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300 font-semibold">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+                    <span>{utrError}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      UPI App Used
+                    </label>
+                    <select
+                      value={selectedUpiApp}
+                      onChange={(e) => setSelectedUpiApp(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3 text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-white font-medium focus:border-indigo-500 focus:outline-none"
+                    >
+                      {UPI_APPS.map((app) => (
+                        <option key={app} value={app}>
+                          {app}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      12-Digit UTR / Transaction Reference ID *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={inputUtr}
+                      onChange={(e) => setInputUtr(e.target.value)}
+                      placeholder="e.g. 426189304721 or T2409..."
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3 font-mono text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-white focus:border-indigo-500 focus:bg-white focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submittingUtr}
+                  className="w-full rounded-xl bg-indigo-600 py-3 text-xs font-bold text-white shadow-md hover:bg-indigo-700 transition disabled:opacity-50"
+                >
+                  {submittingUtr ? "Submitting Reference..." : "Submit Reference ID for Verification"}
+                </button>
+              </form>
+            )}
+          </div>
+        </main>
+      );
+    }
+
+    // 2. Order Confirmed View (PAID or COD)
     return (
-      <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8 space-y-8 animate-fade-in">
+      <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8 space-y-8 animate-fade-in text-xs">
         <div className="rounded-3xl border border-emerald-200 bg-emerald-50/80 p-8 text-center dark:border-emerald-900/60 dark:bg-emerald-950/30 space-y-4">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/30">
             <Check className="h-8 w-8 stroke-[3]" />
           </div>
           <div>
             <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/50 px-2.5 py-0.5 rounded-full">
-              Order Confirmed
+              {isPaid ? "Payment Verified • Order Confirmed" : "Order Confirmed (Cash on Delivery)"}
             </span>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white mt-2">
               Thank You for Your Order!
@@ -237,7 +568,7 @@ export default function CheckoutPage() {
         </div>
 
         {/* Order Details Breakdown */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Shipping & Delivery Box */}
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900 space-y-3">
             <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white border-b border-slate-100 pb-2 dark:border-slate-800">
@@ -266,13 +597,13 @@ export default function CheckoutPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900 space-y-3">
             <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white border-b border-slate-100 pb-2 dark:border-slate-800">
               <CreditCard className="h-4 w-4 text-indigo-600" />
-              <span>Payment Details</span>
+              <span>Payment & Verification Details</span>
             </div>
             <div className="space-y-2 text-slate-600 dark:text-slate-300">
               <div className="flex justify-between">
                 <span>Payment Method:</span>
                 <strong className="text-slate-900 dark:text-white">
-                  {placedOrder.paymentMethod === "UPI" ? "UPI (Instant Payment)" : "Cash on Delivery (COD)"}
+                  {placedOrder.paymentMethod === "UPI" ? "UPI (Direct Payment)" : "Cash on Delivery (COD)"}
                 </strong>
               </div>
               <div className="flex justify-between">
@@ -281,6 +612,14 @@ export default function CheckoutPage() {
                   {placedOrder.paymentStatus}
                 </span>
               </div>
+              {placedOrder.paymentDetails?.transactionRef && (
+                <div className="flex justify-between">
+                  <span>UTR Reference ID:</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-white">
+                    {placedOrder.paymentDetails.transactionRef}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span>Subtotal:</span>
                 <span>{formatPrice(placedOrder.pricing.subtotal)}</span>
@@ -290,7 +629,7 @@ export default function CheckoutPage() {
                 <span>{formatPrice(placedOrder.pricing.shippingFee)}</span>
               </div>
               <div className="flex justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-sm font-black text-slate-900 dark:text-white">
-                <span>Total Amount:</span>
+                <span>Grand Total:</span>
                 <span className="text-indigo-600 dark:text-indigo-400">
                   {formatPrice(placedOrder.pricing.grandTotal)}
                 </span>
@@ -304,7 +643,7 @@ export default function CheckoutPage() {
           <h3 className="font-bold text-sm text-slate-900 dark:text-white">Items in this Order</h3>
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {placedOrder.items.map((item, idx) => (
-              <div key={idx} className="py-3 flex items-center justify-between gap-4 text-xs">
+              <div key={idx} className="py-3 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <img
                     src={item.image}
@@ -367,7 +706,7 @@ export default function CheckoutPage() {
       <div className="border-b border-slate-200 pb-5 dark:border-slate-800">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-200/50 dark:border-indigo-900/50">
-            Sprint 6 Checkout System
+            Sprint 7 Direct UPI Checkout
           </span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
@@ -450,7 +789,7 @@ export default function CheckoutPage() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="collector@figuresworld.com"
+                    placeholder="e.g. zoro@wano.com"
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
                   />
                 </div>
@@ -458,17 +797,17 @@ export default function CheckoutPage() {
 
               <div className="sm:col-span-2">
                 <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                  Street Address *
+                  Street Address (House No, Building, Street) *
                 </label>
                 <div className="relative mt-1">
-                  <Building className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                  <textarea
-                    rows={2}
+                  <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
                     required
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
-                    placeholder="House/Flat number, Building name, Street, Area"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+                    placeholder="e.g. 42 Swordmaster Boulevard, Apartment 4B"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
                   />
                 </div>
               </div>
@@ -482,7 +821,7 @@ export default function CheckoutPage() {
                   required
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
-                  placeholder="e.g. Mumbai, Bengaluru"
+                  placeholder="e.g. Mumbai"
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3 text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
                 />
               </div>
@@ -492,14 +831,13 @@ export default function CheckoutPage() {
                   State *
                 </label>
                 <select
-                  required
                   value={state}
                   onChange={(e) => setState(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3 text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3 text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white font-medium"
                 >
-                  {INDIAN_STATES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
+                  {INDIAN_STATES.map((st) => (
+                    <option key={st} value={st}>
+                      {st}
                     </option>
                   ))}
                 </select>
@@ -521,7 +859,7 @@ export default function CheckoutPage() {
 
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                  Landmark <span className="font-normal text-slate-400">(Optional)</span>
+                  Landmark (Optional)
                 </label>
                 <div className="relative mt-1">
                   <Navigation className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -529,7 +867,7 @@ export default function CheckoutPage() {
                     type="text"
                     value={landmark}
                     onChange={(e) => setLandmark(e.target.value)}
-                    placeholder="Near metro station / school"
+                    placeholder="e.g. Near Gateway of India"
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
                   />
                 </div>
@@ -537,7 +875,7 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {/* Step 2: Delivery Calculation & Compliance */}
+          {/* Step 2: Delivery Calculation */}
           <div className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 shadow-xs dark:border-slate-800 dark:bg-slate-900 space-y-4">
             <div className="flex items-center gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400 font-black text-sm">
@@ -545,7 +883,7 @@ export default function CheckoutPage() {
               </div>
               <div>
                 <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                  Delivery Calculation & Compliance
+                  Delivery Calculation
                 </h2>
                 <p className="text-[11px] text-slate-500">
                   Standard delivery fee calculated automatically by the server.
@@ -605,7 +943,7 @@ export default function CheckoutPage() {
                   Payment Method
                 </h2>
                 <p className="text-[11px] text-slate-500">
-                  Select your preferred payment gateway: UPI or Cash on Delivery.
+                  Select your preferred payment gateway: Direct UPI or Cash on Delivery.
                 </p>
               </div>
             </div>
@@ -629,14 +967,14 @@ export default function CheckoutPage() {
                       onChange={() => setPaymentMethod("UPI")}
                       className="h-4 w-4 text-indigo-600"
                     />
-                    <span>UPI (Instant Transfer)</span>
+                    <span>Direct UPI Payment</span>
                   </div>
                   <span className="rounded bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-300 font-bold px-2 py-0.5 text-[10px]">
-                    Fastest
+                    QR / VPA
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Pay instantly via GPay, PhonePe, Paytm, or BHIM UPI ID.
+                  Scan QR code or pay directly with Google Pay, PhonePe, Paytm, or BHIM.
                 </p>
               </label>
 
@@ -665,7 +1003,7 @@ export default function CheckoutPage() {
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Pay with cash or UPI QR directly to the courier agent upon doorstep delivery.
+                  Pay with cash or UPI QR directly to courier agent upon doorstep arrival.
                 </p>
               </label>
             </div>
@@ -674,7 +1012,7 @@ export default function CheckoutPage() {
             {paymentMethod === "UPI" && (
               <div className="pt-2 animate-fade-in text-xs">
                 <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                  Enter Your UPI ID (VPA) *
+                  Your UPI ID (VPA) *
                 </label>
                 <div className="relative mt-1 max-w-md">
                   <input
@@ -687,7 +1025,7 @@ export default function CheckoutPage() {
                   />
                 </div>
                 <span className="text-[10px] text-slate-400 mt-1 block">
-                  A payment authorization prompt will be simulated upon placing order.
+                  Next, you will be presented with the FiguresWorld merchant QR code to scan and pay.
                 </span>
               </div>
             )}
@@ -750,26 +1088,29 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            {/* Place Order CTA Button */}
+            {/* Submit Action Button */}
             <button
               type="submit"
               disabled={submitting}
-              className="w-full flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 py-3.5 px-6 text-sm font-bold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-700 disabled:opacity-50 transition"
+              className="w-full rounded-2xl bg-indigo-600 py-3.5 text-xs font-bold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              <ShieldCheck className="h-4 w-4" />
-              <span>{submitting ? "Placing Order..." : `Confirm & Place Order (${paymentMethod})`}</span>
+              {submitting ? (
+                <span>Generating Order...</span>
+              ) : paymentMethod === "UPI" ? (
+                <>
+                  <span>Proceed to Direct UPI Payment</span>
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              ) : (
+                <>
+                  <span>Confirm Cash on Delivery Order</span>
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
             </button>
 
-            {/* Trust Assurances */}
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 text-[11px] text-slate-500">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                <span>Zero-Trust Server Verified Prices</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                <span>100% Authentic Japanese Collector Imports</span>
-              </div>
+            <div className="pt-2 text-center text-[10px] text-slate-400">
+              Discreet packaging • 100% Genuine Collectibles
             </div>
           </div>
         </div>

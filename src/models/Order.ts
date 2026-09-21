@@ -10,6 +10,40 @@ export interface IOrderPricing {
   currency: string;
 }
 
+export interface IUpiPaymentDetails {
+  merchantUpiId?: string;
+  customerUpiId?: string;
+  transactionRef?: string;
+  upiApp?: string;
+  qrPayload?: string;
+  submittedAt?: Date;
+  verifiedAt?: Date;
+  verifiedBy?: mongoose.Types.ObjectId | string;
+  verificationNotes?: string;
+  rejectionReason?: string;
+}
+
+export type PaymentStatus =
+  | "PENDING"
+  | "UNDER_REVIEW"
+  | "PAID"
+  | "FAILED"
+  | "EXPIRED"
+  | "REFUNDED"
+  | "pending"
+  | "paid"
+  | "failed"
+  | "refunded";
+
+export type OrderStatus =
+  | "pending"
+  | "confirmed"
+  | "processing"
+  | "shipped"
+  | "delivered"
+  | "cancelled"
+  | "refunded";
+
 export interface IOrder extends Document {
   orderNumber: string;
   customer?: mongoose.Types.ObjectId;
@@ -19,8 +53,9 @@ export interface IOrder extends Document {
   shippingAddress: mongoose.Types.ObjectId;
   billingAddress?: mongoose.Types.ObjectId;
   paymentMethod: "UPI" | "COD";
-  paymentStatus: "pending" | "paid" | "failed" | "refunded";
-  orderStatus: "pending" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
+  paymentStatus: PaymentStatus;
+  orderStatus: OrderStatus;
+  paymentDetails?: IUpiPaymentDetails;
   complianceVerified: boolean;
   couponCode?: string;
   notes?: string;
@@ -37,6 +72,22 @@ const OrderPricingSchema = new Schema<IOrderPricing>(
     shippingFee: { type: Number, default: 0, min: 0 },
     grandTotal: { type: Number, required: true, min: 0 },
     currency: { type: String, default: "INR" },
+  },
+  { _id: false }
+);
+
+const UpiPaymentDetailsSchema = new Schema<IUpiPaymentDetails>(
+  {
+    merchantUpiId: { type: String, trim: true },
+    customerUpiId: { type: String, trim: true },
+    transactionRef: { type: String, trim: true, index: true },
+    upiApp: { type: String, trim: true },
+    qrPayload: { type: String },
+    submittedAt: { type: Date },
+    verifiedAt: { type: Date },
+    verifiedBy: { type: Schema.Types.Mixed },
+    verificationNotes: { type: String },
+    rejectionReason: { type: String },
   },
   { _id: false }
 );
@@ -88,15 +139,38 @@ const OrderSchema = new Schema<IOrder>(
     },
     paymentStatus: {
       type: String,
-      enum: ["pending", "paid", "failed", "refunded"],
-      default: "pending",
+      enum: [
+        "PENDING",
+        "UNDER_REVIEW",
+        "PAID",
+        "FAILED",
+        "EXPIRED",
+        "REFUNDED",
+        "pending",
+        "paid",
+        "failed",
+        "refunded",
+      ],
+      default: "PENDING",
       index: true,
     },
     orderStatus: {
       type: String,
-      enum: ["pending", "processing", "shipped", "delivered", "cancelled", "refunded"],
-      default: "processing",
+      enum: [
+        "pending",
+        "confirmed",
+        "processing",
+        "shipped",
+        "delivered",
+        "cancelled",
+        "refunded",
+      ],
+      default: "pending",
       index: true,
+    },
+    paymentDetails: {
+      type: UpiPaymentDetailsSchema,
+      default: () => ({}),
     },
     complianceVerified: {
       type: Boolean,

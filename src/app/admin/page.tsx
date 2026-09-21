@@ -150,6 +150,57 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Direct UPI Payment Verification (Sprint 7) */}
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
+              <DollarSign className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">Direct UPI Payment Verification</h2>
+                <span className="text-[10px] font-bold uppercase tracking-wider rounded-md bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 border border-emerald-500/30">
+                  Sprint 7
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Audit submitted customer UTR references, confirm bank transfers, and transition orders from UNDER_REVIEW to PAID & CONFIRMED.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/payments"
+              className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500 transition shadow-sm flex items-center gap-1.5"
+            >
+              <span>Open Payment Console</span>
+            </Link>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 text-xs pt-1">
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+            <p className="font-bold text-slate-900 dark:text-white">Zero-Trust Payment Rule</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              Submitting screenshot or UTR does NOT confirm order. Order moves to confirmed status only after admin verification.
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+            <p className="font-bold text-slate-900 dark:text-white">Full State Machine</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              PENDING → UNDER_REVIEW → PAID / FAILED / EXPIRED / REFUNDED with audit logs (verifiedAt & verifiedBy).
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+            <p className="font-bold text-slate-900 dark:text-white">Auto Stock Restoration</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              When an unverified or invalid transaction is rejected, reserved inventory is instantly restored to active stock.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
