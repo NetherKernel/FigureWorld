@@ -347,6 +347,8 @@ export class NotificationService {
       courier?: string;
       trackingNumber?: string;
       trackingUrl?: string;
+      dispatchDate?: Date | string;
+      expectedDeliveryDate?: Date | string;
     }
   ): Promise<INotificationLog> {
     const ctx = await resolveOrderContext(orderOrNumber);
@@ -369,18 +371,37 @@ export class NotificationService {
       ctx.order.shipmentDetails?.trackingUrl ||
       `https://www.bluedart.com/tracking?track=${encodeURIComponent(trackingNumber)}`;
 
-    const text = [
+    const dispatchDate =
+      options?.dispatchDate ||
+      ctx.order.shipmentDetails?.dispatchedAt ||
+      new Date();
+
+    const expectedDeliveryDate =
+      options?.expectedDeliveryDate ||
+      ctx.order.shipmentDetails?.estimatedDelivery;
+
+    const textLines = [
       `Hello ${ctx.customerName}! 🚀`,
       ``,
       `Your order #${ctx.orderNumber} has been dispatched.`,
       ``,
       `Courier: ${courier}`,
       `Tracking ID: ${trackingNumber}`,
-      `🔗 Track your order: ${trackingUrl}`,
-      ``,
-      `Your package is securely packed in tamper-proof collectible packaging and is on its way!`,
-      `FiguresWorld Anime Store 🎌`,
-    ].join("\n");
+    ];
+
+    if (dispatchDate) {
+      textLines.push(`📅 Dispatch Date: ${new Date(dispatchDate).toLocaleDateString("en-IN")}`);
+    }
+    if (expectedDeliveryDate) {
+      textLines.push(`📦 Expected Delivery: ${new Date(expectedDeliveryDate).toLocaleDateString("en-IN")}`);
+    }
+
+    textLines.push(`🔗 Track your order: ${trackingUrl}`);
+    textLines.push(``);
+    textLines.push(`Your package is securely packed in tamper-proof collectible packaging and is on its way!`);
+    textLines.push(`FiguresWorld Anime Store 🎌`);
+
+    const text = textLines.join("\n");
 
     const result = await sendWhatsAppText({ to: phone, text });
 

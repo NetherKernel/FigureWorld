@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
+import { getModelProxy } from "@/lib/db";
 
 export interface IShipmentUpdate {
   timestamp: Date;
@@ -9,13 +10,31 @@ export interface IShipmentUpdate {
 
 export interface IShipment extends Document {
   order: mongoose.Types.ObjectId;
+  orderNumber: string;
   trackingNumber: string;
-  carrier: "fedex" | "ups" | "dhl" | "usps" | "other";
+  courierName: string;
+  carrier?: string;
+  trackingUrl?: string;
   shippingMethod: string;
-  status: "pending" | "manifested" | "in_transit" | "out_for_delivery" | "delivered" | "failed" | "returned";
-  estimatedDeliveryDate?: Date;
+  status:
+    | "pending"
+    | "manifested"
+    | "in_transit"
+    | "out_for_delivery"
+    | "delivered"
+    | "failed"
+    | "returned"
+    | "DISPATCHED"
+    | "OUT_FOR_DELIVERY"
+    | "DELIVERED";
+  dispatchDate?: Date;
+  expectedDeliveryDate?: Date;
   actualDeliveryDate?: Date;
   shippedAt?: Date;
+  customerName?: string;
+  customerPhone?: string;
+  shippingNotes?: string;
+  provider: "MANUAL" | "SHIPROCKET" | "DELHIVERY" | "BLUEDART" | "DTDC";
   events: IShipmentUpdate[];
   createdAt: Date;
   updatedAt: Date;
@@ -39,29 +58,47 @@ const ShipmentSchema = new Schema<IShipment>(
       required: true,
       index: true,
     },
-    trackingNumber: {
+    orderNumber: {
       type: String,
       required: true,
-      unique: true,
+      uppercase: true,
       trim: true,
       index: true,
     },
+    trackingNumber: {
+      type: String,
+      required: true,
+      trim: true,
+      index: true,
+    },
+    courierName: {
+      type: String,
+      required: true,
+      trim: true,
+      default: "Blue Dart Express",
+    },
     carrier: {
       type: String,
-      enum: ["fedex", "ups", "dhl", "usps", "other"],
-      required: true,
+      default: "other",
+    },
+    trackingUrl: {
+      type: String,
+      trim: true,
     },
     shippingMethod: {
       type: String,
-      default: "Standard Ground",
+      default: "Standard Express",
     },
     status: {
       type: String,
-      enum: ["pending", "manifested", "in_transit", "out_for_delivery", "delivered", "failed", "returned"],
-      default: "pending",
+      default: "in_transit",
       index: true,
     },
-    estimatedDeliveryDate: {
+    dispatchDate: {
+      type: Date,
+      default: Date.now,
+    },
+    expectedDeliveryDate: {
       type: Date,
     },
     actualDeliveryDate: {
@@ -69,6 +106,24 @@ const ShipmentSchema = new Schema<IShipment>(
     },
     shippedAt: {
       type: Date,
+      default: Date.now,
+    },
+    customerName: {
+      type: String,
+      trim: true,
+    },
+    customerPhone: {
+      type: String,
+      trim: true,
+    },
+    shippingNotes: {
+      type: String,
+      trim: true,
+    },
+    provider: {
+      type: String,
+      enum: ["MANUAL", "SHIPROCKET", "DELHIVERY", "BLUEDART", "DTDC"],
+      default: "MANUAL",
     },
     events: {
       type: [ShipmentUpdateSchema],
@@ -80,7 +135,12 @@ const ShipmentSchema = new Schema<IShipment>(
   }
 );
 
-export const Shipment: Model<IShipment> =
+ShipmentSchema.index({ trackingNumber: 1 });
+ShipmentSchema.index({ orderNumber: 1, createdAt: -1 });
+
+const ShipmentModel: Model<IShipment> =
   mongoose.models.Shipment || mongoose.model<IShipment>("Shipment", ShipmentSchema);
+
+export const Shipment = getModelProxy(ShipmentModel, "Shipment");
 
 export default Shipment;

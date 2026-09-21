@@ -312,6 +312,57 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Dispatch & Shipping Management (Sprint 12) */}
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+              <Truck className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">Dispatch & Shipping Management</h2>
+                <span className="text-[10px] font-bold uppercase tracking-wider rounded-md bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 border border-indigo-500/30">
+                  Sprint 12
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Warehouse fulfillment queues: Pack orders, enter courier AWB details, dispatch shipments, and auto-notify customers.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/shipments"
+              className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500 transition shadow-sm flex items-center gap-1.5"
+            >
+              <span>Open Shipping Console</span>
+            </Link>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 text-xs pt-1">
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+            <p className="font-bold text-slate-900 dark:text-white">Full Fulfillment Queue</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              Order $\rightarrow$ Pack $\rightarrow$ Dispatch $\rightarrow$ Enter Courier $\rightarrow$ Customer Notification.
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+            <p className="font-bold text-slate-900 dark:text-white">Courier Tracking & ETA</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              Blue Dart, Delhivery, DTDC, Shiprocket, and more with automatic tracking URL computation and delivery estimates.
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+            <p className="font-bold text-slate-900 dark:text-white">Pluggable Carrier Adapters</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              Prepared for automated API integrations with Shiprocket, Delhivery, Blue Dart, and DTDC.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

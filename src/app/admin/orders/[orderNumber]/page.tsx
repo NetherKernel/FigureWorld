@@ -30,6 +30,7 @@ import {
   MessageSquare,
   CheckCheck,
   Smartphone,
+  Package,
 } from "lucide-react";
 import { formatPrice } from "@/lib/format";
 
@@ -173,7 +174,14 @@ export default function AdminOrderDetailPage() {
   const [trackingNumberInput, setTrackingNumberInput] = useState("");
   const [autoDispatchShipment, setAutoDispatchShipment] = useState(true);
   const [shippingNotesInput, setShippingNotesInput] = useState("");
+  const [dispatchDateInput, setDispatchDateInput] = useState(new Date().toISOString().split("T")[0]);
+  const [expectedDeliveryInput, setExpectedDeliveryInput] = useState(
+    new Date(Date.now() + 4 * 86400000).toISOString().split("T")[0]
+  );
+  const [trackingUrlInput, setTrackingUrlInput] = useState("");
+  const [notifyCustomerShipment, setNotifyCustomerShipment] = useState(true);
   const [updatingShipment, setUpdatingShipment] = useState(false);
+  const [packingOrder, setPackingOrder] = useState(false);
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
   const [sendingInvoice, setSendingInvoice] = useState(false);
 
@@ -291,6 +299,28 @@ export default function AdminOrderDetailPage() {
     }
   };
 
+  const handleMarkPacked = async () => {
+    setPackingOrder(true);
+    try {
+      const res = await fetch(`/api/admin/orders/${encodeURIComponent(rawOrderNumber)}/pack`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: "Items picked and packed into shipping box." }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setToastMessage({ type: "success", text: "Order marked as PACKED!" });
+        await fetchOrderDetail();
+      } else {
+        setToastMessage({ type: "error", text: json.message || "Failed to pack order." });
+      }
+    } catch {
+      setToastMessage({ type: "error", text: "Network error packing order." });
+    } finally {
+      setPackingOrder(false);
+    }
+  };
+
   const handleSaveShipment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!trackingNumberInput.trim()) {
@@ -306,14 +336,18 @@ export default function AdminOrderDetailPage() {
         body: JSON.stringify({
           courier: courierInput,
           trackingNumber: trackingNumberInput.trim(),
+          dispatchDate: dispatchDateInput,
+          expectedDeliveryDate: expectedDeliveryInput,
+          trackingUrl: trackingUrlInput.trim() || undefined,
           shippingNotes: shippingNotesInput.trim() || undefined,
           autoDispatch: autoDispatchShipment,
+          notifyCustomer: notifyCustomerShipment,
         }),
       });
 
       const json = await res.json();
       if (res.ok && json.success) {
-        setToastMessage({ type: "success", text: "Shipment details updated successfully." });
+        setToastMessage({ type: "success", text: "Order dispatched & customer notified successfully." });
         setIsShipmentModalOpen(false);
         await fetchOrderDetail();
       } else {
@@ -595,6 +629,28 @@ export default function AdminOrderDetailPage() {
               </span>
               {getPaymentStatusBadge(order.paymentStatus)}
             </div>
+
+            {/* Quick fulfillment buttons (Sprint 12) */}
+            {(order.orderStatus === "CONFIRMED" || order.orderStatus === "PROCESSING" || order.orderStatus === "confirmed" || order.orderStatus === "processing") && (
+              <button
+                onClick={handleMarkPacked}
+                disabled={packingOrder}
+                className="rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white hover:bg-amber-500 transition shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Package className="h-3.5 w-3.5" />
+                <span>{packingOrder ? "Packing..." : "Pack Order"}</span>
+              </button>
+            )}
+
+            {order.orderStatus === "PACKED" && (
+              <button
+                onClick={() => setIsShipmentModalOpen(true)}
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-500 transition shadow-sm flex items-center gap-1.5"
+              >
+                <Truck className="h-3.5 w-3.5" />
+                <span>Dispatch Order</span>
+              </button>
+            )}
 
             <button
               onClick={() => setIsStatusModalOpen(true)}
@@ -1347,6 +1403,47 @@ export default function AdminOrderDetailPage() {
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                    Dispatch Date:
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={dispatchDateInput}
+                    onChange={(e) => setDispatchDateInput(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 font-medium text-slate-800 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-200"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                    Expected Delivery (ETA):
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={expectedDeliveryInput}
+                    onChange={(e) => setExpectedDeliveryInput(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 font-medium text-slate-800 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-200"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  Live Tracking URL (Optional - Auto-Generated):
+                </label>
+                <input
+                  type="url"
+                  value={trackingUrlInput}
+                  onChange={(e) => setTrackingUrlInput(e.target.value)}
+                  placeholder="https://www.bluedart.com/tracking?track=..."
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 font-mono text-[11px] text-slate-800 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-200"
+                />
+              </div>
+
               <div>
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
                   Dispatch Notes:
@@ -1360,17 +1457,32 @@ export default function AdminOrderDetailPage() {
                 />
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="autoDispatchCheckbox"
-                  checked={autoDispatchShipment}
-                  onChange={(e) => setAutoDispatchShipment(e.target.checked)}
-                  className="h-4 w-4 rounded-md border-slate-300 text-teal-600 focus:ring-teal-500"
-                />
-                <label htmlFor="autoDispatchCheckbox" className="font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
-                  Automatically transition Order Status to <strong>DISPATCHED</strong>
-                </label>
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="autoDispatchCheckbox"
+                    checked={autoDispatchShipment}
+                    onChange={(e) => setAutoDispatchShipment(e.target.checked)}
+                    className="h-4 w-4 rounded-md border-slate-300 text-teal-600 focus:ring-teal-500"
+                  />
+                  <label htmlFor="autoDispatchCheckbox" className="font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                    Automatically transition Order Status to <strong>DISPATCHED</strong>
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="notifyCustomerCheckbox"
+                    checked={notifyCustomerShipment}
+                    onChange={(e) => setNotifyCustomerShipment(e.target.checked)}
+                    className="h-4 w-4 rounded-md border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <label htmlFor="notifyCustomerCheckbox" className="font-semibold text-emerald-800 dark:text-emerald-300 cursor-pointer text-[11px]">
+                    Automatically notify customer via <strong>WhatsApp & Email</strong> with tracking details
+                  </label>
+                </div>
               </div>
             </div>
 
