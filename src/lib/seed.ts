@@ -3,6 +3,8 @@ import { User } from "@/models/User";
 import { Address } from "@/models/Address";
 import { Category } from "@/models/Category";
 import { Product } from "@/models/Product";
+import { Order } from "@/models/Order";
+import { OrderItem } from "@/models/OrderItem";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
 
@@ -232,6 +234,76 @@ export async function seedStoreData() {
     } else if (existingProd.stock < 10) {
       existingProd.stock = prod.stock;
       await existingProd.save();
+    }
+  }
+
+  // 5. Seed Reference Order #KF100001 for Sprint 9 Admin Order Inspection
+  let kfOrder = await Order.findOne({ orderNumber: "KF100001" });
+  if (!kfOrder) {
+    const defaultAddr = await Address.findOne({ user: customer._id }) || await Address.findOne();
+    const demoProd = await Product.findOne({ sku: "AF-DEMO-2499" });
+
+    if (defaultAddr && demoProd) {
+      kfOrder = await Order.create({
+        orderNumber: "KF100001",
+        customer: customer._id,
+        customerEmail: customer.email,
+        items: [],
+        pricing: {
+          subtotal: 4998,
+          discountTotal: 0,
+          taxTotal: 0,
+          shippingFee: 100,
+          grandTotal: 5098,
+          currency: "INR",
+        },
+        shippingAddress: defaultAddr._id,
+        paymentMethod: "UPI",
+        paymentStatus: "PAID",
+        orderStatus: "PROCESSING",
+        paymentDetails: {
+          merchantUpiId: "figuresworld@icici",
+          customerUpiId: "luffy@okicici",
+          transactionRef: "426189304721",
+          upiApp: "Google Pay",
+          submittedAt: new Date(Date.now() - 7200000),
+          verifiedAt: new Date(Date.now() - 3600000),
+          verifiedBy: admin._id,
+          verificationNotes: "Verified via ICICI corporate banking",
+        },
+        shipmentDetails: {
+          courier: "Blue Dart Express",
+          trackingNumber: "BD-KF100001",
+          trackingUrl: "https://www.bluedart.com/tracking?track=BD-KF100001",
+          dispatchedAt: new Date(),
+          shippingNotes: "Signature collector anime figure. Fragile handling required.",
+        },
+        statusHistory: [
+          { status: "PENDING_PAYMENT", changedAt: new Date(Date.now() - 7200000), notes: "Order checkout placed" },
+          { status: "PAYMENT_REVIEW", changedAt: new Date(Date.now() - 5400000), notes: "Customer submitted UPI UTR 426189304721" },
+          { status: "CONFIRMED", changedAt: new Date(Date.now() - 3600000), notes: "Admin confirmed payment" },
+          { status: "PROCESSING", changedAt: new Date(Date.now() - 1800000), notes: "Warehouse picking and packaging" },
+        ],
+        notes: "Priority delivery requested by customer",
+        placedAt: new Date(Date.now() - 7200000),
+      });
+
+      const orderItem = await OrderItem.create({
+        order: kfOrder._id,
+        product: demoProd._id,
+        productTitle: demoProd.name,
+        productSku: demoProd.sku,
+        productImage: demoProd.images?.[0]?.url || "https://images.unsplash.com/photo-1563089145-599997674d42?w=800",
+        unitPrice: 2499,
+        quantity: 2,
+        subtotal: 4998,
+        discountAmount: 0,
+        total: 4998,
+      });
+
+      kfOrder.items = [orderItem._id];
+      await kfOrder.save();
+      logger.info("Seeded reference order: #KF100001");
     }
   }
 

@@ -62,7 +62,22 @@ export type PaymentStatus =
   | "failed"
   | "refunded";
 
+export type CanonicalOrderStatus =
+  | "PENDING_PAYMENT"
+  | "PAYMENT_REVIEW"
+  | "CONFIRMED"
+  | "PROCESSING"
+  | "PACKED"
+  | "DISPATCHED"
+  | "OUT_FOR_DELIVERY"
+  | "DELIVERED"
+  | "CANCELLED"
+  | "RETURN_REQUESTED"
+  | "RETURNED"
+  | "REFUNDED";
+
 export type OrderStatus =
+  | CanonicalOrderStatus
   | "pending"
   | "confirmed"
   | "processing"
@@ -70,6 +85,23 @@ export type OrderStatus =
   | "delivered"
   | "cancelled"
   | "refunded";
+
+export interface IShipmentDetails {
+  courier?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  dispatchedAt?: Date;
+  estimatedDelivery?: Date;
+  deliveredAt?: Date;
+  shippingNotes?: string;
+}
+
+export interface IOrderStatusHistory {
+  status: string;
+  changedAt: Date;
+  changedBy?: mongoose.Types.ObjectId | string;
+  notes?: string;
+}
 
 export interface IOrder extends Document {
   orderNumber: string;
@@ -84,6 +116,8 @@ export interface IOrder extends Document {
   orderStatus: OrderStatus;
   paymentDetails?: IUpiPaymentDetails;
   codDetails?: ICodDetails;
+  shipmentDetails?: IShipmentDetails;
+  statusHistory?: IOrderStatusHistory[];
   complianceVerified: boolean;
   couponCode?: string;
   notes?: string;
@@ -161,6 +195,29 @@ const CodDetailsSchema = new Schema<ICodDetails>(
   { _id: false }
 );
 
+const ShipmentDetailsSchema = new Schema<IShipmentDetails>(
+  {
+    courier: { type: String, trim: true },
+    trackingNumber: { type: String, trim: true, index: true },
+    trackingUrl: { type: String, trim: true },
+    dispatchedAt: { type: Date },
+    estimatedDelivery: { type: Date },
+    deliveredAt: { type: Date },
+    shippingNotes: { type: String },
+  },
+  { _id: false }
+);
+
+const OrderStatusHistorySchema = new Schema<IOrderStatusHistory>(
+  {
+    status: { type: String, required: true },
+    changedAt: { type: Date, default: Date.now },
+    changedBy: { type: Schema.Types.Mixed },
+    notes: { type: String },
+  },
+  { _id: false }
+);
+
 const OrderSchema = new Schema<IOrder>(
   {
     orderNumber: {
@@ -226,6 +283,18 @@ const OrderSchema = new Schema<IOrder>(
     orderStatus: {
       type: String,
       enum: [
+        "PENDING_PAYMENT",
+        "PAYMENT_REVIEW",
+        "CONFIRMED",
+        "PROCESSING",
+        "PACKED",
+        "DISPATCHED",
+        "OUT_FOR_DELIVERY",
+        "DELIVERED",
+        "CANCELLED",
+        "RETURN_REQUESTED",
+        "RETURNED",
+        "REFUNDED",
         "pending",
         "confirmed",
         "processing",
@@ -244,6 +313,14 @@ const OrderSchema = new Schema<IOrder>(
     codDetails: {
       type: CodDetailsSchema,
       default: () => ({}),
+    },
+    shipmentDetails: {
+      type: ShipmentDetailsSchema,
+      default: () => ({}),
+    },
+    statusHistory: {
+      type: [OrderStatusHistorySchema],
+      default: () => [],
     },
     complianceVerified: {
       type: Boolean,

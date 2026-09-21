@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { Shield, Users, Package, DollarSign, Layers, AlertCircle, CheckCircle2, PhoneCall } from "lucide-react";
+import { Shield, Users, Package, DollarSign, Layers, AlertCircle, CheckCircle2, PhoneCall, ShoppingBag, Truck } from "lucide-react";
 import Link from "next/link";
 
 export default function AdminDashboardPage() {
@@ -96,6 +96,66 @@ export default function AdminDashboardPage() {
           </div>
           <p className="mt-3 text-2xl font-black text-slate-900 dark:text-white">Enabled</p>
           <p className="mt-1 text-[11px] text-emerald-600 font-semibold">Route-level access gate</p>
+        </div>
+      </div>
+
+      {/* Order Management — Heart of the Admin Panel (Sprint 9) */}
+      <div className="rounded-3xl border-2 border-blue-500/30 bg-gradient-to-br from-blue-50/50 via-white to-indigo-50/30 p-6 shadow-md dark:border-blue-500/20 dark:from-slate-900 dark:via-slate-900 dark:to-blue-950/20 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/80 pb-4 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/30">
+              <ShoppingBag className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">Order Management</h2>
+                <span className="text-[10px] font-bold uppercase tracking-wider rounded-md bg-blue-600 text-white px-2 py-0.5 shadow-2xs">
+                  Heart of Admin Panel
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider rounded-md bg-blue-500/20 text-blue-700 dark:text-blue-300 px-2 py-0.5 border border-blue-500/30">
+                  Sprint 9
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Full 12-stage lifecycle engine, Order #KF100001 inspection, shipment tracking, customer contacts, and inventory controls.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/orders"
+              className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-blue-500 transition shadow-md shadow-blue-600/30 flex items-center gap-1.5"
+            >
+              <span>Open Orders Hub</span>
+            </Link>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4 text-xs pt-1">
+          <div className="rounded-xl border border-slate-100 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-800/60">
+            <p className="font-bold text-slate-900 dark:text-white">12 Canonical Statuses</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              Pending Payment, Payment Review, Confirmed, Processing, Packed, Dispatched, Out for Delivery, Delivered, Cancelled, Return Req, Returned, Refunded.
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-800/60">
+            <p className="font-bold text-slate-900 dark:text-white">Order Inspection</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              Complete customer details, click-to-dial phone, full shipping address, products list with quantities, and authoritative calculations.
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-800/60">
+            <p className="font-bold text-slate-900 dark:text-white">Shipment & Courier Tracking</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              Assign courier partners (Blue Dart, Delhivery, etc.), record AWB tracking codes, and automatically trigger dispatch state.
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-800/60">
+            <p className="font-bold text-slate-900 dark:text-white">Warehouse Inventory Safety</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              Cancelling or returning an order automatically restores all reserved product quantities back to live warehouse stock.
+            </p>
+          </div>
         </div>
       </div>
 
