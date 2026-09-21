@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
+import { getModelProxy } from "@/lib/db";
 
 export interface IOrderItem extends Document {
   order: mongoose.Types.ObjectId;
@@ -71,7 +72,9 @@ export const OrderItemSchema = new Schema<IOrderItem>(
   }
 );
 
-export const OrderItem: Model<IOrderItem> =
+const OrderItemModel: Model<IOrderItem> =
   mongoose.models.OrderItem || mongoose.model<IOrderItem>("OrderItem", OrderItemSchema);
+
+export const OrderItem = getModelProxy(OrderItemModel, "OrderItem");
 
 export default OrderItem;

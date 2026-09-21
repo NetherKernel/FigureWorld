@@ -2,12 +2,13 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 import { getModelProxy } from "@/lib/db";
 
 export interface IAddress extends Document {
-  user: mongoose.Types.ObjectId;
+  user?: mongoose.Types.ObjectId;
   type: "shipping" | "billing" | "both";
   fullName: string;
   phone: string;
   streetLine1: string;
   streetLine2?: string;
+  landmark?: string;
   city: string;
   state: string;
   postalCode: string;
@@ -22,7 +23,7 @@ const AddressSchema = new Schema<IAddress>(
     user: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: false,
       index: true,
     },
     type: {
@@ -49,6 +50,10 @@ const AddressSchema = new Schema<IAddress>(
       type: String,
       trim: true,
     },
+    landmark: {
+      type: String,
+      trim: true,
+    },
     city: {
       type: String,
       required: [true, "City is required"],
@@ -67,7 +72,7 @@ const AddressSchema = new Schema<IAddress>(
     country: {
       type: String,
       required: [true, "Country is required"],
-      default: "United States",
+      default: "India",
       trim: true,
     },
     isDefault: {
