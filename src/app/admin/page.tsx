@@ -98,6 +98,58 @@ export default function AdminDashboardPage() {
           <p className="mt-1 text-[11px] text-emerald-600 font-semibold">Route-level access gate</p>
         </div>
       </div>
+
+      {/* Catalog & Store Management (Sprint 3) */}
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+              <Package className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">Store Catalog & Products</h2>
+              <p className="text-xs text-slate-500">
+                Sprint 3: Manage product inventory, edit prices, upload images, and control 18+ compliance.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/products/new"
+              className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-200"
+            >
+              + Add Product
+            </Link>
+            <Link
+              href="/admin/products"
+              className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500 transition shadow-sm"
+            >
+              Manage Catalog
+            </Link>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 text-xs pt-1">
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+            <p className="font-bold text-slate-900 dark:text-white">Quick Price & Stock Controls</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              Directly adjust prices, set discount rates, and update warehouse inventory inline without full reloads.
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+            <p className="font-bold text-slate-900 dark:text-white">18+ Restricted Categories</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              Katanas and replica swords automatically inherit minimum age verification gates and shipping territory blocks.
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+            <p className="font-bold text-slate-900 dark:text-white">File Upload & CDN</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              Multipart file uploader storing images in public uploads with MIME validation and primary photo selection.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

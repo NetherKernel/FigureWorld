@@ -16,7 +16,8 @@ import {
   Briefcase,
   MapPin,
   KeyRound,
-  ChevronDown
+  ChevronDown,
+  Package
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -204,14 +205,24 @@ export function Header() {
                   )}
 
                   {user.role === "ADMIN" && (
-                    <Link
-                      href="/admin"
-                      onClick={() => setUserDropdownOpen(false)}
-                      className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-950/40"
-                    >
-                      <Shield className="h-4 w-4" />
-                      <span>Admin Dashboard</span>
-                    </Link>
+                    <>
+                      <Link
+                        href="/admin"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-950/40"
+                      >
+                        <Shield className="h-4 w-4" />
+                        <span>Admin Dashboard</span>
+                      </Link>
+                      <Link
+                        href="/admin/products"
+                        onClick={() => setUserDropdownOpen(false)}
+                        className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/40"
+                      >
+                        <Package className="h-4 w-4" />
+                        <span>Product Catalog</span>
+                      </Link>
+                    </>
                   )}
                 </div>
 

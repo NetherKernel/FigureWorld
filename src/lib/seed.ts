@@ -1,13 +1,15 @@
 import { connectToDatabase } from "./db";
 import { User } from "@/models/User";
 import { Address } from "@/models/Address";
+import { Category } from "@/models/Category";
+import { Product } from "@/models/Product";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
 
-export async function seedAuthData() {
+export async function seedStoreData() {
   await connectToDatabase();
 
-  logger.info("Seeding authentication test accounts...");
+  logger.info("Seeding authentication test accounts & store catalog...");
 
   const defaultPassword = "Customer@123456";
   const adminPassword = "Admin@123456";
@@ -17,7 +19,7 @@ export async function seedAuthData() {
   const adminHash = await hashPassword(adminPassword);
   const staffHash = await hashPassword(staffPassword);
 
-  // 1. Customer User
+  // 1. Seed Accounts
   let customer = await User.findOne({ email: "customer@figuresworld.com" });
   if (!customer) {
     customer = await User.create({
@@ -27,11 +29,10 @@ export async function seedAuthData() {
       role: "CUSTOMER",
       phone: "+1 (555) 123-4567",
       isEmailVerified: true,
+      isActive: true,
     });
-    logger.info("Created test customer account: customer@figuresworld.com");
   }
 
-  // 2. Staff User
   let staff = await User.findOne({ email: "staff@figuresworld.com" });
   if (!staff) {
     staff = await User.create({
@@ -41,11 +42,10 @@ export async function seedAuthData() {
       role: "STAFF",
       phone: "+1 (555) 234-5678",
       isEmailVerified: true,
+      isActive: true,
     });
-    logger.info("Created test staff account: staff@figuresworld.com");
   }
 
-  // 3. Admin User
   let admin = await User.findOne({ email: "admin@figuresworld.com" });
   if (!admin) {
     admin = await User.create({
@@ -55,11 +55,11 @@ export async function seedAuthData() {
       role: "ADMIN",
       phone: "+1 (555) 999-0000",
       isEmailVerified: true,
+      isActive: true,
     });
-    logger.info("Created test admin account: admin@figuresworld.com");
   }
 
-  // 4. Sample Address for customer
+  // 2. Default Address
   const existingAddress = await Address.findOne({ user: customer._id });
   if (!existingAddress) {
     const addr = await Address.create({
@@ -77,12 +77,153 @@ export async function seedAuthData() {
     });
     customer.addresses = [addr._id];
     await customer.save();
-    logger.info("Created default shipping address for test customer");
+  }
+
+  // 3. Seed Categories
+  const categoryDefs = [
+    { name: "Anime Figures", slug: "anime-figures", description: "Scale figures and articulated models from popular anime series", displayOrder: 1 },
+    { name: "Collectibles", slug: "collectibles", description: "Limited edition resin statues and collector busts", displayOrder: 2 },
+    { name: "Accessories", slug: "accessories", description: "Display cases, LED risers, cleaning kits and figure accessories", displayOrder: 3 },
+    { name: "Keychains", slug: "keychains", description: "Acrylic, metallic and rubber anime character keychains", displayOrder: 4 },
+    { name: "Posters", slug: "posters", description: "High-definition collector wall scrolls and framed art prints", displayOrder: 5 },
+    { name: "Manga", slug: "manga", description: "Original Japanese and translated manga volumes and box sets", displayOrder: 6 },
+    { name: "Other Merchandise", slug: "other-merchandise", description: "Apparel, plushies, and gaming desk mats", displayOrder: 7 },
+    {
+      name: "Katanas & Replicas",
+      slug: "katanas-replicas",
+      description: "Collector display anime swords, scabbards, and metal weapons. Age restricted 18+.",
+      displayOrder: 8,
+      isRestricted: true,
+      complianceRequirements: {
+        minAge: 18,
+        requiresIdVerification: true,
+        disclaimerText: "Notice: Ornamental replica sword for display purposes only. Buyer must be 18 years or older and complies with local weapons regulations.",
+        restrictedRegions: ["UK", "NY-NYC", "CA-SF"],
+      },
+    },
+  ];
+
+  const categoryMap: Record<string, any> = {};
+
+  for (const cat of categoryDefs) {
+    let existingCat = await Category.findOne({ slug: cat.slug });
+    if (!existingCat) {
+      existingCat = await Category.create(cat);
+      logger.info(`Created category: ${cat.name}`);
+    }
+    categoryMap[cat.slug] = existingCat;
+  }
+
+  // 4. Seed Products
+  const productsDefs = [
+    {
+      name: "Luffy Gear 5 Sun God Scale Figure",
+      slug: "luffy-gear-5-sun-god-scale-figure",
+      description: "Stunning 1/7 scale figure of Monkey D. Luffy activating Gear 5 with cloud dynamic aura and translucent lighting effect base.",
+      price: 189.99,
+      discountPrice: 169.99,
+      stock: 25,
+      category: categoryMap["anime-figures"]._id,
+      brand: "MegaHouse",
+      sku: "OP-LFF-G5-001",
+      weight: 850,
+      dimensions: { length: 22, width: 20, height: 32, unit: "cm" },
+      images: [{ url: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800", altText: "Luffy Gear 5 Figure", isPrimary: true }],
+      status: "active" as const,
+      isFeatured: true,
+      isRestricted: false,
+      ageRequirement: 0,
+    },
+    {
+      name: "Zoro Enma 3-Sword Style Battle Diorama",
+      slug: "zoro-enma-3-sword-style-battle-diorama",
+      description: "Highly detailed 1/6 scale statue featuring Roronoa Zoro unleashing green dragon Haki with Enma, Wado Ichimonji, and Sandai Kitetsu.",
+      price: 249.99,
+      discountPrice: 219.99,
+      stock: 14,
+      category: categoryMap["collectibles"]._id,
+      brand: "Tsume Art",
+      sku: "OP-ZRO-ENM-002",
+      weight: 1600,
+      dimensions: { length: 28, width: 25, height: 35, unit: "cm" },
+      images: [{ url: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800", altText: "Zoro Diorama", isPrimary: true }],
+      status: "active" as const,
+      isFeatured: true,
+      isRestricted: false,
+      ageRequirement: 0,
+    },
+    {
+      name: "Demon Slayer Tanjiro Kamado Hinokami Kagura",
+      slug: "tanjiro-kamado-hinokami-kagura",
+      description: "Aniplex dynamic scale figure capturing the Dance of the Fire God with translucent flame vortex effects and detailed uniform folds.",
+      price: 159.99,
+      stock: 30,
+      category: categoryMap["anime-figures"]._id,
+      brand: "Aniplex+",
+      sku: "DS-TNJ-HNK-003",
+      weight: 720,
+      dimensions: { length: 18, width: 18, height: 26, unit: "cm" },
+      images: [{ url: "https://images.unsplash.com/photo-1563089145-599997674d42?w=800", altText: "Tanjiro Kagura Figure", isPrimary: true }],
+      status: "active" as const,
+      isFeatured: true,
+      isRestricted: false,
+      ageRequirement: 0,
+    },
+    {
+      name: "Demon Slayer Nichirin Katana Replica (Carbon Steel)",
+      slug: "demon-slayer-nichirin-katana-replica",
+      description: "Authentic full-tang hand-forged 1045 high carbon steel replica of Tanjiro's black Nichirin blade. Comes with wooden scabbard and display stand. For adult collectors only.",
+      price: 129.99,
+      discountPrice: 109.99,
+      stock: 8,
+      category: categoryMap["katanas-replicas"]._id,
+      brand: "Hansei Blades",
+      sku: "WP-NCHR-TNJ-004",
+      weight: 1200,
+      dimensions: { length: 104, width: 8, height: 8, unit: "cm" },
+      images: [{ url: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800", altText: "Nichirin Katana Replica", isPrimary: true }],
+      status: "active" as const,
+      isFeatured: true,
+      isRestricted: true,
+      ageRequirement: 18,
+      shippingRestrictions: ["UK", "NY-NYC", "CA-SF"],
+    },
+    {
+      name: "Gojo Satoru Hollow Purple 1/7 Scale Statue",
+      slug: "gojo-satoru-hollow-purple-statue",
+      description: "Jujutsu Kaisen master Gojo Satoru casting Hollow Purple with floating blindfold and LED crystalline foundation.",
+      price: 210.00,
+      stock: 12,
+      category: categoryMap["anime-figures"]._id,
+      brand: "eStream SHIBUYA SCRAMBLE",
+      sku: "JJK-GJO-HLW-005",
+      weight: 950,
+      dimensions: { length: 24, width: 22, height: 30, unit: "cm" },
+      images: [{ url: "https://images.unsplash.com/photo-1618336753974-aae8e04506aa?w=800", altText: "Gojo Satoru Statue", isPrimary: true }],
+      status: "active" as const,
+      isFeatured: true,
+      isRestricted: false,
+      ageRequirement: 0,
+    },
+  ];
+
+  for (const prod of productsDefs) {
+    const existingProd = await Product.findOne({ sku: prod.sku });
+    if (!existingProd) {
+      await Product.create(prod);
+      logger.info(`Created sample product: ${prod.name}`);
+    }
   }
 
   return {
-    customer: customer.email,
-    staff: staff.email,
-    admin: admin.email,
+    categoriesCount: categoryDefs.length,
+    productsCount: productsDefs.length,
+    accounts: {
+      customer: customer.email,
+      staff: staff.email,
+      admin: admin.email,
+    },
   };
 }
+
+export const seedAuthData = seedStoreData;

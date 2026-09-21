@@ -1,4 +1,12 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
+import { getModelProxy } from "@/lib/db";
+
+export interface ICategoryCompliance {
+  minAge: number;
+  requiresIdVerification: boolean;
+  disclaimerText: string;
+  restrictedRegions: string[];
+}
 
 export interface ICategory extends Document {
   name: string;
@@ -8,9 +16,21 @@ export interface ICategory extends Document {
   parentCategory?: mongoose.Types.ObjectId;
   displayOrder: number;
   isActive: boolean;
+  isRestricted: boolean;
+  complianceRequirements: ICategoryCompliance;
   createdAt: Date;
   updatedAt: Date;
 }
+
+const CategoryComplianceSchema = new Schema<ICategoryCompliance>(
+  {
+    minAge: { type: Number, default: 0 },
+    requiresIdVerification: { type: Boolean, default: false },
+    disclaimerText: { type: String, default: "" },
+    restrictedRegions: { type: [String], default: [] },
+  },
+  { _id: false }
+);
 
 const CategorySchema = new Schema<ICategory>(
   {
@@ -50,13 +70,29 @@ const CategorySchema = new Schema<ICategory>(
       default: true,
       index: true,
     },
+    isRestricted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    complianceRequirements: {
+      type: CategoryComplianceSchema,
+      default: () => ({
+        minAge: 0,
+        requiresIdVerification: false,
+        disclaimerText: "",
+        restrictedRegions: [],
+      }),
+    },
   },
   {
     timestamps: true,
   }
 );
 
-export const Category: Model<ICategory> =
+const CategoryModel: Model<ICategory> =
   mongoose.models.Category || mongoose.model<ICategory>("Category", CategorySchema);
+
+export const Category = getModelProxy(CategoryModel, "Category");
 
 export default Category;
