@@ -153,6 +153,13 @@ export async function POST(req: Request) {
     const shippingFee = 100;
     const grandTotal = subtotal + shippingFee;
 
+    // 2b. COD Maximum Limit Enforcement (Sprint 8)
+    if (data.paymentMethod === "COD" && grandTotal > 15000) {
+      throw new ValidationError(
+        `Cash on Delivery is limited to orders up to ₹15,000. Your order total is ₹${grandTotal.toLocaleString("en-IN")}. Please choose Direct UPI payment for higher value orders.`
+      );
+    }
+
     // 3. Create Shipping Address Record
     const shippingAddress = await Address.create({
       user: currentUser?.userId || undefined,
@@ -185,9 +192,9 @@ export async function POST(req: Request) {
       qrDataUrl = await generateUpiQrDataUrl(qrPayload);
     }
 
-    // 6. Create Order Record with Canonical Payment Status State Machine
-    // For UPI: Payment starts as PENDING and Order starts as pending (unconfirmed until verified)
-    // For COD: Payment starts as PENDING (doorstep) and Order is confirmed
+    // 6. Create Order Record
+    // For UPI: Payment is PENDING, Order is pending (awaiting payment confirmation)
+    // For COD (Sprint 8): Payment is PENDING, Order is pending (awaiting COD Phone Verification)
     const newOrder = await Order.create({
       orderNumber,
       customer: currentUser?.userId || undefined,
@@ -204,7 +211,7 @@ export async function POST(req: Request) {
       shippingAddress: shippingAddress._id,
       paymentMethod: data.paymentMethod,
       paymentStatus: "PENDING",
-      orderStatus: data.paymentMethod === "UPI" ? "pending" : "confirmed",
+      orderStatus: "pending",
       paymentDetails:
         data.paymentMethod === "UPI"
           ? {
@@ -213,11 +220,19 @@ export async function POST(req: Request) {
               qrPayload,
             }
           : undefined,
+      codDetails:
+        data.paymentMethod === "COD"
+          ? {
+              codStatus: "PENDING_VERIFICATION",
+              callLogs: [],
+              maxCodLimit: 15000,
+            }
+          : undefined,
       complianceVerified: containsRestrictedGoods,
       notes:
         data.paymentMethod === "UPI"
           ? `Direct UPI checkout. Customer VPA: ${data.upiId}`
-          : "Cash on Delivery",
+          : "Cash on Delivery - Pending Phone Verification",
       placedAt: new Date(),
     });
 
@@ -271,6 +286,7 @@ export async function POST(req: Request) {
           qrPayload,
           qrDataUrl,
         },
+        codDetails: newOrder.codDetails,
         shippingAddress: {
           fullName: shippingAddress.fullName,
           phone: shippingAddress.phone,

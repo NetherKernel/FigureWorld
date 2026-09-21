@@ -195,6 +195,11 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (paymentMethod === "COD" && summary.subtotal + 100 > 15000) {
+      setError("Cash on Delivery is limited to orders up to ₹15,000. Please select Direct UPI payment.");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -566,6 +571,43 @@ export default function CheckoutPage() {
             </p>
           </div>
         </div>
+
+        {/* COD Verification Status Tracker (Sprint 8) */}
+        {placedOrder.paymentMethod === "COD" && (
+          <div className="rounded-3xl border-2 border-amber-300 bg-amber-50/90 p-6 sm:p-8 dark:border-amber-800/80 dark:bg-amber-950/30 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-md">
+                <Phone className="h-6 w-6" />
+              </div>
+              <div>
+                <span className="rounded-full bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 px-2.5 py-0.5 font-bold uppercase tracking-wider text-[10px]">
+                  COD Verification Required
+                </span>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white mt-1">
+                  Customer Phone Verification in Progress
+                </h3>
+                <p className="text-slate-600 dark:text-slate-300 text-[11px] mt-0.5">
+                  Our verification agent will dial <strong className="font-mono">{placedOrder.shippingAddress.phone}</strong> within 2-4 hours to confirm delivery schedule prior to dispatch.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-amber-200/60 dark:border-amber-900/40 text-[11px]">
+              <div className="flex items-center gap-2 font-semibold text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                <span>1. Order Created</span>
+              </div>
+              <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-200 animate-pulse">
+                <Clock className="h-4 w-4 shrink-0 text-amber-600" />
+                <span>2. Phone Verification</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-400">
+                <Truck className="h-4 w-4 shrink-0" />
+                <span>3. Confirmed & Dispatch</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Order Details Breakdown */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -56,6 +56,7 @@ export async function GET(
           ...order.paymentDetails,
           qrDataUrl,
         },
+        codDetails: order.codDetails || null,
         shippingAddress: shippingAddress
           ? {
               fullName: shippingAddress.fullName,

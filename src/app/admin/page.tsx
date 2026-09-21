@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { Shield, Users, Package, DollarSign, Layers, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Shield, Users, Package, DollarSign, Layers, AlertCircle, CheckCircle2, PhoneCall } from "lucide-react";
 import Link from "next/link";
 
 export default function AdminDashboardPage() {
@@ -197,6 +197,57 @@ export default function AdminDashboardPage() {
             <p className="font-bold text-slate-900 dark:text-white">Auto Stock Restoration</p>
             <p className="mt-1 text-slate-500 text-[11px]">
               When an unverified or invalid transaction is rejected, reserved inventory is instantly restored to active stock.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Cash on Delivery Verification & Dispatch (Sprint 8) */}
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
+              <PhoneCall className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">Cash on Delivery (COD) Management</h2>
+                <span className="text-[10px] font-bold uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 px-2 py-0.5 border border-amber-500/30">
+                  Sprint 8
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">
+                Log customer phone verification calls, confirm destination coordinates, accept or reject COD orders, and execute courier dispatch.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/cod"
+              className="rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-500 transition shadow-sm flex items-center gap-1.5"
+            >
+              <span>Open COD Console</span>
+            </Link>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 text-xs pt-1">
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+            <p className="font-bold text-slate-900 dark:text-white">Customer Phone Verification</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              Direct click-to-dial with call log history tracking: Answered, No Answer, Busy, or Callback Requested.
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+            <p className="font-bold text-slate-900 dark:text-white">Strict Verification Gate</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              Order Created → Phone Verification → Confirmed → Courier Dispatch. Orders cannot be dispatched prior to phone confirmation.
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+            <p className="font-bold text-slate-900 dark:text-white">COD Safeguards & Limit</p>
+            <p className="mt-1 text-slate-500 text-[11px]">
+              Orders are capped at ₹15,000 maximum for COD. Rejection or cancellation automatically returns reserved items to active inventory.
             </p>
           </div>
         </div>

@@ -23,6 +23,33 @@ export interface IUpiPaymentDetails {
   rejectionReason?: string;
 }
 
+export interface ICodCallLog {
+  calledAt: Date;
+  calledBy: string;
+  callStatus: "ANSWERED" | "NO_ANSWER" | "BUSY" | "CALLBACK_REQUESTED";
+  notes?: string;
+}
+
+export type CodStatus =
+  | "PENDING_VERIFICATION"
+  | "VERIFIED"
+  | "DISPATCHED"
+  | "REJECTED"
+  | "CANCELLED";
+
+export interface ICodDetails {
+  codStatus: CodStatus;
+  verifiedAt?: Date;
+  verifiedBy?: mongoose.Types.ObjectId | string;
+  callLogs: ICodCallLog[];
+  rejectionReason?: string;
+  cancellationReason?: string;
+  courierPartner?: string;
+  trackingNumber?: string;
+  dispatchedAt?: Date;
+  maxCodLimit?: number;
+}
+
 export type PaymentStatus =
   | "PENDING"
   | "UNDER_REVIEW"
@@ -56,6 +83,7 @@ export interface IOrder extends Document {
   paymentStatus: PaymentStatus;
   orderStatus: OrderStatus;
   paymentDetails?: IUpiPaymentDetails;
+  codDetails?: ICodDetails;
   complianceVerified: boolean;
   couponCode?: string;
   notes?: string;
@@ -88,6 +116,47 @@ const UpiPaymentDetailsSchema = new Schema<IUpiPaymentDetails>(
     verifiedBy: { type: Schema.Types.Mixed },
     verificationNotes: { type: String },
     rejectionReason: { type: String },
+  },
+  { _id: false }
+);
+
+const CodCallLogSchema = new Schema<ICodCallLog>(
+  {
+    calledAt: { type: Date, default: Date.now },
+    calledBy: { type: String, required: true },
+    callStatus: {
+      type: String,
+      enum: ["ANSWERED", "NO_ANSWER", "BUSY", "CALLBACK_REQUESTED"],
+      required: true,
+    },
+    notes: { type: String },
+  },
+  { _id: false }
+);
+
+const CodDetailsSchema = new Schema<ICodDetails>(
+  {
+    codStatus: {
+      type: String,
+      enum: [
+        "PENDING_VERIFICATION",
+        "VERIFIED",
+        "DISPATCHED",
+        "REJECTED",
+        "CANCELLED",
+      ],
+      default: "PENDING_VERIFICATION",
+      index: true,
+    },
+    verifiedAt: { type: Date },
+    verifiedBy: { type: Schema.Types.Mixed },
+    callLogs: { type: [CodCallLogSchema], default: () => [] },
+    rejectionReason: { type: String },
+    cancellationReason: { type: String },
+    courierPartner: { type: String },
+    trackingNumber: { type: String },
+    dispatchedAt: { type: Date },
+    maxCodLimit: { type: Number, default: 15000 },
   },
   { _id: false }
 );
@@ -170,6 +239,10 @@ const OrderSchema = new Schema<IOrder>(
     },
     paymentDetails: {
       type: UpiPaymentDetailsSchema,
+      default: () => ({}),
+    },
+    codDetails: {
+      type: CodDetailsSchema,
       default: () => ({}),
     },
     complianceVerified: {

@@ -229,6 +229,9 @@ export async function seedStoreData() {
     if (!existingProd) {
       await Product.create(prod);
       logger.info(`Created sample product: ${prod.name}`);
+    } else if (existingProd.stock < 10) {
+      existingProd.stock = prod.stock;
+      await existingProd.save();
     }
   }
 
