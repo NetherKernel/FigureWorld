@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
+import { getModelProxy } from "@/lib/db";
 
 export interface IAddress extends Document {
   user: mongoose.Types.ObjectId;
@@ -79,7 +80,9 @@ const AddressSchema = new Schema<IAddress>(
   }
 );
 
-export const Address: Model<IAddress> =
+const AddressModel: Model<IAddress> =
   mongoose.models.Address || mongoose.model<IAddress>("Address", AddressSchema);
+
+export const Address = getModelProxy(AddressModel, "Address");
 
 export default Address;

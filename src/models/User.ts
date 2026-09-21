@@ -1,15 +1,20 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
+import { getModelProxy } from "@/lib/db";
+
+export type UserRole = "CUSTOMER" | "ADMIN" | "STAFF";
 
 export interface IUser extends Document {
   name: string;
   email: string;
   passwordHash?: string;
-  role: "customer" | "vip" | "moderator" | "admin";
+  role: UserRole;
   phone?: string;
   avatar?: string;
   isEmailVerified: boolean;
   isActive: boolean;
   addresses: mongoose.Types.ObjectId[];
+  resetPasswordToken?: string;
+  resetPasswordExpires?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,8 +41,8 @@ const UserSchema = new Schema<IUser>(
     },
     role: {
       type: String,
-      enum: ["customer", "vip", "moderator", "admin"],
-      default: "customer",
+      enum: ["CUSTOMER", "ADMIN", "STAFF"],
+      default: "CUSTOMER",
       index: true,
     },
     phone: {
@@ -61,13 +66,23 @@ const UserSchema = new Schema<IUser>(
         ref: "Address",
       },
     ],
+    resetPasswordToken: {
+      type: String,
+      select: false,
+    },
+    resetPasswordExpires: {
+      type: Date,
+      select: false,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-export const User: Model<IUser> =
+const UserModel: Model<IUser> =
   mongoose.models.User || mongoose.model<IUser>("User", UserSchema);
+
+export const User = getModelProxy(UserModel, "User");
 
 export default User;
