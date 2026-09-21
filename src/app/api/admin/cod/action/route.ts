@@ -7,6 +7,7 @@ import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
+import { createInvoiceForOrder } from "@/lib/invoice";
 
 const codActionSchema = z.object({
   orderNumber: z.string().optional(),
@@ -149,6 +150,14 @@ export async function POST(req: Request) {
     }
 
     await order.save();
+
+    if (data.action === "ACCEPT" || data.action === "MARK_VERIFIED") {
+      try {
+        await createInvoiceForOrder(order.orderNumber);
+      } catch (invErr) {
+        console.error("Invoice auto-generation error on COD accept:", invErr);
+      }
+    }
 
     return apiSuccess(
       {

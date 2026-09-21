@@ -24,6 +24,9 @@ import {
   ShieldCheck,
   Layers,
   Edit3,
+  FileText,
+  Send,
+  Download,
 } from "lucide-react";
 import { formatPrice } from "@/lib/format";
 
@@ -112,6 +115,8 @@ interface IOrderDetail {
     shippingNotes?: string;
   };
   statusHistory: IOrderStatusHistory[];
+  invoiceNumber?: string;
+  invoiceId?: string;
   complianceVerified: boolean;
   notes?: string;
   placedAt: string;
@@ -166,6 +171,8 @@ export default function AdminOrderDetailPage() {
   const [autoDispatchShipment, setAutoDispatchShipment] = useState(true);
   const [shippingNotesInput, setShippingNotesInput] = useState("");
   const [updatingShipment, setUpdatingShipment] = useState(false);
+  const [generatingInvoice, setGeneratingInvoice] = useState(false);
+  const [sendingInvoice, setSendingInvoice] = useState(false);
 
   const fetchOrderDetail = useCallback(async () => {
     if (!rawOrderNumber) return;
@@ -267,6 +274,46 @@ export default function AdminOrderDetailPage() {
       setToastMessage({ type: "error", text: "Network error updating shipment details." });
     } finally {
       setUpdatingShipment(false);
+    }
+  };
+
+  const handleGenerateInvoice = async () => {
+    setGeneratingInvoice(true);
+    try {
+      const res = await fetch(`/api/orders/${encodeURIComponent(rawOrderNumber)}/invoice`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setToastMessage({ type: "success", text: `Invoice ${json.data.invoiceNumber} generated successfully!` });
+        await fetchOrderDetail();
+      } else {
+        setToastMessage({ type: "error", text: json.message || "Failed to generate invoice." });
+      }
+    } catch {
+      setToastMessage({ type: "error", text: "Network error generating invoice." });
+    } finally {
+      setGeneratingInvoice(false);
+    }
+  };
+
+  const handleSendInvoice = async () => {
+    if (!order?.invoiceNumber) return;
+    setSendingInvoice(true);
+    try {
+      const res = await fetch(`/api/invoices/${encodeURIComponent(order.invoiceNumber)}/send`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setToastMessage({ type: "success", text: `Invoice sent to customer at ${order.customerEmail}` });
+      } else {
+        setToastMessage({ type: "error", text: json.message || "Failed to send invoice email." });
+      }
+    } catch {
+      setToastMessage({ type: "error", text: "Network error sending invoice email." });
+    } finally {
+      setSendingInvoice(false);
     }
   };
 
@@ -846,6 +893,108 @@ export default function AdminOrderDetailPage() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Official Tax Invoice Card (Sprint 10) */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">Tax Invoice</h2>
+                  <p className="text-[11px] text-slate-500">GST 18% Compliant Billing</p>
+                </div>
+              </div>
+              {order.invoiceNumber ? (
+                <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300">
+                  GENERATED
+                </span>
+              ) : (
+                <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300">
+                  NOT GENERATED
+                </span>
+              )}
+            </div>
+
+            {order.invoiceNumber ? (
+              <div className="space-y-3 text-xs">
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/40">
+                  <span className="text-slate-400 text-[10px] block">Invoice Number (Server-Generated)</span>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                      {order.invoiceNumber}
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(order.invoiceNumber!, "invoiceNumber")}
+                      className="text-slate-400 hover:text-slate-600 p-0.5"
+                    >
+                      {copiedText === "invoiceNumber" ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-between text-[11px] text-slate-500">
+                  <span>Store GSTIN:</span>
+                  <span className="font-mono font-bold text-slate-800 dark:text-slate-200">27AADCF1234F1Z5</span>
+                </div>
+
+                <div className="flex justify-between text-[11px] text-slate-500">
+                  <span>HSN Code:</span>
+                  <span className="font-mono text-slate-800 dark:text-slate-200">95030090</span>
+                </div>
+
+                {/* Actions */}
+                <div className="pt-2 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link
+                      href={`/invoices/${order.invoiceNumber}`}
+                      target="_blank"
+                      className="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition dark:border-slate-800 dark:bg-slate-800 dark:text-slate-200"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      <span>Web View</span>
+                    </Link>
+
+                    <a
+                      href={`/api/invoices/${order.invoiceNumber}/pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-1 rounded-xl bg-indigo-600 py-2 text-xs font-semibold text-white hover:bg-indigo-500 transition shadow-xs"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      <span>PDF</span>
+                    </a>
+                  </div>
+
+                  <button
+                    onClick={handleSendInvoice}
+                    disabled={sendingInvoice}
+                    className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition dark:border-indigo-800/40 dark:bg-indigo-950/40 dark:text-indigo-300"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    <span>{sendingInvoice ? "Sending..." : "Email Invoice to Customer"}</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-4 space-y-2 text-xs">
+                <p className="text-slate-500">No invoice generated yet for this order.</p>
+                <button
+                  onClick={handleGenerateInvoice}
+                  disabled={generatingInvoice}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-500 transition shadow-xs disabled:opacity-50"
+                >
+                  <FileText className="h-4 w-4" />
+                  <span>{generatingInvoice ? "Generating..." : "Generate Tax Invoice"}</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

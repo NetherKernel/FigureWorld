@@ -8,6 +8,7 @@ import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
+import { createInvoiceForOrder } from "@/lib/invoice";
 
 const updateStatusSchema = z.object({
   status: z.enum([
@@ -139,6 +140,12 @@ export async function PATCH(
         order.codDetails.codStatus = "VERIFIED";
         order.codDetails.verifiedAt = new Date();
         order.codDetails.verifiedBy = user.userId;
+      }
+      // Trigger automatic invoice generation on confirmation
+      try {
+        await createInvoiceForOrder(order.orderNumber);
+      } catch (invErr) {
+        console.error("Invoice auto-generation error:", invErr);
       }
     }
 

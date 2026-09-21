@@ -135,6 +135,8 @@ export async function GET(
         shippingNotes: order.shipmentDetails?.shippingNotes || "",
       },
       statusHistory: order.statusHistory || [],
+      invoiceNumber: order.invoiceNumber || null,
+      invoiceId: order.invoiceId ? order.invoiceId.toString() : null,
       complianceVerified: order.complianceVerified || false,
       notes: order.notes || "",
       placedAt: order.placedAt || order.createdAt,

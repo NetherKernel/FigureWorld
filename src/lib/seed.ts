@@ -5,6 +5,8 @@ import { Category } from "@/models/Category";
 import { Product } from "@/models/Product";
 import { Order } from "@/models/Order";
 import { OrderItem } from "@/models/OrderItem";
+import { Invoice } from "@/models/Invoice";
+import { createInvoiceForOrder } from "./invoice";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
 
@@ -304,6 +306,17 @@ export async function seedStoreData() {
       kfOrder.items = [orderItem._id];
       await kfOrder.save();
       logger.info("Seeded reference order: #KF100001");
+
+      // Generate invoice for #KF100001
+      try {
+        const existingInv = await Invoice.findOne({ order: kfOrder._id });
+        if (!existingInv) {
+          await createInvoiceForOrder(kfOrder.orderNumber);
+          logger.info("Seeded invoice for reference order #KF100001");
+        }
+      } catch (invErr) {
+        logger.error("Error seeding invoice for #KF100001:", { error: String(invErr) });
+      }
     }
   }
 

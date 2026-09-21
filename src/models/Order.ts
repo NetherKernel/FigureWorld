@@ -118,6 +118,8 @@ export interface IOrder extends Document {
   codDetails?: ICodDetails;
   shipmentDetails?: IShipmentDetails;
   statusHistory?: IOrderStatusHistory[];
+  invoiceNumber?: string;
+  invoiceId?: mongoose.Types.ObjectId;
   complianceVerified: boolean;
   couponCode?: string;
   notes?: string;
@@ -321,6 +323,15 @@ const OrderSchema = new Schema<IOrder>(
     statusHistory: {
       type: [OrderStatusHistorySchema],
       default: () => [],
+    },
+    invoiceNumber: {
+      type: String,
+      trim: true,
+      index: true,
+    },
+    invoiceId: {
+      type: Schema.Types.ObjectId,
+      ref: "Invoice",
     },
     complianceVerified: {
       type: Boolean,
