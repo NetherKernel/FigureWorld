@@ -121,6 +121,8 @@ export interface IOrder extends Document {
   invoiceNumber?: string;
   invoiceId?: mongoose.Types.ObjectId;
   complianceVerified: boolean;
+  requiresAdminReview?: boolean;
+  complianceDetails?: Record<string, unknown>;
   couponCode?: string;
   notes?: string;
   placedAt: Date;
@@ -336,6 +338,13 @@ const OrderSchema = new Schema<IOrder>(
     complianceVerified: {
       type: Boolean,
       default: false,
+    },
+    requiresAdminReview: {
+      type: Boolean,
+      default: false,
+    },
+    complianceDetails: {
+      type: Schema.Types.Mixed,
     },
     couponCode: {
       type: String,

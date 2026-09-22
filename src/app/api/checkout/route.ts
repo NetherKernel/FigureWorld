@@ -6,10 +6,13 @@ import { Category } from "@/models/Category";
 import { Address } from "@/models/Address";
 import { Order } from "@/models/Order";
 import { OrderItem } from "@/models/OrderItem";
+import { Coupon } from "@/models/Coupon";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { ValidationError, ConflictError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
+import { sanitizeMongoQuery } from "@/lib/security";
+import { getClientIp } from "@/lib/rate-limiter";
 import {
   buildUpiUri,
   generateUpiQrDataUrl,
@@ -43,12 +46,15 @@ const checkoutSchema = z.object({
     .min(1, "Your cart is empty. Please add items before checking out."),
   paymentMethod: z.enum(["UPI", "COD"]),
   upiId: z.string().optional(),
+  couponCode: z.string().optional(),
   ageConfirmed: z.boolean().default(false),
+  termsConsent: z.boolean().optional(),
 });
 
 export async function POST(req: Request) {
   try {
-    const data = await validateRequestBody(req, checkoutSchema);
+    const rawData = await validateRequestBody(req, checkoutSchema);
+    const data = sanitizeMongoQuery(rawData);
 
     // Strict validation for UPI payment method
     if (data.paymentMethod === "UPI") {
@@ -61,8 +67,10 @@ export async function POST(req: Request) {
 
     // Check optional authenticated user session
     const currentUser = await getAuthenticatedUser(req);
+    const clientIp = getClientIp(req);
+    const userAgent = req.headers.get("user-agent") || "";
 
-    // 1. Fetch live products from DB, validate stock, and verify 18+ destination restrictions
+    // 1. Fetch live products from DB, validate stock, and verify 18+ destination & legal compliance
     const orderItemsData: any[] = [];
     let subtotal = 0;
     let containsRestrictedGoods = false;
@@ -81,18 +89,25 @@ export async function POST(req: Request) {
         );
       }
 
-      // Restricted Products: Eligibility and Destination Restrictions
+      // Restricted Products: Eligibility, Age Confirmation, Terms Consent, and Destination Restrictions
       if (product.isRestricted) {
         containsRestrictedGoods = true;
 
-        // Eligibility verification
+        // 1. Age Gate Verification
         if (!data.ageConfirmed) {
           throw new ValidationError(
             `Age eligibility confirmation required: "${product.name}" is an 18+ age-restricted product. You must verify that you are at least 18 years old.`
           );
         }
 
-        // Destination restrictions verification
+        // 2. Terms / Legal Consent Verification
+        if (data.termsConsent === false) {
+          throw new ValidationError(
+            `Legal terms consent required: You must accept terms of possession and legal compliance for decorative collector replica weapons.`
+          );
+        }
+
+        // 3. Destination restrictions verification
         const categoryDoc = await Category.findById(product.category);
         const prohibitedRegions: string[] = [
           ...(product.shippingRestrictions || []),
@@ -122,7 +137,7 @@ export async function POST(req: Request) {
         }
       }
 
-      // Effective unit price (Never trust React!)
+      // Zero-Trust: Authoritative unit price strictly from database (Client cannot tamper with price!)
       const effectivePrice =
         product.discountPrice !== undefined && product.discountPrice !== null && product.discountPrice < product.price
           ? product.discountPrice
@@ -149,18 +164,59 @@ export async function POST(req: Request) {
       });
     }
 
-    // 2. Authoritative Delivery Calculation (Flat ₹100 as specified in Sprint 5 & Sprint 6)
-    const shippingFee = 100;
-    const grandTotal = subtotal + shippingFee;
+    // 2. Authoritative Coupon Verification & Discount Calculation
+    let discountAmount = 0;
+    let appliedCouponCode: string | undefined = undefined;
 
-    // 2b. COD Maximum Limit Enforcement (Sprint 8)
+    if (data.couponCode) {
+      const codeClean = data.couponCode.toUpperCase().trim();
+      const coupon = await Coupon.findOne({ code: codeClean });
+
+      if (!coupon || !coupon.isActive) {
+        throw new ValidationError(`Coupon code "${codeClean}" is invalid or inactive.`);
+      }
+
+      const now = new Date();
+      if (new Date(coupon.validUntil) < now || new Date(coupon.validFrom) > now) {
+        throw new ValidationError(`Coupon code "${codeClean}" has expired.`);
+      }
+
+      if (subtotal < (coupon.minimumOrderValue || 0)) {
+        throw new ValidationError(
+          `Coupon "${codeClean}" requires a minimum order value of ₹${coupon.minimumOrderValue.toLocaleString("en-IN")}. Your subtotal is ₹${subtotal.toLocaleString("en-IN")}.`
+        );
+      }
+
+      if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
+        throw new ValidationError(`Coupon "${codeClean}" has exceeded its maximum usage limit.`);
+      }
+
+      if (coupon.discountType === "percentage") {
+        discountAmount = Math.round((subtotal * coupon.discountValue) / 100);
+        if (coupon.maximumDiscountAmount && discountAmount > coupon.maximumDiscountAmount) {
+          discountAmount = coupon.maximumDiscountAmount;
+        }
+      } else {
+        discountAmount = Math.min(coupon.discountValue, subtotal);
+      }
+
+      appliedCouponCode = coupon.code;
+      coupon.usedCount = (coupon.usedCount || 0) + 1;
+      await coupon.save();
+    }
+
+    // 3. Authoritative Delivery Calculation (Flat ₹100 as specified in Sprint 5 & 6)
+    const shippingFee = 100;
+    const grandTotal = Math.max(0, subtotal - discountAmount + shippingFee);
+
+    // 3b. COD Maximum Limit Enforcement (Sprint 8)
     if (data.paymentMethod === "COD" && grandTotal > 15000) {
       throw new ValidationError(
         `Cash on Delivery is limited to orders up to ₹15,000. Your order total is ₹${grandTotal.toLocaleString("en-IN")}. Please choose Direct UPI payment for higher value orders.`
       );
     }
 
-    // 3. Create Shipping Address Record
+    // 4. Create Shipping Address Record
     const shippingAddress = await Address.create({
       user: currentUser?.userId || undefined,
       type: "shipping",
@@ -176,10 +232,10 @@ export async function POST(req: Request) {
       isDefault: false,
     });
 
-    // 4. Generate Unique Order Number
+    // 5. Generate Unique Order Number
     const orderNumber = `FW-${Date.now().toString().slice(-6)}-${crypto.randomBytes(2).toString("hex").toUpperCase()}`;
 
-    // 5. UPI QR Code & Intent generation
+    // 6. UPI QR Code & Intent generation
     let qrPayload = "";
     let qrDataUrl = "";
     if (data.paymentMethod === "UPI") {
@@ -192,9 +248,8 @@ export async function POST(req: Request) {
       qrDataUrl = await generateUpiQrDataUrl(qrPayload);
     }
 
-    // 6. Create Order Record
-    // For UPI: Payment is PENDING, Order is pending (awaiting payment confirmation)
-    // For COD (Sprint 8): Payment is PENDING, Order is pending (awaiting COD Phone Verification)
+    // 7. Create Order Record strictly initializing status
+    // Zero-Trust: Payment status is ALWAYS PENDING; Order status is ALWAYS pending.
     const newOrder = await Order.create({
       orderNumber,
       customer: currentUser?.userId || undefined,
@@ -202,7 +257,7 @@ export async function POST(req: Request) {
       items: [], // Will populate with OrderItem IDs
       pricing: {
         subtotal,
-        discountTotal: 0,
+        discountTotal: discountAmount,
         taxTotal: 0,
         shippingFee,
         grandTotal,
@@ -212,6 +267,7 @@ export async function POST(req: Request) {
       paymentMethod: data.paymentMethod,
       paymentStatus: "PENDING",
       orderStatus: "pending",
+      couponCode: appliedCouponCode,
       paymentDetails:
         data.paymentMethod === "UPI"
           ? {
@@ -229,6 +285,17 @@ export async function POST(req: Request) {
             }
           : undefined,
       complianceVerified: containsRestrictedGoods,
+      requiresAdminReview: containsRestrictedGoods,
+      complianceDetails: containsRestrictedGoods
+        ? {
+            isRestrictedOrder: true,
+            ageConfirmed: true,
+            termsConsent: data.termsConsent !== false,
+            verifiedAt: new Date(),
+            clientIp,
+            userAgent,
+          }
+        : undefined,
       notes:
         data.paymentMethod === "UPI"
           ? `Direct UPI checkout. Customer VPA: ${data.upiId}`
@@ -236,7 +303,7 @@ export async function POST(req: Request) {
       placedAt: new Date(),
     });
 
-    // 7. Create OrderItems linked to newOrder
+    // 8. Create OrderItems linked to newOrder and atomically decrement stock
     const orderItemIds = [];
     for (const itemData of orderItemsData) {
       const orderItem = await OrderItem.create({
@@ -253,7 +320,7 @@ export async function POST(req: Request) {
       });
       orderItemIds.push(orderItem._id);
 
-      // 8. Inventory stock decrement
+      // Atomic inventory stock decrement
       itemData.productDoc.stock = Math.max(0, itemData.productDoc.stock - itemData.quantity);
       await itemData.productDoc.save();
     }
@@ -279,6 +346,7 @@ export async function POST(req: Request) {
         paymentMethod: newOrder.paymentMethod,
         paymentStatus: newOrder.paymentStatus,
         orderStatus: newOrder.orderStatus,
+        couponCode: appliedCouponCode,
         paymentDetails: {
           merchantUpiId: MERCHANT_UPI_ID,
           merchantName: MERCHANT_NAME,
@@ -306,6 +374,7 @@ export async function POST(req: Request) {
         })),
         estimatedDelivery: estimatedDeliveryFormatted,
         complianceVerified: containsRestrictedGoods,
+        requiresAdminReview: containsRestrictedGoods,
       },
       "Order placed successfully",
       201

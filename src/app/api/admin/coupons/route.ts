@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { ConflictError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
+import { logAdminAudit } from "@/lib/audit";
 
 const createCouponSchema = z.object({
   code: z.string().min(3, "Coupon code must be at least 3 characters").max(30).toUpperCase().trim(),
@@ -55,7 +56,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    await requireRole(req, "ADMIN");
+    const user = await requireRole(req, "ADMIN");
     await connectToDatabase();
 
     const data = await validateRequestBody(req, createCouponSchema);
@@ -66,6 +67,22 @@ export async function POST(req: Request) {
     }
 
     const newCoupon = await Coupon.create(data);
+
+    await logAdminAudit({
+      action: "COUPON_CREATE",
+      actor: user,
+      resource: {
+        type: "COUPON",
+        id: newCoupon._id.toString(),
+        identifier: newCoupon.code,
+      },
+      details: {
+        code: newCoupon.code,
+        discountType: newCoupon.discountType,
+        discountValue: newCoupon.discountValue,
+      },
+      req,
+    });
 
     return apiSuccess({ coupon: newCoupon }, "Coupon created successfully", 201);
   } catch (err) {

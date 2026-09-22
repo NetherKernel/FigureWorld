@@ -160,13 +160,18 @@ async function runSprint10Tests() {
 
     // --- Step 2: Invoice Lookup by Invoice Number ---
     console.log("\n--- Step 2: Query Invoice by Invoice Number ---");
-    const directInvRes = await request(`/api/invoices/${invoiceNum}`);
+    const directInvRes = await request(`/api/invoices/${invoiceNum}`, {
+      headers: { Cookie: customerCookie },
+    });
     assert(directInvRes.status === 200, `Retrieved invoice via /api/invoices/${invoiceNum}`);
     assert(directInvRes.json?.data?.invoiceNumber === invoiceNum, "Invoice number matches");
 
     // --- Step 3: Vector PDF Generation & Stream Verification ---
     console.log("\n--- Step 3: Stream Binary PDF Document ---");
-    const pdfRes = await request(`/api/invoices/${invoiceNum}/pdf`, { binary: true });
+    const pdfRes = await request(`/api/invoices/${invoiceNum}/pdf`, {
+      binary: true,
+      headers: { Cookie: customerCookie },
+    });
     assert(pdfRes.status === 200, "PDF stream returned 200 OK");
     const pdfContentType = pdfRes.headers.get("content-type");
     assert(pdfContentType?.includes("application/pdf"), `Content-Type is application/pdf (got: ${pdfContentType})`);

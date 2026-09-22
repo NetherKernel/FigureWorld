@@ -10,6 +10,7 @@ import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } fro
 import { validateRequestBody } from "@/lib/validation";
 import { createInvoiceForOrder } from "@/lib/invoice";
 import { NotificationService } from "@/lib/notifications";
+import { logAdminAudit } from "@/lib/audit";
 
 const updateStatusSchema = z.object({
   status: z.enum([
@@ -180,6 +181,22 @@ export async function PATCH(
     });
 
     await order.save();
+
+    await logAdminAudit({
+      action: "ORDER_STATUS_UPDATE",
+      actor: user,
+      resource: {
+        type: "ORDER",
+        id: order._id.toString(),
+        identifier: order.orderNumber,
+      },
+      details: {
+        previousStatus: prevStatus,
+        newStatus: targetStatus,
+        notes: data.notes,
+      },
+      req,
+    });
 
     return apiSuccess(
       {

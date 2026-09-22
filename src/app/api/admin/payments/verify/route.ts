@@ -9,6 +9,7 @@ import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } fro
 import { validateRequestBody } from "@/lib/validation";
 import { createInvoiceForOrder } from "@/lib/invoice";
 import { NotificationService } from "@/lib/notifications";
+import { logAdminAudit } from "@/lib/audit";
 
 const verifyPaymentSchema = z.object({
   orderNumber: z.string().optional(),
@@ -117,6 +118,23 @@ export async function POST(req: Request) {
         console.error("WhatsApp notification error:", notifErr);
       }
     }
+
+    await logAdminAudit({
+      action: `PAYMENT_${data.action}`,
+      actor: user,
+      resource: {
+        type: "PAYMENT",
+        id: order._id.toString(),
+        identifier: order.orderNumber,
+      },
+      details: {
+        action: data.action,
+        paymentStatus: order.paymentStatus,
+        orderStatus: order.orderStatus,
+        notes: data.notes || data.rejectionReason,
+      },
+      req,
+    });
 
     return apiSuccess(
       {
