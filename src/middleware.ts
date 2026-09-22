@@ -12,7 +12,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isProfileRoute = pathname.startsWith("/profile") || pathname.startsWith("/account");
-  const isAdminRoute = pathname.startsWith("/admin");
+  const isAdminRoute = pathname.startsWith("/admin") || pathname.startsWith("/dashboard");
   const isStaffRoute = pathname.startsWith("/staff");
 
   if (!isProfileRoute && !isAdminRoute && !isStaffRoute) {
@@ -54,6 +54,7 @@ export const config = {
     "/profile/:path*",
     "/account/:path*",
     "/admin/:path*",
+    "/dashboard/:path*",
     "/staff/:path*",
   ],
 };

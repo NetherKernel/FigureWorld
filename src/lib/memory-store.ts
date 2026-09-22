@@ -29,13 +29,51 @@ function matchFilter(doc: Record<string, any>, filter: Record<string, any>): boo
       continue;
     }
 
-    // Handle complex comparison operator: { $gt: date }
-    if (val && typeof val === "object" && "$gt" in val) {
+    // Handle complex comparison operators: $in, $gt, $gte, $lt, $lte, $ne
+    if (val && typeof val === "object" && !(val instanceof Date) && !(val instanceof RegExp)) {
       const docVal = doc[key];
-      const targetVal = (val as { $gt: any }).$gt;
-      if (!(docVal instanceof Date) || !(targetVal instanceof Date) || docVal <= targetVal) {
-        return false;
+
+      if ("$in" in val && Array.isArray(val.$in)) {
+        const docValStr = docVal?._id?.toString?.() || docVal?.toString?.() || String(docVal);
+        const inList = val.$in.map((item: any) => item?._id?.toString?.() || item?.toString?.() || String(item));
+        if (!inList.includes(docValStr)) return false;
       }
+
+      if ("$gt" in val) {
+        const targetVal = val.$gt;
+        const dVal = docVal instanceof Date ? docVal.getTime() : docVal;
+        const tVal = targetVal instanceof Date ? targetVal.getTime() : targetVal;
+        if (dVal <= tVal) return false;
+      }
+
+      if ("$gte" in val) {
+        const targetVal = val.$gte;
+        const dVal = docVal instanceof Date ? docVal.getTime() : docVal;
+        const tVal = targetVal instanceof Date ? targetVal.getTime() : targetVal;
+        if (dVal < tVal) return false;
+      }
+
+      if ("$lt" in val) {
+        const targetVal = val.$lt;
+        const dVal = docVal instanceof Date ? docVal.getTime() : docVal;
+        const tVal = targetVal instanceof Date ? targetVal.getTime() : targetVal;
+        if (dVal >= tVal) return false;
+      }
+
+      if ("$lte" in val) {
+        const targetVal = val.$lte;
+        const dVal = docVal instanceof Date ? docVal.getTime() : docVal;
+        const tVal = targetVal instanceof Date ? targetVal.getTime() : targetVal;
+        if (dVal > tVal) return false;
+      }
+
+      if ("$ne" in val) {
+        const targetVal = val.$ne;
+        if (docVal === targetVal || (docVal?.toString && targetVal?.toString && docVal.toString() === targetVal.toString())) {
+          return false;
+        }
+      }
+
       continue;
     }
 

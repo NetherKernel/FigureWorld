@@ -34,16 +34,16 @@ export default function AdminDashboardPage() {
 
           <div className="flex items-center gap-3">
             <Link
+              href="/dashboard"
+              className="rounded-xl bg-purple-500 px-4 py-2 text-xs font-bold text-white hover:bg-purple-400 transition shadow-lg shadow-purple-500/40 flex items-center gap-1.5"
+            >
+              <span>Launch Dashboard Suite →</span>
+            </Link>
+            <Link
               href="/profile"
               className="rounded-xl border border-purple-400/30 bg-purple-950/40 px-4 py-2 text-xs font-semibold text-purple-200 hover:bg-purple-900/60 transition"
             >
               My Profile
-            </Link>
-            <Link
-              href="/staff"
-              className="rounded-xl bg-purple-600 px-4 py-2 text-xs font-semibold text-white hover:bg-purple-500 transition shadow-md shadow-purple-600/30"
-            >
-              View Staff Portal
             </Link>
           </div>
         </div>

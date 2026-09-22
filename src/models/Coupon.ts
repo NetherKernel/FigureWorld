@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
+import { getModelProxy } from "@/lib/db";
 
 export interface ICoupon extends Document {
   code: string;
@@ -76,7 +77,9 @@ const CouponSchema = new Schema<ICoupon>(
   }
 );
 
-export const Coupon: Model<ICoupon> =
+const CouponModel: Model<ICoupon> =
   mongoose.models.Coupon || mongoose.model<ICoupon>("Coupon", CouponSchema);
+
+export const Coupon = getModelProxy(CouponModel, "Coupon");
 
 export default Coupon;

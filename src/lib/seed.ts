@@ -7,6 +7,7 @@ import { Order } from "@/models/Order";
 import { OrderItem } from "@/models/OrderItem";
 import { Invoice } from "@/models/Invoice";
 import { NotificationLog } from "@/models/NotificationLog";
+import { Coupon } from "@/models/Coupon";
 import { createInvoiceForOrder } from "./invoice";
 import { NotificationService } from "./notifications";
 import { hashPassword } from "./auth";
@@ -337,6 +338,71 @@ export async function seedStoreData() {
     }
   } catch (notifErr) {
     logger.error("Error seeding WhatsApp notifications for #KF100001:", { error: String(notifErr) });
+  }
+
+  // 5. Seed Promotional Coupons
+  try {
+    const existingCoupons = await Coupon.countDocuments({});
+    if (existingCoupons === 0) {
+      await Coupon.create({
+        code: "WELCOME10",
+        description: "10% off on your first anime collectible order",
+        discountType: "percentage",
+        discountValue: 10,
+        minimumOrderValue: 999,
+        maximumDiscountAmount: 500,
+        validFrom: new Date(Date.now() - 30 * 24 * 3600 * 1000),
+        validUntil: new Date("2027-12-31T23:59:59Z"),
+        usageLimit: 500,
+        usedCount: 24,
+        isActive: true,
+      });
+
+      await Coupon.create({
+        code: "ANIME500",
+        description: "Flat ₹500 instant discount on premium figures",
+        discountType: "fixed",
+        discountValue: 500,
+        minimumOrderValue: 2499,
+        validFrom: new Date(Date.now() - 15 * 24 * 3600 * 1000),
+        validUntil: new Date("2027-12-31T23:59:59Z"),
+        usageLimit: 200,
+        usedCount: 42,
+        isActive: true,
+      });
+
+      await Coupon.create({
+        code: "KATANA15",
+        description: "15% off on collector replica blades and katanas",
+        discountType: "percentage",
+        discountValue: 15,
+        minimumOrderValue: 1500,
+        maximumDiscountAmount: 1000,
+        validFrom: new Date(Date.now() - 7 * 24 * 3600 * 1000),
+        validUntil: new Date("2027-12-31T23:59:59Z"),
+        usageLimit: 100,
+        usedCount: 8,
+        isActive: true,
+      });
+
+      await Coupon.create({
+        code: "EXPIRED20",
+        description: "Seasonal 20% discount (Past campaign)",
+        discountType: "percentage",
+        discountValue: 20,
+        minimumOrderValue: 1000,
+        maximumDiscountAmount: 400,
+        validFrom: new Date(Date.now() - 90 * 24 * 3600 * 1000),
+        validUntil: new Date(Date.now() - 15 * 24 * 3600 * 1000),
+        usageLimit: 100,
+        usedCount: 100,
+        isActive: false,
+      });
+
+      logger.info("Seeded sample promotional coupons: WELCOME10, ANIME500, KATANA15, EXPIRED20");
+    }
+  } catch (couponErr) {
+    logger.error("Error seeding coupons:", { error: String(couponErr) });
   }
 
   return {
