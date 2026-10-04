@@ -158,22 +158,24 @@ export function Footer() {
             </h3>
             <ul className="mt-3 space-y-2 text-xs">
               <li className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                <span className="text-slate-500">Sprint 1: Foundation Active</span>
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-slate-500">Live & Operational</span>
               </li>
               <li>
                 <Link href="/api/health" className="text-indigo-600 dark:text-indigo-400 hover:underline">
-                  API & MongoDB Health
+                  System Health (/api/health)
+                </Link>
+              </li>
+              <li>
+                <Link href="/dashboard" className="text-purple-600 dark:text-purple-400 hover:underline">
+                  Admin Dashboard
                 </Link>
               </li>
               <li>
                 <span className="text-slate-400">Next.js App Router</span>
               </li>
               <li>
-                <span className="text-slate-400">Tailwind CSS v4</span>
-              </li>
-              <li>
-                <span className="text-slate-400">TypeScript / Mongoose</span>
+                <span className="text-slate-400">MongoDB Database</span>
               </li>
             </ul>
           </div>
@@ -181,7 +183,7 @@ export function Footer() {
 
         {/* Bottom bar */}
         <div className="mt-12 border-t border-slate-200 pt-6 text-center text-xs text-slate-500 dark:border-slate-800">
-          <p>© {new Date().getFullYear()} FiguresWorld. All rights reserved. Sprint 1 — Project Foundation.</p>
+          <p>© {new Date().getFullYear()} FiguresWorld. All rights reserved. Premium Anime Figures & Collectibles Store.</p>
         </div>
       </div>
     </footer>

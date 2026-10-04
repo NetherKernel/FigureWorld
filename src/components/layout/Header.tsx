@@ -46,8 +46,8 @@ export function Header() {
       <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 px-4 py-1.5 text-center text-xs font-medium text-white tracking-wide">
         <span className="inline-flex items-center gap-1.5">
           <Sparkles className="h-3.5 w-3.5 animate-pulse" />
-          <span>Sprint 2 Active: Customer Accounts, RBAC Roles & Saved Addresses</span>
-          <span className="hidden sm:inline">| Free domestic shipping over $99</span>
+          <span>🎌 Authentic Japanese Anime Figures & Collectibles</span>
+          <span className="hidden sm:inline">| Flat ₹100 Express Shipping Across India | Code WELCOME10 for 10% Off</span>
         </span>
       </div>
 
