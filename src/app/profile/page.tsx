@@ -15,7 +15,6 @@ import {
   Plus,
   AlertCircle,
   CheckCircle2,
-  Search,
   RotateCcw,
   Truck,
   FileText,
@@ -65,6 +64,7 @@ interface CustomerOrder {
     pinCode: string;
   } | null;
   items: Array<{
+    productId?: string;
     name: string;
     sku: string;
     image?: string;
@@ -93,8 +93,6 @@ type AddressForm = {
 
 const DEFAULT_COUNTRY = "India";
 const SUPPORT_EMAIL = "support@figuresworld.com";
-const SAVED_ORDERS_PREFIX = "fw_saved_orders:";
-const MAX_SAVED_ORDERS = 20;
 
 const ACCOUNT_SECTIONS = [
   { id: "orders", title: "Your Orders", description: "Track packages, view invoices or buy things again", icon: Package },
@@ -144,28 +142,31 @@ function formatShortDate(value: string | undefined): string {
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 }
 
-function readSavedOrderNumbers(userId: string): string[] {
-  try {
-    const raw = localStorage.getItem(SAVED_ORDERS_PREFIX + userId);
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed)
-      ? parsed.filter((n): n is string => typeof n === "string").slice(0, MAX_SAVED_ORDERS)
-      : [];
-  } catch {
-    return [];
-  }
+type OrderRange = "all" | "30d" | "3m" | "year";
+
+function orderRangeOptions(): Array<{ value: OrderRange; label: string }> {
+  return [
+    { value: "all", label: "All time" },
+    { value: "30d", label: "Last 30 days" },
+    { value: "3m", label: "Last 3 months" },
+    { value: "year", label: String(new Date().getFullYear()) },
+  ];
 }
 
-function writeSavedOrderNumbers(userId: string, numbers: string[]) {
-  try {
-    localStorage.setItem(SAVED_ORDERS_PREFIX + userId, JSON.stringify(numbers.slice(0, MAX_SAVED_ORDERS)));
-  } catch {
-    // Storage unavailable (private mode etc.) — orders simply won't persist.
-  }
+function isInOrderRange(placedAt: string, range: OrderRange): boolean {
+  if (range === "all") return true;
+  const placed = new Date(placedAt);
+  if (Number.isNaN(placed.getTime())) return false;
+  const now = new Date();
+  if (range === "year") return placed.getFullYear() === now.getFullYear();
+  const cutoff = new Date(now);
+  if (range === "30d") cutoff.setDate(cutoff.getDate() - 30);
+  else cutoff.setMonth(cutoff.getMonth() - 3);
+  return placed >= cutoff;
 }
 
-function sortOrders(list: CustomerOrder[]): CustomerOrder[] {
-  return [...list].sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
+function buyAgainHref(item: { productId?: string; name: string }): string {
+  return item.productId ? `/products/${encodeURIComponent(item.productId)}` : `/products?search=${encodeURIComponent(item.name)}`;
 }
 
 type Tone = "success" | "warn" | "brand" | "muted" | "fg";
@@ -357,7 +358,7 @@ function OrderTracker({ step }: { step: number }) {
   );
 }
 
-function OrderCard({ order, onRemove }: { order: CustomerOrder; onRemove: (orderNumber: string) => void }) {
+function OrderCard({ order, highlighted = false }: { order: CustomerOrder; highlighted?: boolean }) {
   const router = useRouter();
   const [showTracking, setShowTracking] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -393,7 +394,12 @@ function OrderCard({ order, onRemove }: { order: CustomerOrder; onRemove: (order
   };
 
   return (
-    <article className="card overflow-hidden animate-fade-up" aria-label={`Order ${order.orderNumber}`}>
+    <article
+      id={`order-${order.orderNumber}`}
+      className={`card scroll-mt-36 overflow-hidden animate-fade-up ${highlighted ? "ring-2 ring-brand" : ""}`}
+      aria-label={`Order ${order.orderNumber}`}
+      aria-current={highlighted ? "true" : undefined}
+    >
       {/* Grey header strip */}
       <header className="flex flex-wrap items-start gap-x-8 gap-y-3 border-b border-line bg-surface-2 px-4 py-3 text-xs text-fg-2 sm:px-5">
         <div>
@@ -472,12 +478,18 @@ function OrderCard({ order, onRemove }: { order: CustomerOrder; onRemove: (order
                   />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="line-clamp-2 text-sm font-medium text-fg">{item.name}</p>
+                  {item.productId ? (
+                    <Link href={buyAgainHref(item)} className="link line-clamp-2 text-sm">
+                      {item.name}
+                    </Link>
+                  ) : (
+                    <p className="line-clamp-2 text-sm font-medium text-fg">{item.name}</p>
+                  )}
                   <p className="mt-0.5 text-xs text-muted">
                     Qty {item.quantity} · {formatPrice(item.unitPrice, currency)} each
                   </p>
                   <Link
-                    href={`/products?search=${encodeURIComponent(item.name)}`}
+                    href={buyAgainHref(item)}
                     className="btn btn-secondary btn-sm mt-2 min-h-10"
                     aria-label={`Buy ${item.name} again`}
                   >
@@ -505,13 +517,6 @@ function OrderCard({ order, onRemove }: { order: CustomerOrder; onRemove: (order
           <button type="button" className="btn btn-secondary min-h-10 w-full" onClick={openInvoice} disabled={invoiceBusy}>
             {invoiceBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileText className="h-4 w-4" aria-hidden="true" />}
             View invoice
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm min-h-10 w-full text-muted"
-            onClick={() => onRemove(order.orderNumber)}
-          >
-            Remove from this list
           </button>
         </div>
       </div>
@@ -629,15 +634,14 @@ export default function ProfilePage() {
   // New / edited address form state
   const [newAddress, setNewAddress] = useState<AddressForm>(emptyAddressForm());
 
-  // Orders state (looked up by order number, remembered on this device)
+  // Orders state
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
-  const [loadingOrders, setLoadingOrders] = useState(false);
-  const [orderQuery, setOrderQuery] = useState("");
-  const [orderLookupBusy, setOrderLookupBusy] = useState(false);
-  const [orderLookupMsg, setOrderLookupMsg] = useState<Msg>(null);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [orderRange, setOrderRange] = useState<OrderRange>("all");
+  const [highlightedOrder, setHighlightedOrder] = useState<string | null>(null);
 
   const userId = user?.id;
-  const userEmail = user?.email;
 
   // Profile details are copied from `user` into the edit fields when an inline editor opens
   // (see startEditing), so no sync effect is needed.
@@ -676,60 +680,48 @@ export default function ProfilePage() {
     if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [userId]);
 
-  // Fetch a single order and make sure it belongs to the signed-in customer.
-  const fetchOrder = useCallback(
-    async (orderNumber: string): Promise<{ order?: CustomerOrder; error?: string; transient?: boolean }> => {
-      try {
-        const res = await fetch(`/api/orders/${encodeURIComponent(orderNumber)}`, { cache: "no-store" });
-        const json = await res.json();
-        if (!res.ok || !json.success) {
-          return {
-            error:
-              res.status === 404
-                ? "We couldn't find an order with that number."
-                : json.error?.message || "Couldn't load that order.",
-            transient: res.status >= 500,
-          };
-        }
-        const order = json.data as CustomerOrder;
-        const owner = (order.customerEmail || "").toLowerCase().trim();
-        if (!userEmail || owner !== userEmail.toLowerCase().trim()) {
-          return { error: "We couldn't find an order with that number on your account." };
-        }
-        return { order };
-      } catch {
-        return { error: "Network error occurred.", transient: true };
+  // Load "Your Orders" for the signed-in customer (newest first).
+  // loadingOrders starts true, so the first skeleton needs no synchronous setState in the effect.
+  const fetchOrders = useCallback(async () => {
+    try {
+      const res = await fetch("/api/orders", { cache: "no-store" });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setOrders(json.data?.orders || []);
+        setOrdersError(null);
+      } else {
+        setOrdersError(json.error?.message || "We couldn't load your orders.");
       }
-    },
-    [userEmail]
-  );
+    } catch {
+      setOrdersError("Network error occurred.");
+    } finally {
+      setLoadingOrders(false);
+    }
+  }, []);
 
-  // Restore remembered orders (plus ?order=FW-... handed over from checkout).
   useEffect(() => {
     if (!userId) return;
-    let cancelled = false;
-    const saved = readSavedOrderNumbers(userId);
-    const fromQuery = new URLSearchParams(window.location.search).get("order")?.trim().toUpperCase();
-    const numbers = fromQuery && !saved.includes(fromQuery) ? [fromQuery, ...saved] : saved;
-    if (numbers.length === 0) return;
-
     const load = async () => {
-      setLoadingOrders(true);
-      const results = await Promise.all(numbers.map((n) => fetchOrder(n)));
-      if (cancelled) return;
-      const found = results.flatMap((r) => (r.order ? [r.order] : []));
-      setOrders(sortOrders(found));
-      writeSavedOrderNumbers(
-        userId,
-        numbers.filter((_, i) => results[i].order || results[i].transient)
-      );
-      setLoadingOrders(false);
+      await fetchOrders();
+      // /profile?order=FW-... (e.g. from checkout) highlights that order once the list is in.
+      const fromQuery = new URLSearchParams(window.location.search).get("order")?.trim().toUpperCase();
+      if (fromQuery) setHighlightedOrder(fromQuery);
     };
     load();
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, fetchOrder]);
+  }, [userId, fetchOrders]);
+
+  // Bring a highlighted order into view once it has rendered.
+  useEffect(() => {
+    if (!highlightedOrder || loadingOrders) return;
+    const el = document.getElementById(`order-${highlightedOrder}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [highlightedOrder, loadingOrders]);
+
+  const retryOrders = () => {
+    setLoadingOrders(true);
+    setOrdersError(null);
+    fetchOrders();
+  };
 
   // Close the address dialog with Escape
   useEffect(() => {
@@ -904,38 +896,6 @@ export default function ProfilePage() {
     }
   };
 
-  // Order lookup
-  const handleLookupOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const orderNumber = orderQuery.trim().toUpperCase();
-    setOrderLookupMsg(null);
-    if (!orderNumber) {
-      setOrderLookupMsg({ type: "error", text: "Enter the order number from your confirmation message." });
-      return;
-    }
-    if (orders.some((o) => o.orderNumber === orderNumber)) {
-      setOrderLookupMsg({ type: "success", text: "That order is already listed below." });
-      return;
-    }
-    setOrderLookupBusy(true);
-    const result = await fetchOrder(orderNumber);
-    setOrderLookupBusy(false);
-    if (result.order && userId) {
-      const next = sortOrders([result.order, ...orders]);
-      setOrders(next);
-      writeSavedOrderNumbers(userId, next.map((o) => o.orderNumber));
-      setOrderQuery("");
-    } else {
-      setOrderLookupMsg({ type: "error", text: result.error || "Couldn't load that order." });
-    }
-  };
-
-  const handleRemoveOrder = (orderNumber: string) => {
-    const next = orders.filter((o) => o.orderNumber !== orderNumber);
-    setOrders(next);
-    if (userId) writeSavedOrderNumbers(userId, next.map((o) => o.orderNumber));
-  };
-
   // Inline editor controls
   const startEditing = (field: EditableField) => {
     setProfileMsg(null);
@@ -1012,6 +972,7 @@ export default function ProfilePage() {
 
   const firstName = user.name.trim().split(/\s+/)[0] || user.name;
   const isEditingAddress = editingAddressId !== null;
+  const visibleOrders = orders.filter((o) => isInOrderRange(o.placedAt, orderRange));
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-10 px-3 py-4 sm:px-4 sm:py-6 lg:px-6">
@@ -1054,59 +1015,76 @@ export default function ProfilePage() {
         <SectionHeading
           id="orders-heading"
           title="Your Orders"
-          description="Find an order with the order number from your confirmation email or message. Orders you add are remembered on this device."
+          description="Track packages, download invoices and reorder your favourites."
         />
 
-        <form onSubmit={handleLookupOrder} className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:p-5" role="search">
-          <div className="min-w-0 flex-1">
-            <label htmlFor="order-lookup" className="label">
-              Order number
+        {!loadingOrders && !ordersError && orders.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-fg-2">
+            <span>
+              <span className="font-bold text-fg">
+                {visibleOrders.length} {visibleOrders.length === 1 ? "order" : "orders"}
+              </span>{" "}
+              placed in
+            </span>
+            <label htmlFor="order-range" className="sr-only">
+              Show orders placed in
             </label>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-              <input
-                id="order-lookup"
-                type="text"
-                inputMode="text"
-                autoComplete="off"
-                spellCheck={false}
-                value={orderQuery}
-                onChange={(e) => setOrderQuery(e.target.value)}
-                placeholder="e.g. FW-123456-AB12"
-                className="input pl-9 font-mono uppercase placeholder:font-sans placeholder:normal-case"
-              />
-            </div>
+            <select
+              id="order-range"
+              value={orderRange}
+              onChange={(e) => setOrderRange(e.target.value as OrderRange)}
+              className="input min-h-10 w-auto py-1.5 pr-8"
+            >
+              {orderRangeOptions().map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </div>
-          <button type="submit" className="btn btn-primary min-h-10 sm:w-40" disabled={orderLookupBusy}>
-            {orderLookupBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-            {orderLookupBusy ? "Searching..." : "Find order"}
-          </button>
-        </form>
-        <div aria-live="polite">
-          <Notice msg={orderLookupMsg} className="mt-3" />
-        </div>
+        )}
 
-        <div className="mt-4 space-y-4">
+        <div className="space-y-4" aria-busy={loadingOrders}>
           {loadingOrders ? (
             <>
               <div className="card h-48 animate-pulse bg-surface-2" />
               <div className="card h-48 animate-pulse bg-surface-2" />
             </>
+          ) : ordersError ? (
+            <div className="flex flex-col gap-3 rounded-xl border border-brand/30 bg-brand-soft p-4 text-brand-ink sm:flex-row sm:items-center sm:justify-between" role="alert">
+              <p className="flex items-start gap-2 text-sm">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>{ordersError}</span>
+              </p>
+              <button type="button" onClick={retryOrders} className="btn btn-secondary min-h-10 shrink-0">
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                Try again
+              </button>
+            </div>
           ) : orders.length === 0 ? (
             <div className="card flex flex-col items-center px-4 py-10 text-center">
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-soft text-brand-ink">
                 <ShoppingBag className="h-7 w-7" aria-hidden="true" />
               </span>
-              <p className="mt-3 text-lg font-bold text-fg">No orders to show yet</p>
+              <p className="mt-3 text-lg font-bold text-fg">You haven&apos;t placed any orders yet</p>
               <p className="mt-1 max-w-md text-sm text-fg-2">
-                Enter an order number above to track it here, or find your next figure in the store.
+                When you do, you&apos;ll be able to track them, view invoices and buy again from here.
               </p>
               <Link href="/products" className="btn btn-primary mt-4 min-h-10">
                 Start shopping
               </Link>
             </div>
+          ) : visibleOrders.length === 0 ? (
+            <div className="card px-4 py-8 text-center">
+              <p className="text-base font-bold text-fg">No orders in this period</p>
+              <button type="button" onClick={() => setOrderRange("all")} className="link mt-1 min-h-10 text-sm">
+                Show all orders
+              </button>
+            </div>
           ) : (
-            orders.map((order) => <OrderCard key={order.orderNumber} order={order} onRemove={handleRemoveOrder} />)
+            visibleOrders.map((order) => (
+              <OrderCard key={order.orderNumber} order={order} highlighted={order.orderNumber === highlightedOrder} />
+            ))
           )}
         </div>
       </section>
@@ -1393,7 +1371,7 @@ export default function ProfilePage() {
             <p className="flex items-center gap-2 text-base font-bold text-fg">
               <Package className="h-5 w-5 text-brand-ink" aria-hidden="true" /> Where&apos;s my order?
             </p>
-            <p className="mt-1 text-sm text-fg-2">Look up any order to see its status and download the invoice.</p>
+            <p className="mt-1 text-sm text-fg-2">See where your order is and download its invoice.</p>
             <a href="#orders" className="link mt-2 inline-flex min-h-10 items-center text-sm">
               Track an order
             </a>

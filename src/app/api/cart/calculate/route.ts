@@ -3,6 +3,8 @@ import { connectToDatabase } from "@/lib/db";
 import { Product } from "@/models/Product";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { validateRequestBody } from "@/lib/validation";
+import { evaluateCoupon } from "@/lib/coupon";
+import { AppError } from "@/lib/errors";
 
 const calculateCartSchema = z.object({
   items: z.array(
@@ -13,6 +15,8 @@ const calculateCartSchema = z.object({
       clientPrice: z.number().optional(),
     })
   ),
+  // Optional coupon preview — validated but never consumed here
+  couponCode: z.string().max(40).optional(),
 });
 
 export interface IVerifiedCartItem {
@@ -129,11 +133,26 @@ export async function POST(req: Request) {
     // Authoritative Shipping Calculation:
     // Flat ₹100 when cart has items (as specified in user example: Subtotal ₹4,998 + Shipping ₹100 = Total ₹5,098)
     const shippingFee = subtotal > 0 ? 100 : 0;
-    const grandTotal = subtotal + shippingFee;
+
+    let discount = 0;
+    let coupon: { code: string; discount: number } | null = null;
+    let couponError: string | null = null;
+    if (data.couponCode?.trim() && subtotal > 0) {
+      try {
+        const evaluated = await evaluateCoupon(data.couponCode, subtotal);
+        discount = evaluated.discountAmount;
+        coupon = { code: evaluated.coupon.code, discount };
+      } catch (err) {
+        couponError = err instanceof AppError ? err.message : "This coupon could not be applied.";
+      }
+    }
+
+    const grandTotal = Math.max(0, subtotal - discount) + shippingFee;
 
     const summary = {
       subtotal,
       shipping: shippingFee,
+      discount,
       total: grandTotal,
       currency: "INR",
       itemCount: verifiedItems.reduce((acc, it) => acc + it.validQuantity, 0),
@@ -146,6 +165,8 @@ export async function POST(req: Request) {
         items: verifiedItems,
         summary,
         stockWarnings,
+        coupon,
+        couponError,
       },
       "Cart calculated and validated by server",
       200

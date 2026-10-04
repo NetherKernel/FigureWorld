@@ -1486,7 +1486,7 @@ export default function CheckoutPage() {
           </div>
 
           {/* ---------------- Right: order summary ---------------- */}
-          <aside aria-label="Order summary" className="lg:sticky lg:top-28">
+          <aside aria-label="Order summary" className="lg:sticky lg:top-24">
             <div className="card p-4 sm:p-5">
               <div className="hidden lg:block">
                 <button

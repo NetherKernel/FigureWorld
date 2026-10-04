@@ -6,7 +6,7 @@ import { Category } from "@/models/Category";
 import { Address } from "@/models/Address";
 import { Order } from "@/models/Order";
 import { OrderItem } from "@/models/OrderItem";
-import { Coupon } from "@/models/Coupon";
+import { evaluateCoupon } from "@/lib/coupon";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { ValidationError, ConflictError } from "@/lib/errors";
@@ -169,36 +169,9 @@ export async function POST(req: Request) {
     let appliedCouponCode: string | undefined = undefined;
 
     if (data.couponCode) {
-      const codeClean = data.couponCode.toUpperCase().trim();
-      const coupon = await Coupon.findOne({ code: codeClean });
-
-      if (!coupon || !coupon.isActive) {
-        throw new ValidationError(`Coupon code "${codeClean}" is invalid or inactive.`);
-      }
-
-      const now = new Date();
-      if (new Date(coupon.validUntil) < now || new Date(coupon.validFrom) > now) {
-        throw new ValidationError(`Coupon code "${codeClean}" has expired.`);
-      }
-
-      if (subtotal < (coupon.minimumOrderValue || 0)) {
-        throw new ValidationError(
-          `Coupon "${codeClean}" requires a minimum order value of ₹${coupon.minimumOrderValue.toLocaleString("en-IN")}. Your subtotal is ₹${subtotal.toLocaleString("en-IN")}.`
-        );
-      }
-
-      if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
-        throw new ValidationError(`Coupon "${codeClean}" has exceeded its maximum usage limit.`);
-      }
-
-      if (coupon.discountType === "percentage") {
-        discountAmount = Math.round((subtotal * coupon.discountValue) / 100);
-        if (coupon.maximumDiscountAmount && discountAmount > coupon.maximumDiscountAmount) {
-          discountAmount = coupon.maximumDiscountAmount;
-        }
-      } else {
-        discountAmount = Math.min(coupon.discountValue, subtotal);
-      }
+      const evaluated = await evaluateCoupon(data.couponCode, subtotal);
+      const coupon = evaluated.coupon;
+      discountAmount = evaluated.discountAmount;
 
       appliedCouponCode = coupon.code;
       coupon.usedCount = (coupon.usedCount || 0) + 1;
