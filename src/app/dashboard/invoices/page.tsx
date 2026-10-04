@@ -82,17 +82,17 @@ export default function DashboardInvoicesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+          <h1 className="text-2xl font-black tracking-tight text-fg">
             Tax Invoices Ledger
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-muted mt-1">
             Official GST-compliant tax invoices, PDF streaming, and customer dispatch receipts.
           </p>
         </div>
 
         <button
           onClick={() => fetchInvoices(query)}
-          className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300 transition w-fit"
+          className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-2 text-xs font-semibold text-fg-2 hover:bg-surface-2 transition w-fit"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           <span>Refresh</span>
@@ -101,57 +101,57 @@ export default function DashboardInvoicesPage() {
 
       {/* KPI Metrics */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-2xl border border-line bg-surface p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Generated Invoices</span>
-            <FileText className="h-5 w-5 text-purple-600" />
+            <span className="text-xs font-semibold text-muted">Generated Invoices</span>
+            <FileText className="h-5 w-5 text-brand-ink" />
           </div>
-          <p className="mt-3 text-2xl font-black text-slate-900 dark:text-white">
+          <p className="mt-3 text-2xl font-black text-fg">
             {metrics ? metrics.totalInvoices : "—"}
           </p>
-          <p className="mt-1 text-[11px] text-slate-400">Server-side sequential numbering</p>
+          <p className="mt-1 text-[11px] text-muted">Server-side sequential numbering</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-2xl border border-line bg-surface p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Total Invoiced Amount</span>
+            <span className="text-xs font-semibold text-muted">Total Invoiced Amount</span>
             <IndianRupee className="h-5 w-5 text-emerald-600" />
           </div>
-          <p className="mt-3 text-2xl font-black text-slate-900 dark:text-white">
+          <p className="mt-3 text-2xl font-black text-fg">
             ₹{metrics ? metrics.totalAmount.toLocaleString("en-IN") : "—"}
           </p>
           <p className="mt-1 text-[11px] text-emerald-600 font-medium">Billed customer turnover</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-2xl border border-line bg-surface p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">GST Collected</span>
+            <span className="text-xs font-semibold text-muted">GST Collected</span>
             <span className="text-xs font-bold text-amber-600">18% GST</span>
           </div>
-          <p className="mt-3 text-2xl font-black text-slate-900 dark:text-white">
+          <p className="mt-3 text-2xl font-black text-fg">
             ₹{metrics ? Math.round(metrics.totalTax).toLocaleString("en-IN") : "—"}
           </p>
-          <p className="mt-1 text-[11px] text-slate-400">CGST + SGST tax pool</p>
+          <p className="mt-1 text-[11px] text-muted">CGST + SGST tax pool</p>
         </div>
       </div>
 
       {/* Search Input */}
       <div className="relative">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by Invoice # (FW-INV-...), Order #, or Customer name/email..."
-          className="w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-xs text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-white shadow-xs focus:ring-2 focus:ring-purple-500 outline-none"
+          className="w-full rounded-2xl border border-line bg-surface pl-10 pr-4 py-2.5 text-xs text-fg shadow-xs focus:ring-2 focus:ring-brand outline-none"
         />
       </div>
 
       {/* Invoices Ledger Table */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+      <div className="rounded-3xl border border-line bg-surface p-6 shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-800">
+          <table className="w-full min-w-[600px] text-left text-xs">
+            <thead className="border-b border-line text-[11px] font-bold uppercase tracking-wider text-muted">
               <tr>
                 <th className="pb-3">Invoice #</th>
                 <th className="pb-3">Order #</th>
@@ -163,14 +163,14 @@ export default function DashboardInvoicesPage() {
                 <th className="pb-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-line">
               {data?.invoices && data.invoices.length > 0 ? (
                 data.invoices.map((inv) => (
-                  <tr key={inv._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                  <tr key={inv._id} className="hover:bg-surface-2">
                     <td className="py-3.5">
                       <Link
                         href={`/invoices/${inv.invoiceNumber}`}
-                        className="font-bold text-purple-600 hover:underline flex items-center gap-1 font-mono"
+                        className="font-bold text-brand-ink hover:underline flex items-center gap-1 font-mono"
                       >
                         <span>{inv.invoiceNumber}</span>
                         <ExternalLink className="h-3 w-3" />
@@ -179,26 +179,26 @@ export default function DashboardInvoicesPage() {
                     <td className="py-3.5">
                       <Link
                         href={`/admin/orders/${inv.orderNumber}`}
-                        className="font-semibold text-slate-700 hover:text-purple-600 dark:text-slate-300"
+                        className="font-semibold text-fg-2 hover:text-brand-hover"
                       >
                         #{inv.orderNumber}
                       </Link>
                     </td>
                     <td className="py-3.5">
-                      <p className="font-semibold text-slate-900 dark:text-white">{inv.customerName}</p>
-                      <p className="text-[10px] text-slate-400">{inv.customerEmail}</p>
+                      <p className="font-semibold text-fg">{inv.customerName}</p>
+                      <p className="text-[10px] text-muted">{inv.customerEmail}</p>
                     </td>
-                    <td className="py-3.5 text-slate-500">
+                    <td className="py-3.5 text-muted">
                       {new Date(inv.invoiceDate).toLocaleDateString()}
                     </td>
-                    <td className="py-3.5 text-slate-500">
+                    <td className="py-3.5 text-muted">
                       ₹{Math.round(inv.totalTax).toLocaleString("en-IN")}
                     </td>
-                    <td className="py-3.5 font-black text-slate-900 dark:text-white">
+                    <td className="py-3.5 font-black text-fg">
                       ₹{inv.grandTotal.toLocaleString("en-IN")}
                     </td>
                     <td className="py-3.5">
-                      <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300 uppercase">
+                      <span className="rounded-md bg-surface-3 px-2 py-0.5 text-[10px] font-bold text-fg-2 uppercase">
                         {inv.paymentMethod} • {inv.paymentStatus}
                       </span>
                     </td>
@@ -207,7 +207,7 @@ export default function DashboardInvoicesPage() {
                         href={inv.pdfUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition"
+                        className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface px-2.5 py-1 text-[11px] font-semibold text-fg-2 hover:bg-surface-2 transition"
                         title="Download PDF"
                       >
                         <Download className="h-3 w-3" />
@@ -216,7 +216,7 @@ export default function DashboardInvoicesPage() {
                       <button
                         onClick={() => handleSendInvoice(inv.invoiceNumber)}
                         disabled={sendingMap[inv.invoiceNumber]}
-                        className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-purple-50 px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:bg-purple-100 dark:border-purple-900 dark:bg-purple-950/60 dark:text-purple-300 transition"
+                        className="inline-flex items-center gap-1 rounded-lg border border-brand/30 bg-brand-soft px-2.5 py-1 text-[11px] font-semibold text-brand-ink hover:bg-brand/15 transition"
                         title="Resend to customer"
                       >
                         <Send className="h-3 w-3" />
@@ -227,7 +227,7 @@ export default function DashboardInvoicesPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                  <td colSpan={8} className="py-8 text-center text-muted">
                     No matching invoices found.
                   </td>
                 </tr>

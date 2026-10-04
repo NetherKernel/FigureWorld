@@ -17,7 +17,7 @@ interface PaymentMethodsChartProps {
 export default function PaymentMethodsChart({ data }: PaymentMethodsChartProps) {
   if (!data || data.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center text-xs text-slate-400">
+      <div className="flex h-64 items-center justify-center text-xs text-muted">
         No payment data available.
       </div>
     );
@@ -48,11 +48,11 @@ export default function PaymentMethodsChart({ data }: PaymentMethodsChartProps) 
   const codStrokeDash = circumference - upiStrokeDash;
 
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-xs border border-slate-100 dark:border-slate-800 dark:bg-slate-900 flex flex-col justify-between">
+    <div className="rounded-2xl bg-surface p-5 shadow-xs border border-line flex flex-col justify-between">
       <div className="flex items-center justify-between pb-2">
         <div>
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Payment Methods Split</h3>
-          <p className="text-[11px] text-slate-500">UPI Digital Intent vs Doorstep COD</p>
+          <h3 className="text-sm font-bold text-fg">Payment Methods Split</h3>
+          <p className="text-[11px] text-muted">UPI Digital Intent vs Doorstep COD</p>
         </div>
         <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 dark:text-emerald-300 px-2 py-0.5 rounded-md">
           {totalCount} Transactions
@@ -69,9 +69,8 @@ export default function PaymentMethodsChart({ data }: PaymentMethodsChartProps) 
               cy="70"
               r={r}
               fill="transparent"
-              stroke="#f1f5f9"
+              style={{ stroke: "var(--surface-3)" }}
               strokeWidth="16"
-              className="dark:stroke-slate-800"
             />
             {/* COD Ring */}
             <circle
@@ -79,7 +78,8 @@ export default function PaymentMethodsChart({ data }: PaymentMethodsChartProps) 
               cy="70"
               r={r}
               fill="transparent"
-              stroke="#f59e0b"
+              style={{ stroke: "var(--muted)" }}
+              strokeOpacity="0.55"
               strokeWidth="16"
               strokeDasharray={`${circumference} ${circumference}`}
               strokeDashoffset={0}
@@ -91,7 +91,7 @@ export default function PaymentMethodsChart({ data }: PaymentMethodsChartProps) 
               cy="70"
               r={r}
               fill="transparent"
-              stroke="#8b5cf6"
+              style={{ stroke: "var(--brand)" }}
               strokeWidth="16"
               strokeDasharray={`${upiStrokeDash} ${circumference}`}
               strokeDashoffset={0}
@@ -100,8 +100,8 @@ export default function PaymentMethodsChart({ data }: PaymentMethodsChartProps) 
             />
           </svg>
           <div className="absolute text-center">
-            <p className="text-xs text-slate-400 font-medium">UPI Share</p>
-            <p className="text-base font-black text-slate-900 dark:text-white">
+            <p className="text-xs text-muted font-medium">UPI Share</p>
+            <p className="text-base font-black text-fg">
               {Math.round(upiRatio * 100)}%
             </p>
           </div>
@@ -110,34 +110,34 @@ export default function PaymentMethodsChart({ data }: PaymentMethodsChartProps) 
         {/* Legend stats */}
         <div className="space-y-3 w-full sm:w-auto">
           {/* UPI */}
-          <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-3 dark:border-purple-900/30 dark:bg-purple-950/20">
+          <div className="rounded-xl border border-brand/30 bg-brand-soft p-3">
             <div className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-purple-600" />
-              <span className="text-xs font-bold text-purple-900 dark:text-purple-300">
+              <span className="h-2.5 w-2.5 rounded-full bg-brand" />
+              <span className="text-xs font-bold text-brand-ink">
                 Direct UPI
               </span>
-              <span className="ml-auto text-xs font-black text-purple-700 dark:text-purple-400">
+              <span className="ml-auto text-xs font-black text-brand-ink">
                 {upiData.percentage}%
               </span>
             </div>
-            <div className="mt-1 flex items-center justify-between text-[11px] text-purple-800/80 dark:text-purple-300/80">
+            <div className="mt-1 flex items-center justify-between text-[11px] text-brand-ink/80">
               <span>{upiData.count} orders</span>
               <span className="font-semibold">₹{upiData.revenue.toLocaleString("en-IN")}</span>
             </div>
           </div>
 
           {/* COD */}
-          <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-3 dark:border-amber-900/30 dark:bg-amber-950/20">
+          <div className="rounded-xl border border-line bg-surface-2 p-3">
             <div className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-              <span className="text-xs font-bold text-amber-900 dark:text-amber-300">
+              <span className="h-2.5 w-2.5 rounded-full bg-muted opacity-60" />
+              <span className="text-xs font-bold text-fg">
                 Cash on Delivery
               </span>
-              <span className="ml-auto text-xs font-black text-amber-700 dark:text-amber-400">
+              <span className="ml-auto text-xs font-black text-fg-2">
                 {codData.percentage}%
               </span>
             </div>
-            <div className="mt-1 flex items-center justify-between text-[11px] text-amber-800/80 dark:text-amber-300/80">
+            <div className="mt-1 flex items-center justify-between text-[11px] text-muted">
               <span>{codData.count} orders</span>
               <span className="font-semibold">₹{codData.revenue.toLocaleString("en-IN")}</span>
             </div>

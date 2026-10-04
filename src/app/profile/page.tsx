@@ -1,22 +1,30 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { 
-  User, 
-  MapPin, 
-  KeyRound, 
-  Shield, 
-  Plus, 
-  Trash2, 
-  Check, 
-  AlertCircle, 
-  CheckCircle2, 
-  Phone, 
-  Mail, 
-  Building,
-  Home,
-  Star
+import { formatPrice } from "@/lib/format";
+import { FALLBACK_PRODUCT_IMAGE } from "@/lib/product-view";
+import {
+  Package,
+  ShieldCheck,
+  MapPin,
+  Wallet,
+  Headset,
+  Plus,
+  AlertCircle,
+  CheckCircle2,
+  Search,
+  RotateCcw,
+  Truck,
+  FileText,
+  X,
+  Mail,
+  Smartphone,
+  Banknote,
+  ShoppingBag,
+  Loader2,
 } from "lucide-react";
 
 interface Address {
@@ -33,56 +41,609 @@ interface Address {
   isDefault: boolean;
 }
 
-export default function ProfilePage() {
-  const { user, refreshUser } = useAuth();
+interface CustomerOrder {
+  orderNumber: string;
+  customerEmail: string;
+  pricing: {
+    subtotal: number;
+    discountTotal?: number;
+    taxTotal?: number;
+    shippingFee?: number;
+    grandTotal: number;
+    currency?: string;
+  };
+  paymentMethod: "UPI" | "COD";
+  paymentStatus: string;
+  orderStatus: string;
+  shippingAddress: {
+    fullName: string;
+    phone: string;
+    address: string;
+    landmark?: string;
+    city: string;
+    state: string;
+    pinCode: string;
+  } | null;
+  items: Array<{
+    name: string;
+    sku: string;
+    image?: string;
+    unitPrice: number;
+    quantity: number;
+    total: number;
+  }>;
+  placedAt: string;
+  updatedAt: string;
+}
 
-  const [activeTab, setActiveTab] = useState<"overview" | "profile" | "addresses" | "security">("overview");
+type Msg = { type: "success" | "error"; text: string } | null;
+type EditableField = "name" | "phone" | "password";
+type AddressForm = {
+  type: "shipping" | "billing" | "both";
+  fullName: string;
+  phone: string;
+  streetLine1: string;
+  streetLine2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  isDefault: boolean;
+};
+
+const DEFAULT_COUNTRY = "India";
+const SUPPORT_EMAIL = "support@figuresworld.com";
+const SAVED_ORDERS_PREFIX = "fw_saved_orders:";
+const MAX_SAVED_ORDERS = 20;
+
+const ACCOUNT_SECTIONS = [
+  { id: "orders", title: "Your Orders", description: "Track packages, view invoices or buy things again", icon: Package },
+  { id: "security", title: "Login & security", description: "Edit your name, mobile number and password", icon: ShieldCheck },
+  { id: "addresses", title: "Your Addresses", description: "Add, edit or remove delivery addresses", icon: MapPin },
+  { id: "payments", title: "Payment options", description: "UPI and Cash on Delivery at checkout", icon: Wallet },
+  { id: "help", title: "Contact us", description: "Get help with an order or your account", icon: Headset },
+] as const;
+
+/* ------------------------------------------------------------------
+   Small helpers
+------------------------------------------------------------------- */
+
+function emptyAddressForm(fullName = "", phone = "", isDefault = false): AddressForm {
+  return {
+    type: "shipping",
+    fullName,
+    phone,
+    streetLine1: "",
+    streetLine2: "",
+    city: "",
+    state: "",
+    postalCode: "",
+    country: DEFAULT_COUNTRY,
+    isDefault,
+  };
+}
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "FW";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+function formatLongDate(value: string | undefined): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function formatShortDate(value: string | undefined): string {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
+
+function readSavedOrderNumbers(userId: string): string[] {
+  try {
+    const raw = localStorage.getItem(SAVED_ORDERS_PREFIX + userId);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((n): n is string => typeof n === "string").slice(0, MAX_SAVED_ORDERS)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSavedOrderNumbers(userId: string, numbers: string[]) {
+  try {
+    localStorage.setItem(SAVED_ORDERS_PREFIX + userId, JSON.stringify(numbers.slice(0, MAX_SAVED_ORDERS)));
+  } catch {
+    // Storage unavailable (private mode etc.) — orders simply won't persist.
+  }
+}
+
+function sortOrders(list: CustomerOrder[]): CustomerOrder[] {
+  return [...list].sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
+}
+
+type Tone = "success" | "warn" | "brand" | "muted" | "fg";
+
+const TONE_CLASS: Record<Tone, string> = {
+  success: "text-success",
+  warn: "text-warn",
+  brand: "text-brand-ink",
+  muted: "text-muted",
+  fg: "text-fg",
+};
+
+const TRACK_STEPS = ["Ordered", "Confirmed", "Shipped", "Out for delivery", "Delivered"];
+
+/** Map a raw order status to an Amazon-style headline. step = -1 means the order left the normal flow. */
+function describeOrderStatus(order: CustomerOrder): { headline: string; detail: string; tone: Tone; step: number } {
+  const status = (order.orderStatus || "").toUpperCase();
+  switch (status) {
+    case "PENDING_PAYMENT":
+    case "PENDING":
+      return {
+        headline: order.paymentMethod === "UPI" ? "Awaiting payment" : "Awaiting confirmation",
+        detail:
+          order.paymentMethod === "UPI"
+            ? "Complete your UPI payment so we can confirm this order."
+            : "Our team will call you shortly to confirm your Cash on Delivery order.",
+        tone: "warn",
+        step: 0,
+      };
+    case "PAYMENT_REVIEW":
+      return {
+        headline: "Payment under review",
+        detail: "We're verifying your UPI payment. This usually takes a few hours.",
+        tone: "warn",
+        step: 0,
+      };
+    case "CONFIRMED":
+      return { headline: "Order confirmed", detail: "We're getting your items ready for dispatch.", tone: "fg", step: 1 };
+    case "PROCESSING":
+    case "PACKED":
+      return { headline: "Preparing for dispatch", detail: "Your items are being packed with care.", tone: "fg", step: 1 };
+    case "DISPATCHED":
+    case "SHIPPED":
+      return { headline: "Shipped", detail: "Your package is on the way.", tone: "success", step: 2 };
+    case "OUT_FOR_DELIVERY":
+      return { headline: "Out for delivery", detail: "Arriving today.", tone: "success", step: 3 };
+    case "DELIVERED": {
+      const when = formatShortDate(order.updatedAt);
+      return {
+        headline: when ? `Delivered ${when}` : "Delivered",
+        detail: "Your package was delivered.",
+        tone: "success",
+        step: 4,
+      };
+    }
+    case "CANCELLED":
+      return { headline: "Cancelled", detail: "This order was cancelled.", tone: "brand", step: -1 };
+    case "RETURN_REQUESTED":
+      return { headline: "Return requested", detail: "We've received your return request.", tone: "warn", step: -1 };
+    case "RETURNED":
+      return { headline: "Returned", detail: "Your return has been received.", tone: "muted", step: -1 };
+    case "REFUNDED":
+      return { headline: "Refunded", detail: "Your refund has been issued to the original payment method.", tone: "muted", step: -1 };
+    default: {
+      const label = status
+        ? status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, " ")
+        : "Order placed";
+      return { headline: label, detail: "We'll update you as your order progresses.", tone: "fg", step: 0 };
+    }
+  }
+}
+
+/* ------------------------------------------------------------------
+   Presentational building blocks
+------------------------------------------------------------------- */
+
+function Notice({ msg, className = "" }: { msg: Msg; className?: string }) {
+  if (!msg) return null;
+  const isSuccess = msg.type === "success";
+  return (
+    <div
+      role={isSuccess ? "status" : "alert"}
+      className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm animate-fade-in ${
+        isSuccess ? "border-success/30 bg-success-soft text-success" : "border-brand/30 bg-brand-soft text-brand-ink"
+      } ${className}`}
+    >
+      {isSuccess ? (
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      ) : (
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      )}
+      <span>{msg.text}</span>
+    </div>
+  );
+}
+
+function SectionHeading({ id, title, description, action }: { id: string; title: string; description?: string; action?: React.ReactNode }) {
+  return (
+    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h2 id={id} className="text-xl font-bold text-fg sm:text-2xl">
+          {title}
+        </h2>
+        {description && <p className="mt-0.5 text-sm text-fg-2">{description}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function AccountTile({ href, title, description, icon: Icon }: { href: string; title: string; description: string; icon: React.ElementType }) {
+  return (
+    <a
+      href={href}
+      className="card group flex min-h-[96px] items-start gap-4 p-4 transition hover:border-line-strong hover:bg-surface-2 hover:shadow-pop sm:p-5"
+    >
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-ink transition group-hover:bg-brand group-hover:text-white">
+        <Icon className="h-6 w-6" aria-hidden="true" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-base font-bold text-fg">{title}</span>
+        <span className="mt-0.5 block text-sm text-fg-2">{description}</span>
+      </span>
+    </a>
+  );
+}
+
+function SecurityRow({
+  title,
+  value,
+  editing,
+  onEdit,
+  editLabel,
+  aside,
+  children,
+}: {
+  title: string;
+  value: React.ReactNode;
+  editing?: boolean;
+  onEdit?: () => void;
+  editLabel?: string;
+  aside?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-fg">{title}</p>
+          <div className="mt-0.5 break-words text-sm text-fg-2">{value}</div>
+        </div>
+        {onEdit && !editing && (
+          <button type="button" onClick={onEdit} className="btn btn-secondary btn-sm min-h-10 w-24 shrink-0" aria-label={editLabel}>
+            Edit
+          </button>
+        )}
+        {aside}
+      </div>
+      {editing && <div className="mt-4 animate-fade-up">{children}</div>}
+    </div>
+  );
+}
+
+function OrderTracker({ step }: { step: number }) {
+  return (
+    <ol className="mt-4 grid grid-cols-5 gap-1" aria-label="Delivery progress">
+      {TRACK_STEPS.map((label, i) => {
+        const done = i <= step;
+        return (
+          <li key={label} className="flex flex-col items-center text-center" aria-current={i === step ? "step" : undefined}>
+            <div className="flex w-full items-center">
+              <span className={`h-1 flex-1 rounded-full ${i === 0 ? "invisible" : done ? "bg-success" : "bg-surface-3"}`} />
+              <span
+                className={`mx-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                  done ? "border-success bg-success text-white" : "border-line-strong bg-surface"
+                }`}
+              >
+                {done && <CheckCircle2 className="h-3 w-3" aria-hidden="true" />}
+              </span>
+              <span
+                className={`h-1 flex-1 rounded-full ${i === TRACK_STEPS.length - 1 ? "invisible" : i < step ? "bg-success" : "bg-surface-3"}`}
+              />
+            </div>
+            <span className={`mt-1.5 text-xs leading-tight ${done ? "font-semibold text-fg" : "text-muted"}`}>{label}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function OrderCard({ order, onRemove }: { order: CustomerOrder; onRemove: (orderNumber: string) => void }) {
+  const router = useRouter();
+  const [showTracking, setShowTracking] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
+
+  const status = describeOrderStatus(order);
+  const ship = order.shippingAddress;
+  const currency = order.pricing?.currency || "INR";
+  const detailsId = `order-details-${order.orderNumber}`;
+  const trackingId = `order-tracking-${order.orderNumber}`;
+
+  const openInvoice = async () => {
+    setInvoiceBusy(true);
+    setInvoiceError(null);
+    try {
+      const res = await fetch(`/api/orders/${encodeURIComponent(order.orderNumber)}/invoice`, { cache: "no-store" });
+      const json = await res.json();
+      if (res.ok && json.success && json.data?.invoiceNumber) {
+        router.push(`/invoices/${encodeURIComponent(json.data.invoiceNumber)}`);
+        return;
+      }
+      setInvoiceError(
+        res.status === 404
+          ? "Your invoice will be available once this order is confirmed."
+          : json.error?.message || "Invoice isn't available right now."
+      );
+    } catch {
+      setInvoiceError("Network error occurred.");
+    } finally {
+      setInvoiceBusy(false);
+    }
+  };
+
+  return (
+    <article className="card overflow-hidden animate-fade-up" aria-label={`Order ${order.orderNumber}`}>
+      {/* Grey header strip */}
+      <header className="flex flex-wrap items-start gap-x-8 gap-y-3 border-b border-line bg-surface-2 px-4 py-3 text-xs text-fg-2 sm:px-5">
+        <div>
+          <p className="font-semibold uppercase tracking-wide text-muted">Order placed</p>
+          <p className="mt-0.5 text-sm text-fg-2">{formatLongDate(order.placedAt)}</p>
+        </div>
+        <div>
+          <p className="font-semibold uppercase tracking-wide text-muted">Total</p>
+          <p className="mt-0.5 text-sm text-fg-2">{formatPrice(order.pricing?.grandTotal ?? 0, currency)}</p>
+        </div>
+        {ship && (
+          <div className="min-w-0 max-w-[12rem]">
+            <p className="font-semibold uppercase tracking-wide text-muted">Ship to</p>
+            <p
+              className="mt-0.5 truncate text-sm text-brand-ink"
+              title={`${ship.fullName}, ${ship.address}, ${ship.city}, ${ship.state} ${ship.pinCode}`}
+            >
+              {ship.fullName}
+            </p>
+          </div>
+        )}
+        <div className="w-full min-w-0 sm:ml-auto sm:w-auto sm:text-right">
+          <p className="font-semibold uppercase tracking-wide text-muted">
+            Order # <span className="break-all font-mono normal-case tracking-normal text-fg-2">{order.orderNumber}</span>
+          </p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm sm:justify-end">
+            <button
+              type="button"
+              className="link py-1"
+              aria-expanded={showDetails}
+              aria-controls={detailsId}
+              onClick={() => setShowDetails((v) => !v)}
+            >
+              {showDetails ? "Hide order details" : "View order details"}
+            </button>
+            <span className="text-line-strong" aria-hidden="true">
+              |
+            </span>
+            <button type="button" className="link py-1" onClick={openInvoice} disabled={invoiceBusy}>
+              Invoice
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Body */}
+      <div className="grid gap-5 p-4 sm:p-5 md:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="min-w-0">
+          <h3 className={`text-lg font-bold ${TONE_CLASS[status.tone]}`}>{status.headline}</h3>
+          <p className="text-sm text-fg-2">{status.detail}</p>
+
+          {showTracking && (
+            <div id={trackingId} className="mt-2 animate-fade-in">
+              {status.step >= 0 ? (
+                <OrderTracker step={status.step} />
+              ) : (
+                <p className="mt-3 rounded-lg bg-surface-2 px-3 py-2 text-sm text-fg-2">
+                  Tracking isn&apos;t available for {status.headline.toLowerCase()} orders.
+                </p>
+              )}
+            </div>
+          )}
+
+          {invoiceError && <Notice msg={{ type: "error", text: invoiceError }} className="mt-3" />}
+
+          <ul className="mt-4 space-y-4">
+            {order.items.map((item, idx) => (
+              <li key={`${item.sku}-${idx}`} className="flex gap-3 sm:gap-4">
+                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-line bg-surface-2 sm:h-24 sm:w-24">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.image || FALLBACK_PRODUCT_IMAGE}
+                    alt={item.name}
+                    loading="lazy"
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 text-sm font-medium text-fg">{item.name}</p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    Qty {item.quantity} · {formatPrice(item.unitPrice, currency)} each
+                  </p>
+                  <Link
+                    href={`/products?search=${encodeURIComponent(item.name)}`}
+                    className="btn btn-secondary btn-sm mt-2 min-h-10"
+                    aria-label={`Buy ${item.name} again`}
+                  >
+                    <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                    Buy it again
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            className="btn btn-primary min-h-10 w-full"
+            aria-expanded={showTracking}
+            aria-controls={trackingId}
+            onClick={() => setShowTracking((v) => !v)}
+          >
+            <Truck className="h-4 w-4" aria-hidden="true" />
+            {showTracking ? "Hide tracking" : "Track package"}
+          </button>
+          <button type="button" className="btn btn-secondary min-h-10 w-full" onClick={openInvoice} disabled={invoiceBusy}>
+            {invoiceBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <FileText className="h-4 w-4" aria-hidden="true" />}
+            View invoice
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm min-h-10 w-full text-muted"
+            onClick={() => onRemove(order.orderNumber)}
+          >
+            Remove from this list
+          </button>
+        </div>
+      </div>
+
+      {/* Expanded order details */}
+      {showDetails && (
+        <div id={detailsId} className="grid gap-5 border-t border-line bg-surface-2 p-4 text-sm animate-fade-in sm:grid-cols-3 sm:p-5">
+          <div>
+            <p className="font-bold text-fg">Shipping address</p>
+            {ship ? (
+              <address className="mt-1 not-italic text-fg-2">
+                {ship.fullName}
+                <br />
+                {ship.address}
+                {ship.landmark ? (
+                  <>
+                    <br />
+                    {ship.landmark}
+                  </>
+                ) : null}
+                <br />
+                {ship.city}, {ship.state} {ship.pinCode}
+                <br />
+                Phone: {ship.phone}
+              </address>
+            ) : (
+              <p className="mt-1 text-muted">Not available</p>
+            )}
+          </div>
+          <div>
+            <p className="font-bold text-fg">Payment method</p>
+            <p className="mt-1 text-fg-2">{order.paymentMethod === "UPI" ? "UPI (direct payment)" : "Cash on Delivery"}</p>
+            <p className="mt-1 text-xs text-muted">
+              Payment status: {(order.paymentStatus || "").replace(/_/g, " ").toLowerCase() || "—"}
+            </p>
+          </div>
+          <div>
+            <p className="font-bold text-fg">Order summary</p>
+            <dl className="mt-1 space-y-1 text-fg-2">
+              <div className="flex justify-between gap-4">
+                <dt>Item(s) subtotal</dt>
+                <dd>{formatPrice(order.pricing?.subtotal ?? 0, currency)}</dd>
+              </div>
+              {!!order.pricing?.discountTotal && (
+                <div className="flex justify-between gap-4">
+                  <dt>Discount</dt>
+                  <dd className="text-success">-{formatPrice(order.pricing.discountTotal, currency)}</dd>
+                </div>
+              )}
+              {!!order.pricing?.taxTotal && (
+                <div className="flex justify-between gap-4">
+                  <dt>Tax</dt>
+                  <dd>{formatPrice(order.pricing.taxTotal, currency)}</dd>
+                </div>
+              )}
+              <div className="flex justify-between gap-4">
+                <dt>Shipping</dt>
+                <dd>{order.pricing?.shippingFee ? formatPrice(order.pricing.shippingFee, currency) : "FREE"}</dd>
+              </div>
+              <div className="flex justify-between gap-4 border-t border-line pt-1 font-bold text-fg">
+                <dt>Grand total</dt>
+                <dd>{formatPrice(order.pricing?.grandTotal ?? 0, currency)}</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function Field({ id, label, children, className = "" }: { id: string; label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={className}>
+      <label htmlFor={id} className="label">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------
+   Page
+------------------------------------------------------------------- */
+
+export default function ProfilePage() {
+  const { user, isLoading, refreshUser } = useAuth();
+
+  // Inline editor currently open in "Login & security"
+  const [editingField, setEditingField] = useState<EditableField | null>(null);
 
   // Profile edit state
   const [profileName, setProfileName] = useState("");
   const [profilePhone, setProfilePhone] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
-  const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [profileMsg, setProfileMsg] = useState<Msg>(null);
 
   // Password change state
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
-  const [passwordMsg, setPasswordMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [passwordMsg, setPasswordMsg] = useState<Msg>(null);
 
   // Addresses state
   const [addresses, setAddresses] = useState<Address[]>([]);
-  const [loadingAddresses, setLoadingAddresses] = useState(false);
+  const [loadingAddresses, setLoadingAddresses] = useState(true);
   const [showAddAddressModal, setShowAddAddressModal] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [addressSaving, setAddressSaving] = useState(false);
-  const [addressMsg, setAddressMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [addressMsg, setAddressMsg] = useState<Msg>(null);
+  const [addressListMsg, setAddressListMsg] = useState<Msg>(null);
 
-  // New address form state
-  const [newAddress, setNewAddress] = useState({
-    type: "shipping" as "shipping" | "billing" | "both",
-    fullName: "",
-    phone: "",
-    streetLine1: "",
-    streetLine2: "",
-    city: "",
-    state: "",
-    postalCode: "",
-    country: "United States",
-    isDefault: false,
-  });
+  // New / edited address form state
+  const [newAddress, setNewAddress] = useState<AddressForm>(emptyAddressForm());
 
-  // Sync profile details
-  useEffect(() => {
-    if (user) {
-      setProfileName(user.name || "");
-      setProfilePhone(user.phone || "");
-    }
-  }, [user]);
+  // Orders state (looked up by order number, remembered on this device)
+  const [orders, setOrders] = useState<CustomerOrder[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [orderQuery, setOrderQuery] = useState("");
+  const [orderLookupBusy, setOrderLookupBusy] = useState(false);
+  const [orderLookupMsg, setOrderLookupMsg] = useState<Msg>(null);
 
-  // Load addresses
+  const userId = user?.id;
+  const userEmail = user?.email;
+
+  // Profile details are copied from `user` into the edit fields when an inline editor opens
+  // (see startEditing), so no sync effect is needed.
+
+  // Load addresses (loadingAddresses starts true, so the initial skeleton shows without a sync setState)
   const fetchAddresses = useCallback(async () => {
-    setLoadingAddresses(true);
     try {
       const res = await fetch("/api/user/addresses");
       if (res.ok) {
@@ -99,8 +660,86 @@ export default function ProfilePage() {
   }, []);
 
   useEffect(() => {
-    fetchAddresses();
+    const load = async () => {
+      await fetchAddresses();
+    };
+    load();
   }, [fetchAddresses]);
+
+  // Client-rendered sections don't exist when the browser first applies the URL hash,
+  // so re-apply it once the account content has mounted (e.g. /profile#addresses).
+  useEffect(() => {
+    if (!userId) return;
+    const hash = window.location.hash.slice(1);
+    if (!hash) return;
+    const target = document.getElementById(hash);
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [userId]);
+
+  // Fetch a single order and make sure it belongs to the signed-in customer.
+  const fetchOrder = useCallback(
+    async (orderNumber: string): Promise<{ order?: CustomerOrder; error?: string; transient?: boolean }> => {
+      try {
+        const res = await fetch(`/api/orders/${encodeURIComponent(orderNumber)}`, { cache: "no-store" });
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          return {
+            error:
+              res.status === 404
+                ? "We couldn't find an order with that number."
+                : json.error?.message || "Couldn't load that order.",
+            transient: res.status >= 500,
+          };
+        }
+        const order = json.data as CustomerOrder;
+        const owner = (order.customerEmail || "").toLowerCase().trim();
+        if (!userEmail || owner !== userEmail.toLowerCase().trim()) {
+          return { error: "We couldn't find an order with that number on your account." };
+        }
+        return { order };
+      } catch {
+        return { error: "Network error occurred.", transient: true };
+      }
+    },
+    [userEmail]
+  );
+
+  // Restore remembered orders (plus ?order=FW-... handed over from checkout).
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    const saved = readSavedOrderNumbers(userId);
+    const fromQuery = new URLSearchParams(window.location.search).get("order")?.trim().toUpperCase();
+    const numbers = fromQuery && !saved.includes(fromQuery) ? [fromQuery, ...saved] : saved;
+    if (numbers.length === 0) return;
+
+    const load = async () => {
+      setLoadingOrders(true);
+      const results = await Promise.all(numbers.map((n) => fetchOrder(n)));
+      if (cancelled) return;
+      const found = results.flatMap((r) => (r.order ? [r.order] : []));
+      setOrders(sortOrders(found));
+      writeSavedOrderNumbers(
+        userId,
+        numbers.filter((_, i) => results[i].order || results[i].transient)
+      );
+      setLoadingOrders(false);
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, fetchOrder]);
+
+  // Close the address dialog with Escape
+  useEffect(() => {
+    if (!showAddAddressModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowAddAddressModal(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showAddAddressModal]);
 
   // Handle Profile Update
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -118,7 +757,8 @@ export default function ProfilePage() {
       setProfileSaving(false);
 
       if (res.ok && json.success) {
-        setProfileMsg({ type: "success", text: "Profile updated successfully!" });
+        setProfileMsg({ type: "success", text: "Your account details have been updated." });
+        setEditingField(null);
         await refreshUser();
       } else {
         setProfileMsg({ type: "error", text: json.error?.message || "Failed to update profile." });
@@ -155,10 +795,11 @@ export default function ProfilePage() {
       setPasswordSaving(false);
 
       if (res.ok && json.success) {
-        setPasswordMsg({ type: "success", text: "Password changed successfully!" });
+        setPasswordMsg({ type: "success", text: "Your password has been changed." });
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
+        setEditingField(null);
       } else {
         setPasswordMsg({ type: "error", text: json.error?.message || "Failed to change password." });
       }
@@ -185,18 +826,7 @@ export default function ProfilePage() {
 
       if (res.ok && json.success) {
         setShowAddAddressModal(false);
-        setNewAddress({
-          type: "shipping",
-          fullName: user?.name || "",
-          phone: user?.phone || "",
-          streetLine1: "",
-          streetLine2: "",
-          city: "",
-          state: "",
-          postalCode: "",
-          country: "United States",
-          isDefault: false,
-        });
+        setNewAddress(emptyAddressForm(user?.name || "", user?.phone || ""));
         await fetchAddresses();
       } else {
         setAddressMsg({ type: "error", text: json.error?.message || "Failed to add address." });
@@ -207,22 +837,57 @@ export default function ProfilePage() {
     }
   };
 
+  // Handle Edit Address (same form, PUT to the existing per-address endpoint)
+  const handleUpdateAddress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAddressId) return;
+    setAddressSaving(true);
+    setAddressMsg(null);
+
+    // Only send isDefault when promoting; unticking must not leave the account without a default.
+    const { isDefault, ...fields } = newAddress;
+    try {
+      const res = await fetch(`/api/user/addresses/${editingAddressId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(isDefault ? { ...fields, isDefault: true } : fields),
+      });
+      const json = await res.json();
+      setAddressSaving(false);
+
+      if (res.ok && json.success) {
+        setShowAddAddressModal(false);
+        setEditingAddressId(null);
+        await fetchAddresses();
+      } else {
+        setAddressMsg({ type: "error", text: json.error?.message || "Failed to update address." });
+      }
+    } catch {
+      setAddressSaving(false);
+      setAddressMsg({ type: "error", text: "Network error occurred." });
+    }
+  };
+
   // Delete Address
   const handleDeleteAddress = async (id: string) => {
     if (!confirm("Are you sure you want to delete this address?")) return;
+    setAddressListMsg(null);
 
     try {
       const res = await fetch(`/api/user/addresses/${id}`, { method: "DELETE" });
       if (res.ok) {
         await fetchAddresses();
+      } else {
+        setAddressListMsg({ type: "error", text: "Couldn't remove that address. Please try again." });
       }
     } catch {
-      // Ignore
+      setAddressListMsg({ type: "error", text: "Network error occurred." });
     }
   };
 
   // Set Default Address
   const handleSetDefaultAddress = async (id: string) => {
+    setAddressListMsg(null);
     try {
       const res = await fetch(`/api/user/addresses/${id}`, {
         method: "PUT",
@@ -231,584 +896,684 @@ export default function ProfilePage() {
       });
       if (res.ok) {
         await fetchAddresses();
+      } else {
+        setAddressListMsg({ type: "error", text: "Couldn't update your default address. Please try again." });
       }
     } catch {
-      // Ignore
+      setAddressListMsg({ type: "error", text: "Network error occurred." });
     }
+  };
+
+  // Order lookup
+  const handleLookupOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const orderNumber = orderQuery.trim().toUpperCase();
+    setOrderLookupMsg(null);
+    if (!orderNumber) {
+      setOrderLookupMsg({ type: "error", text: "Enter the order number from your confirmation message." });
+      return;
+    }
+    if (orders.some((o) => o.orderNumber === orderNumber)) {
+      setOrderLookupMsg({ type: "success", text: "That order is already listed below." });
+      return;
+    }
+    setOrderLookupBusy(true);
+    const result = await fetchOrder(orderNumber);
+    setOrderLookupBusy(false);
+    if (result.order && userId) {
+      const next = sortOrders([result.order, ...orders]);
+      setOrders(next);
+      writeSavedOrderNumbers(userId, next.map((o) => o.orderNumber));
+      setOrderQuery("");
+    } else {
+      setOrderLookupMsg({ type: "error", text: result.error || "Couldn't load that order." });
+    }
+  };
+
+  const handleRemoveOrder = (orderNumber: string) => {
+    const next = orders.filter((o) => o.orderNumber !== orderNumber);
+    setOrders(next);
+    if (userId) writeSavedOrderNumbers(userId, next.map((o) => o.orderNumber));
+  };
+
+  // Inline editor controls
+  const startEditing = (field: EditableField) => {
+    setProfileMsg(null);
+    setPasswordMsg(null);
+    setProfileName(user?.name || "");
+    setProfilePhone(user?.phone || "");
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setEditingField(field);
+  };
+
+  const cancelEditing = () => {
+    setProfileName(user?.name || "");
+    setProfilePhone(user?.phone || "");
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordMsg(null);
+    setProfileMsg(null);
+    setEditingField(null);
+  };
+
+  const openAddAddress = () => {
+    setAddressMsg(null);
+    setEditingAddressId(null);
+    setNewAddress(emptyAddressForm(user?.name || "", user?.phone || "", addresses.length === 0));
+    setShowAddAddressModal(true);
+  };
+
+  const openEditAddress = (addr: Address) => {
+    setAddressMsg(null);
+    setEditingAddressId(addr._id);
+    setNewAddress({
+      type: addr.type,
+      fullName: addr.fullName,
+      phone: addr.phone,
+      streetLine1: addr.streetLine1,
+      streetLine2: addr.streetLine2 || "",
+      city: addr.city,
+      state: addr.state,
+      postalCode: addr.postalCode,
+      country: addr.country || DEFAULT_COUNTRY,
+      isDefault: addr.isDefault,
+    });
+    setShowAddAddressModal(true);
+  };
+
+  const closeAddressModal = () => {
+    setShowAddAddressModal(false);
+    setEditingAddressId(null);
   };
 
   if (!user) {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-16 text-center">
-        <p className="text-xs text-slate-500">Checking your session...</p>
+      <div className="mx-auto max-w-[1200px] px-3 py-16 sm:px-4 lg:px-6">
+        {isLoading ? (
+          <div className="flex items-center justify-center gap-2 text-sm text-muted" role="status">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            Loading your account...
+          </div>
+        ) : (
+          <div className="card mx-auto max-w-md p-6 text-center">
+            <h1 className="text-xl font-bold text-fg">Sign in to view your account</h1>
+            <p className="mt-1 text-sm text-fg-2">Track orders, manage addresses and update your details.</p>
+            <Link href="/auth/login?redirect=/profile" className="btn btn-primary mt-4 min-h-10">
+              Sign in
+            </Link>
+          </div>
+        )}
       </div>
     );
   }
 
+  const firstName = user.name.trim().split(/\s+/)[0] || user.name;
+  const isEditingAddress = editingAddressId !== null;
+
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
-      {/* Account Hero Banner */}
-      <div className="rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 sm:p-8 text-white shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-600 text-xl font-extrabold uppercase text-white shadow-lg shadow-indigo-600/30">
-              {user.name.slice(0, 2)}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight">{user.name}</h1>
-                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                  user.role === "ADMIN"
-                    ? "bg-purple-500 text-white"
-                    : user.role === "STAFF"
-                    ? "bg-blue-500 text-white"
-                    : "bg-emerald-500 text-white"
-                }`}>
-                  {user.role}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-0.5">{user.email}</p>
+    <div className="mx-auto max-w-[1200px] space-y-10 px-3 py-4 sm:px-4 sm:py-6 lg:px-6">
+      {/* Title + greeting */}
+      <div className="flex flex-col gap-4 animate-fade-in sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand text-base font-bold text-white sm:h-14 sm:w-14 sm:text-lg"
+            aria-hidden="true"
+          >
+            {initialsOf(user.name)}
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-fg sm:text-3xl">Your Account</h1>
+            <p className="text-sm text-fg-2">
+              Hello, <span className="font-semibold text-fg">{firstName}</span>. Manage your orders, addresses and sign-in
+              details.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
+          <span className="break-all">{user.email}</span>
+          {user.role !== "CUSTOMER" && <span className="chip chip-neutral">{user.role === "ADMIN" ? "Admin" : "Staff"}</span>}
+        </div>
+      </div>
+
+      {/* Tiles */}
+      <nav aria-label="Account sections" className="-mt-4">
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+          {ACCOUNT_SECTIONS.map((s) => (
+            <li key={s.id}>
+              <AccountTile href={`#${s.id}`} title={s.title} description={s.description} icon={s.icon} />
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      {/* ---------------- Your Orders ---------------- */}
+      <section id="orders" aria-labelledby="orders-heading" className="scroll-mt-36">
+        <SectionHeading
+          id="orders-heading"
+          title="Your Orders"
+          description="Find an order with the order number from your confirmation email or message. Orders you add are remembered on this device."
+        />
+
+        <form onSubmit={handleLookupOrder} className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:p-5" role="search">
+          <div className="min-w-0 flex-1">
+            <label htmlFor="order-lookup" className="label">
+              Order number
+            </label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+              <input
+                id="order-lookup"
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                spellCheck={false}
+                value={orderQuery}
+                onChange={(e) => setOrderQuery(e.target.value)}
+                placeholder="e.g. FW-123456-AB12"
+                className="input pl-9 font-mono uppercase placeholder:font-sans placeholder:normal-case"
+              />
             </div>
           </div>
+          <button type="submit" className="btn btn-primary min-h-10 sm:w-40" disabled={orderLookupBusy}>
+            {orderLookupBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+            {orderLookupBusy ? "Searching..." : "Find order"}
+          </button>
+        </form>
+        <div aria-live="polite">
+          <Notice msg={orderLookupMsg} className="mt-3" />
+        </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <div className="rounded-xl border border-slate-800 bg-slate-800/60 px-3.5 py-2">
-              <span className="text-slate-400 block text-[10px]">Saved Addresses</span>
-              <span className="font-bold text-white text-sm">{addresses.length}</span>
-            </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-800/60 px-3.5 py-2">
-              <span className="text-slate-400 block text-[10px]">Security Status</span>
-              <span className="font-bold text-emerald-400 text-sm flex items-center gap-1">
-                <CheckCircle2 className="h-3.5 w-3.5" /> Protected
+        <div className="mt-4 space-y-4">
+          {loadingOrders ? (
+            <>
+              <div className="card h-48 animate-pulse bg-surface-2" />
+              <div className="card h-48 animate-pulse bg-surface-2" />
+            </>
+          ) : orders.length === 0 ? (
+            <div className="card flex flex-col items-center px-4 py-10 text-center">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-soft text-brand-ink">
+                <ShoppingBag className="h-7 w-7" aria-hidden="true" />
               </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs Navigation */}
-      <div className="flex overflow-x-auto border-b border-slate-200 dark:border-slate-800 gap-2 text-xs font-semibold">
-        <button
-          type="button"
-          onClick={() => setActiveTab("overview")}
-          className={`flex items-center gap-2 pb-3 px-3 transition-colors border-b-2 ${
-            activeTab === "overview"
-              ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400"
-              : "border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white"
-          }`}
-        >
-          <Home className="h-4 w-4" />
-          <span>Overview</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("profile")}
-          className={`flex items-center gap-2 pb-3 px-3 transition-colors border-b-2 ${
-            activeTab === "profile"
-              ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400"
-              : "border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white"
-          }`}
-        >
-          <User className="h-4 w-4" />
-          <span>Edit Profile</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("addresses")}
-          className={`flex items-center gap-2 pb-3 px-3 transition-colors border-b-2 ${
-            activeTab === "addresses"
-              ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400"
-              : "border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white"
-          }`}
-        >
-          <MapPin className="h-4 w-4" />
-          <span>Saved Addresses ({addresses.length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("security")}
-          className={`flex items-center gap-2 pb-3 px-3 transition-colors border-b-2 ${
-            activeTab === "security"
-              ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400"
-              : "border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white"
-          }`}
-        >
-          <KeyRound className="h-4 w-4" />
-          <span>Security & Password</span>
-        </button>
-      </div>
-
-      {/* Tab 1: Overview */}
-      {activeTab === "overview" && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900 space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <User className="h-4 w-4 text-indigo-600" /> Account Summary
-            </h3>
-            <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300">
-              <p><span className="font-semibold text-slate-400">Name:</span> {user.name}</p>
-              <p><span className="font-semibold text-slate-400">Email:</span> {user.email}</p>
-              <p><span className="font-semibold text-slate-400">Phone:</span> {user.phone || "Not specified"}</p>
-              <p><span className="font-semibold text-slate-400">Account Role:</span> {user.role}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveTab("profile")}
-              className="text-xs font-semibold text-indigo-600 hover:underline"
-            >
-              Update Information →
-            </button>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900 space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-purple-600" /> Primary Address
-            </h3>
-            {addresses.find((a) => a.isDefault) ? (
-              <div className="space-y-1 text-xs text-slate-600 dark:text-slate-300">
-                <span className="inline-block text-[10px] font-bold uppercase bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 px-2 py-0.5 rounded">
-                  Default {addresses.find((a) => a.isDefault)?.type}
-                </span>
-                <p className="font-bold text-slate-900 dark:text-white pt-1">
-                  {addresses.find((a) => a.isDefault)?.fullName}
-                </p>
-                <p>{addresses.find((a) => a.isDefault)?.streetLine1}</p>
-                <p>{addresses.find((a) => a.isDefault)?.city}, {addresses.find((a) => a.isDefault)?.state} {addresses.find((a) => a.isDefault)?.postalCode}</p>
-              </div>
-            ) : (
-              <p className="text-xs text-slate-500">No default address set yet.</p>
-            )}
-            <button
-              type="button"
-              onClick={() => setActiveTab("addresses")}
-              className="text-xs font-semibold text-purple-600 hover:underline"
-            >
-              Manage Address Book ({addresses.length}) →
-            </button>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900 space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Shield className="h-4 w-4 text-emerald-600" /> Security & Role Access
-            </h3>
-            <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300">
-              <p><span className="font-semibold text-slate-400">Password Encryption:</span> bcryptjs (12 rounds)</p>
-              <p><span className="font-semibold text-slate-400">Session Type:</span> HTTP-Only Signed JWT</p>
-              <p><span className="font-semibold text-slate-400">Role Privileges:</span> {
-                user.role === "ADMIN" 
-                  ? "Superuser (Full Catalog & Staff Management)" 
-                  : user.role === "STAFF" 
-                  ? "Staff (Catalog & Order Management)" 
-                  : "Customer (Standard Purchasing & Profile)"
-              }</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveTab("security")}
-              className="text-xs font-semibold text-emerald-600 hover:underline"
-            >
-              Change Password →
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Tab 2: Edit Profile */}
-      {activeTab === "profile" && (
-        <div className="max-w-xl rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">Edit Profile Details</h2>
-          <p className="text-xs text-slate-500 mt-1">Update your display name and contact phone</p>
-
-          {profileMsg && (
-            <div className={`mt-4 flex items-center gap-2 rounded-xl p-3 text-xs ${
-              profileMsg.type === "success" 
-                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                : "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
-            }`}>
-              {profileMsg.type === "success" ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
-              <span>{profileMsg.text}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleUpdateProfile} className="mt-6 space-y-4 text-xs">
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300">Full Name</label>
-              <div className="relative mt-1">
-                <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  required
-                  value={profileName}
-                  onChange={(e) => setProfileName(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300">Account Email (Immutable)</label>
-              <div className="relative mt-1">
-                <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="email"
-                  disabled
-                  value={user.email}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-100 py-2.5 pl-10 pr-4 text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400 cursor-not-allowed"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300">Phone Number</label>
-              <div className="relative mt-1">
-                <Phone className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="tel"
-                  value={profilePhone}
-                  onChange={(e) => setProfilePhone(e.target.value)}
-                  placeholder="+1 (555) 000-0000"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={profileSaving}
-              className="rounded-xl bg-indigo-600 px-5 py-2.5 font-bold text-white shadow-xs transition hover:bg-indigo-700 disabled:opacity-60"
-            >
-              {profileSaving ? "Saving changes..." : "Save Profile Changes"}
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* Tab 3: Saved Addresses */}
-      {activeTab === "addresses" && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">Saved Addresses</h2>
-              <p className="text-xs text-slate-500">Manage your shipping and billing destinations</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setNewAddress({
-                  type: "shipping",
-                  fullName: user.name,
-                  phone: user.phone || "",
-                  streetLine1: "",
-                  streetLine2: "",
-                  city: "",
-                  state: "",
-                  postalCode: "",
-                  country: "United States",
-                  isDefault: addresses.length === 0,
-                });
-                setShowAddAddressModal(true);
-              }}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-indigo-700"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Add New Address</span>
-            </button>
-          </div>
-
-          {loadingAddresses ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="h-36 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
-              <div className="h-36 rounded-2xl bg-slate-100 dark:bg-slate-800 animate-pulse" />
-            </div>
-          ) : addresses.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center text-xs dark:border-slate-800">
-              <MapPin className="mx-auto h-8 w-8 text-slate-400" />
-              <p className="mt-2 font-bold text-slate-700 dark:text-slate-300">No saved addresses found</p>
-              <p className="text-slate-500 mt-1">Add a default address to accelerate your checkout process.</p>
+              <p className="mt-3 text-lg font-bold text-fg">No orders to show yet</p>
+              <p className="mt-1 max-w-md text-sm text-fg-2">
+                Enter an order number above to track it here, or find your next figure in the store.
+              </p>
+              <Link href="/products" className="btn btn-primary mt-4 min-h-10">
+                Start shopping
+              </Link>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {addresses.map((addr) => (
-                <div
-                  key={addr._id}
-                  className={`relative rounded-2xl border p-5 transition-all ${
-                    addr.isDefault
-                      ? "border-indigo-500 bg-indigo-50/30 dark:border-indigo-500 dark:bg-indigo-950/20 shadow-xs"
-                      : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
-                  }`}
-                >
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800/80">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-slate-700 dark:text-slate-300">
-                        {addr.type}
-                      </span>
-                      {addr.isDefault && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase rounded-md bg-indigo-600 px-2 py-0.5 text-white">
-                          <Star className="h-2.5 w-2.5 fill-white" /> Default
-                        </span>
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteAddress(addr._id)}
-                      className="text-slate-400 hover:text-rose-600 transition"
-                      title="Delete address"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <div className="mt-3 space-y-1 text-xs text-slate-600 dark:text-slate-300">
-                    <p className="font-bold text-slate-900 dark:text-white text-sm">{addr.fullName}</p>
-                    <p>{addr.streetLine1}</p>
-                    {addr.streetLine2 && <p>{addr.streetLine2}</p>}
-                    <p>{addr.city}, {addr.state} {addr.postalCode}</p>
-                    <p>{addr.country}</p>
-                    <p className="text-[11px] text-slate-400 pt-1">Phone: {addr.phone}</p>
-                  </div>
-
-                  {!addr.isDefault && (
-                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80">
-                      <button
-                        type="button"
-                        onClick={() => handleSetDefaultAddress(addr._id)}
-                        className="text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400"
-                      >
-                        Set as Default Address
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Add Address Modal */}
-          {showAddAddressModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-              <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-                <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Add New Address</h3>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddAddressModal(false)}
-                    className="text-slate-400 hover:text-slate-600"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {addressMsg && (
-                  <div className="mt-4 rounded-xl bg-rose-50 p-3 text-xs text-rose-700 dark:bg-rose-950/40 dark:text-rose-400">
-                    {addressMsg.text}
-                  </div>
-                )}
-
-                <form onSubmit={handleAddAddress} className="mt-4 space-y-3 text-xs">
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300">Address Type</label>
-                    <select
-                      value={newAddress.type}
-                      onChange={(e) => setNewAddress({ ...newAddress, type: e.target.value as "shipping" | "billing" | "both" })}
-                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 px-3 text-xs font-medium text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-                    >
-                      <option value="shipping">Shipping Address</option>
-                      <option value="billing">Billing Address</option>
-                      <option value="both">Both (Shipping & Billing)</option>
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-semibold text-slate-700 dark:text-slate-300">Full Name</label>
-                      <input
-                        type="text"
-                        required
-                        value={newAddress.fullName}
-                        onChange={(e) => setNewAddress({ ...newAddress, fullName: e.target.value })}
-                        className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-slate-700 dark:text-slate-300">Contact Phone</label>
-                      <input
-                        type="tel"
-                        required
-                        value={newAddress.phone}
-                        onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })}
-                        className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300">Street Address</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="123 Collector Lane"
-                      value={newAddress.streetLine1}
-                      onChange={(e) => setNewAddress({ ...newAddress, streetLine1: e.target.value })}
-                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300">Apt, Suite, Unit (Optional)</label>
-                    <input
-                      type="text"
-                      placeholder="Apt 4B"
-                      value={newAddress.streetLine2}
-                      onChange={(e) => setNewAddress({ ...newAddress, streetLine2: e.target.value })}
-                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-semibold text-slate-700 dark:text-slate-300">City</label>
-                      <input
-                        type="text"
-                        required
-                        value={newAddress.city}
-                        onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
-                        className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-slate-700 dark:text-slate-300">State / Province</label>
-                      <input
-                        type="text"
-                        required
-                        value={newAddress.state}
-                        onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
-                        className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-semibold text-slate-700 dark:text-slate-300">Postal / ZIP Code</label>
-                      <input
-                        type="text"
-                        required
-                        value={newAddress.postalCode}
-                        onChange={(e) => setNewAddress({ ...newAddress, postalCode: e.target.value })}
-                        className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-semibold text-slate-700 dark:text-slate-300">Country</label>
-                      <input
-                        type="text"
-                        required
-                        value={newAddress.country}
-                        onChange={(e) => setNewAddress({ ...newAddress, country: e.target.value })}
-                        className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-3 text-xs dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-                      />
-                    </div>
-                  </div>
-
-                  <label className="flex items-center gap-2 pt-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newAddress.isDefault}
-                      onChange={(e) => setNewAddress({ ...newAddress, isDefault: e.target.checked })}
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className="font-medium text-slate-700 dark:text-slate-300">Set as my default address</span>
-                  </label>
-
-                  <div className="flex gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-                    <button
-                      type="button"
-                      onClick={() => setShowAddAddressModal(false)}
-                      className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={addressSaving}
-                      className="flex-1 rounded-xl bg-indigo-600 py-2.5 font-bold text-white hover:bg-indigo-700 disabled:opacity-60"
-                    >
-                      {addressSaving ? "Saving..." : "Save Address"}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
+            orders.map((order) => <OrderCard key={order.orderNumber} order={order} onRemove={handleRemoveOrder} />)
           )}
         </div>
-      )}
+      </section>
 
-      {/* Tab 4: Security (Change Password) */}
-      {activeTab === "security" && (
-        <div className="max-w-xl rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">Change Password</h2>
-          <p className="text-xs text-slate-500 mt-1">Ensure your collector account is guarded with a strong password</p>
+      {/* ---------------- Login & security ---------------- */}
+      <section id="security" aria-labelledby="security-heading" className="scroll-mt-36">
+        <SectionHeading id="security-heading" title="Login & security" description="Keep your sign-in details up to date." />
 
-          {passwordMsg && (
-            <div className={`mt-4 flex items-center gap-2 rounded-xl p-3 text-xs ${
-              passwordMsg.type === "success" 
-                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-                : "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300"
-            }`}>
-              {passwordMsg.type === "success" ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
-              <span>{passwordMsg.text}</span>
-            </div>
-          )}
+        <div className="card max-w-3xl">
+          <div aria-live="polite">
+            {(profileMsg || passwordMsg) && (
+              <div className="space-y-2 px-4 pt-4 sm:px-5">
+                <Notice msg={profileMsg} />
+                <Notice msg={passwordMsg} />
+              </div>
+            )}
+          </div>
 
-          <form onSubmit={handleChangePassword} className="mt-6 space-y-4 text-xs">
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300">Current Password</label>
-              <input
-                type="password"
-                required
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="••••••••"
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 px-4 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-              />
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300">New Password (min 6 chars)</label>
-              <input
-                type="password"
-                required
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="••••••••"
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 px-4 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-              />
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300">Confirm New Password</label>
-              <input
-                type="password"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 px-4 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={passwordSaving}
-              className="rounded-xl bg-indigo-600 px-5 py-2.5 font-bold text-white shadow-xs transition hover:bg-indigo-700 disabled:opacity-60"
+          <div className="divide-y divide-line">
+            {/* Name */}
+            <SecurityRow
+              title="Name"
+              value={user.name}
+              editing={editingField === "name"}
+              onEdit={() => startEditing("name")}
+              editLabel="Edit name"
             >
-              {passwordSaving ? "Updating password..." : "Update Password"}
-            </button>
-          </form>
+              <form onSubmit={handleUpdateProfile} className="space-y-3">
+                <Field id="profile-name" label="New name">
+                  <input
+                    id="profile-name"
+                    type="text"
+                    required
+                    autoComplete="name"
+                    value={profileName}
+                    onChange={(e) => setProfileName(e.target.value)}
+                    className="input max-w-md"
+                  />
+                </Field>
+                <div className="flex flex-wrap gap-2">
+                  <button type="submit" disabled={profileSaving} className="btn btn-primary min-h-10">
+                    {profileSaving ? "Saving..." : "Save changes"}
+                  </button>
+                  <button type="button" onClick={cancelEditing} className="btn btn-ghost min-h-10">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </SecurityRow>
+
+            {/* Email */}
+            <SecurityRow
+              title="Email"
+              value={user.email}
+              aside={<span className="shrink-0 pt-0.5 text-right text-xs text-muted">Contact us to change</span>}
+            />
+
+            {/* Phone */}
+            <SecurityRow
+              title="Mobile number"
+              value={user.phone || <span className="text-muted">Not added</span>}
+              editing={editingField === "phone"}
+              onEdit={() => startEditing("phone")}
+              editLabel="Edit mobile number"
+            >
+              <form onSubmit={handleUpdateProfile} className="space-y-3">
+                <Field id="profile-phone" label="Mobile number">
+                  <input
+                    id="profile-phone"
+                    type="tel"
+                    autoComplete="tel"
+                    value={profilePhone}
+                    onChange={(e) => setProfilePhone(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    className="input max-w-md"
+                  />
+                </Field>
+                <div className="flex flex-wrap gap-2">
+                  <button type="submit" disabled={profileSaving} className="btn btn-primary min-h-10">
+                    {profileSaving ? "Saving..." : "Save changes"}
+                  </button>
+                  <button type="button" onClick={cancelEditing} className="btn btn-ghost min-h-10">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </SecurityRow>
+
+            {/* Password */}
+            <SecurityRow
+              title="Password"
+              value={<span aria-label="Password hidden">••••••••</span>}
+              editing={editingField === "password"}
+              onEdit={() => startEditing("password")}
+              editLabel="Change password"
+            >
+              <form onSubmit={handleChangePassword} className="max-w-md space-y-3">
+                <Field id="current-password" label="Current password">
+                  <input
+                    id="current-password"
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="input"
+                  />
+                </Field>
+                <Field id="new-password" label="New password">
+                  <input
+                    id="new-password"
+                    type="password"
+                    required
+                    autoComplete="new-password"
+                    aria-describedby="new-password-hint"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="input"
+                  />
+                  <p id="new-password-hint" className="mt-1 text-xs text-muted">
+                    At least 6 characters.
+                  </p>
+                </Field>
+                <Field id="confirm-password" label="Re-enter new password">
+                  <input
+                    id="confirm-password"
+                    type="password"
+                    required
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="input"
+                  />
+                </Field>
+                <div className="flex flex-wrap gap-2">
+                  <button type="submit" disabled={passwordSaving} className="btn btn-primary min-h-10">
+                    {passwordSaving ? "Updating..." : "Save changes"}
+                  </button>
+                  <button type="button" onClick={cancelEditing} className="btn btn-ghost min-h-10">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </SecurityRow>
+          </div>
+        </div>
+      </section>
+
+      {/* ---------------- Your Addresses ---------------- */}
+      <section id="addresses" aria-labelledby="addresses-heading" className="scroll-mt-36">
+        <SectionHeading
+          id="addresses-heading"
+          title="Your Addresses"
+          description="Your default address is pre-selected at checkout."
+        />
+
+        <div aria-live="polite">
+          <Notice msg={addressListMsg} className="mb-4" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <button
+            type="button"
+            onClick={openAddAddress}
+            className="flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-line-strong bg-surface p-6 text-fg-2 transition hover:border-brand hover:bg-brand-soft hover:text-brand-ink"
+          >
+            <Plus className="h-10 w-10" aria-hidden="true" />
+            <span className="text-lg font-bold">Add address</span>
+          </button>
+
+          {loadingAddresses && addresses.length === 0
+            ? [0, 1].map((i) => <div key={i} className="card min-h-[220px] animate-pulse bg-surface-2" />)
+            : addresses.map((addr) => (
+                <div key={addr._id} className="card flex min-h-[220px] flex-col overflow-hidden animate-fade-up">
+                  <div className="flex items-center gap-2 border-b border-line px-4 py-2">
+                    {addr.isDefault ? (
+                      <span className="chip chip-brand">Default</span>
+                    ) : (
+                      <span className="text-xs text-muted">Saved address</span>
+                    )}
+                    <span className="chip chip-neutral ml-auto capitalize">
+                      {addr.type === "both" ? "Shipping & billing" : addr.type}
+                    </span>
+                  </div>
+
+                  <div className="flex-1 space-y-0.5 px-4 py-3 text-sm text-fg-2">
+                    <p className="font-bold text-fg">{addr.fullName}</p>
+                    <p className="break-words">{addr.streetLine1}</p>
+                    {addr.streetLine2 && <p className="break-words">{addr.streetLine2}</p>}
+                    <p>
+                      {addr.city}, {addr.state} {addr.postalCode}
+                    </p>
+                    <p>{addr.country}</p>
+                    <p className="pt-1">Phone number: {addr.phone}</p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-2 px-4 pb-2 text-sm">
+                    <button
+                      type="button"
+                      className="link min-h-10"
+                      onClick={() => openEditAddress(addr)}
+                      aria-label={`Edit address for ${addr.fullName}`}
+                    >
+                      Edit
+                    </button>
+                    <span className="text-line-strong" aria-hidden="true">
+                      |
+                    </span>
+                    <button
+                      type="button"
+                      className="link min-h-10"
+                      onClick={() => handleDeleteAddress(addr._id)}
+                      aria-label={`Remove address for ${addr.fullName}`}
+                    >
+                      Remove
+                    </button>
+                    {!addr.isDefault && (
+                      <>
+                        <span className="text-line-strong" aria-hidden="true">
+                          |
+                        </span>
+                        <button type="button" className="link min-h-10" onClick={() => handleSetDefaultAddress(addr._id)}>
+                          Set as default
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+        </div>
+      </section>
+
+      {/* ---------------- Payment options ---------------- */}
+      <section id="payments" aria-labelledby="payments-heading" className="scroll-mt-36">
+        <SectionHeading
+          id="payments-heading"
+          title="Payment options"
+          description="Choose how to pay each time you check out. No card details are stored on your account."
+        />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="card flex items-start gap-4 p-4 sm:p-5">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-surface-3 text-fg">
+              <Smartphone className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div>
+              <p className="flex flex-wrap items-center gap-2 text-base font-bold text-fg">
+                UPI <span className="chip chip-soft">Recommended</span>
+              </p>
+              <p className="mt-0.5 text-sm text-fg-2">
+                Scan the QR code at checkout with any UPI app — Google Pay, PhonePe, Paytm or your bank app — then
+                share the transaction reference.
+              </p>
+            </div>
+          </div>
+          <div className="card flex items-start gap-4 p-4 sm:p-5">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-surface-3 text-fg">
+              <Banknote className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-base font-bold text-fg">Cash on Delivery</p>
+              <p className="mt-0.5 text-sm text-fg-2">
+                Available on orders up to <span className="font-semibold text-fg">{formatPrice(15000)}</span>. We&apos;ll
+                call to confirm before dispatch.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ---------------- Contact us ---------------- */}
+      <section id="help" aria-labelledby="help-heading" className="scroll-mt-36">
+        <SectionHeading id="help-heading" title="Contact us" description="We're here to help with orders, payments and your account." />
+        <div className="card grid grid-cols-1 divide-y divide-line md:grid-cols-3 md:divide-x md:divide-y-0">
+          <div className="p-4 sm:p-5">
+            <p className="flex items-center gap-2 text-base font-bold text-fg">
+              <Mail className="h-5 w-5 text-brand-ink" aria-hidden="true" /> Email support
+            </p>
+            <p className="mt-1 text-sm text-fg-2">Include your order number so we can help faster.</p>
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="link mt-2 inline-flex min-h-10 items-center break-all text-sm">
+              {SUPPORT_EMAIL}
+            </a>
+          </div>
+          <div className="p-4 sm:p-5">
+            <p className="flex items-center gap-2 text-base font-bold text-fg">
+              <Package className="h-5 w-5 text-brand-ink" aria-hidden="true" /> Where&apos;s my order?
+            </p>
+            <p className="mt-1 text-sm text-fg-2">Look up any order to see its status and download the invoice.</p>
+            <a href="#orders" className="link mt-2 inline-flex min-h-10 items-center text-sm">
+              Track an order
+            </a>
+          </div>
+          <div className="p-4 sm:p-5">
+            <p className="flex items-center gap-2 text-base font-bold text-fg">
+              <MapPin className="h-5 w-5 text-brand-ink" aria-hidden="true" /> Delivery details
+            </p>
+            <p className="mt-1 text-sm text-fg-2">Moved recently? Update your default address before your next order.</p>
+            <a href="#addresses" className="link mt-2 inline-flex min-h-10 items-center text-sm">
+              Manage addresses
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ---------------- Add / edit address dialog ---------------- */}
+      {showAddAddressModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 animate-fade-in sm:items-center sm:p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeAddressModal();
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="address-dialog-title"
+            className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-line bg-surface shadow-pop animate-pop-in sm:rounded-xl"
+          >
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface-2 px-4 py-3 sm:px-5">
+              <h3 id="address-dialog-title" className="text-lg font-bold text-fg">
+                {isEditingAddress ? "Edit your address" : "Add a new address"}
+              </h3>
+              <button
+                type="button"
+                onClick={closeAddressModal}
+                className="btn btn-ghost h-10 w-10 !p-0"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </div>
+
+            <form onSubmit={isEditingAddress ? handleUpdateAddress : handleAddAddress} className="space-y-4 p-4 sm:p-5">
+              <Notice msg={addressMsg} />
+
+              <Field id="addr-type" label="Address type">
+                <select
+                  id="addr-type"
+                  value={newAddress.type}
+                  onChange={(e) => setNewAddress({ ...newAddress, type: e.target.value as "shipping" | "billing" | "both" })}
+                  className="input"
+                >
+                  <option value="shipping">Shipping address</option>
+                  <option value="billing">Billing address</option>
+                  <option value="both">Both (shipping &amp; billing)</option>
+                </select>
+              </Field>
+
+              <Field id="addr-name" label="Full name (first and last name)">
+                <input
+                  id="addr-name"
+                  type="text"
+                  required
+                  autoComplete="name"
+                  value={newAddress.fullName}
+                  onChange={(e) => setNewAddress({ ...newAddress, fullName: e.target.value })}
+                  className="input"
+                />
+              </Field>
+
+              <Field id="addr-phone" label="Mobile number">
+                <input
+                  id="addr-phone"
+                  type="tel"
+                  required
+                  autoComplete="tel"
+                  value={newAddress.phone}
+                  onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })}
+                  className="input"
+                />
+              </Field>
+
+              <Field id="addr-line1" label="Flat, house no., building, street">
+                <input
+                  id="addr-line1"
+                  type="text"
+                  required
+                  autoComplete="address-line1"
+                  value={newAddress.streetLine1}
+                  onChange={(e) => setNewAddress({ ...newAddress, streetLine1: e.target.value })}
+                  className="input"
+                />
+              </Field>
+
+              <Field id="addr-line2" label="Area, landmark (optional)">
+                <input
+                  id="addr-line2"
+                  type="text"
+                  autoComplete="address-line2"
+                  value={newAddress.streetLine2}
+                  onChange={(e) => setNewAddress({ ...newAddress, streetLine2: e.target.value })}
+                  className="input"
+                />
+              </Field>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field id="addr-city" label="Town / city">
+                  <input
+                    id="addr-city"
+                    type="text"
+                    required
+                    autoComplete="address-level2"
+                    value={newAddress.city}
+                    onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
+                    className="input"
+                  />
+                </Field>
+                <Field id="addr-state" label="State">
+                  <input
+                    id="addr-state"
+                    type="text"
+                    required
+                    autoComplete="address-level1"
+                    value={newAddress.state}
+                    onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
+                    className="input"
+                  />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field id="addr-postal" label="PIN code">
+                  <input
+                    id="addr-postal"
+                    type="text"
+                    required
+                    inputMode="numeric"
+                    autoComplete="postal-code"
+                    value={newAddress.postalCode}
+                    onChange={(e) => setNewAddress({ ...newAddress, postalCode: e.target.value })}
+                    className="input"
+                  />
+                </Field>
+                <Field id="addr-country" label="Country">
+                  <input
+                    id="addr-country"
+                    type="text"
+                    required
+                    autoComplete="country-name"
+                    value={newAddress.country}
+                    onChange={(e) => setNewAddress({ ...newAddress, country: e.target.value })}
+                    className="input"
+                  />
+                </Field>
+              </div>
+
+              {!(isEditingAddress && addresses.find((a) => a._id === editingAddressId)?.isDefault) && (
+                <label className="flex min-h-10 cursor-pointer items-center gap-2 text-sm text-fg">
+                  <input
+                    type="checkbox"
+                    checked={newAddress.isDefault}
+                    onChange={(e) => setNewAddress({ ...newAddress, isDefault: e.target.checked })}
+                    className="h-4 w-4 accent-[var(--brand)]"
+                  />
+                  Make this my default address
+                </label>
+              )}
+
+              <div className="flex flex-col-reverse gap-2 border-t border-line pt-4 sm:flex-row sm:justify-end">
+                <button type="button" onClick={closeAddressModal} className="btn btn-secondary min-h-10">
+                  Cancel
+                </button>
+                <button type="submit" disabled={addressSaving} className="btn btn-primary min-h-10">
+                  {addressSaving ? "Saving..." : isEditingAddress ? "Save changes" : "Add address"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

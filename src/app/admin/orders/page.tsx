@@ -178,7 +178,7 @@ export default function AdminOrdersPage() {
         );
       case "PAYMENT_REVIEW":
         return (
-          <span className="inline-flex items-center gap-1 rounded-md bg-purple-50 px-2 py-0.5 text-xs font-semibold text-purple-700 border border-purple-200/80 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/60">
+          <span className="inline-flex items-center gap-1 rounded-md bg-yellow-50 px-2 py-0.5 text-xs font-semibold text-yellow-700 border border-yellow-200/80 dark:bg-yellow-950/40 dark:text-yellow-300 dark:border-yellow-800/60">
             <Clock className="h-3 w-3" />
             Payment Review
           </span>
@@ -192,7 +192,7 @@ export default function AdminOrdersPage() {
         );
       case "PROCESSING":
         return (
-          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 border border-indigo-200/80 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800/60">
+          <span className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700 border border-sky-200/80 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800/60">
             <Layers className="h-3 w-3" />
             Processing
           </span>
@@ -242,21 +242,21 @@ export default function AdminOrdersPage() {
         );
       case "RETURNED":
         return (
-          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 border border-slate-300 dark:bg-slate-800 dark:text-slate-300">
+          <span className="inline-flex items-center gap-1 rounded-md bg-surface-3 px-2 py-0.5 text-xs font-semibold text-fg-2 border border-line-strong">
             <RotateCcw className="h-3 w-3" />
             Returned
           </span>
         );
       case "REFUNDED":
         return (
-          <span className="inline-flex items-center gap-1 rounded-md bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700 border border-violet-200 dark:bg-violet-950/40 dark:text-violet-300">
+          <span className="inline-flex items-center gap-1 rounded-md bg-stone-50 px-2 py-0.5 text-xs font-semibold text-stone-700 border border-stone-200 dark:bg-stone-950/40 dark:text-stone-300">
             <RotateCcw className="h-3 w-3" />
             Refunded
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200">
+          <span className="inline-flex items-center gap-1 rounded-md bg-surface-3 px-2 py-0.5 text-xs font-semibold text-fg-2 border border-line">
             {status}
           </span>
         );
@@ -274,7 +274,7 @@ export default function AdminOrdersPage() {
     }
     if (s === "UNDER_REVIEW") {
       return (
-        <span className="rounded-md bg-purple-50 px-2 py-0.5 text-[11px] font-bold text-purple-700 border border-purple-200/80 dark:bg-purple-950/40 dark:text-purple-300">
+        <span className="rounded-md bg-yellow-50 px-2 py-0.5 text-[11px] font-bold text-yellow-700 border border-yellow-200/80 dark:bg-yellow-950/40 dark:text-yellow-300">
           UNDER REVIEW
         </span>
       );
@@ -305,27 +305,27 @@ export default function AdminOrdersPage() {
           }`}
         >
           <span>{toastMessage.text}</span>
-          <button onClick={() => setToastMessage(null)} className="ml-4 font-bold text-slate-500 hover:text-slate-700">
+          <button onClick={() => setToastMessage(null)} className="ml-4 font-bold text-muted hover:text-fg">
             ×
           </button>
         </div>
       )}
 
       {/* Header Banner */}
-      <div className="rounded-3xl bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 p-8 text-white shadow-xl">
+      <div className="rounded-3xl bg-gradient-to-r from-zinc-950 via-zinc-900 to-red-950 p-8 text-white shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/40">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-white shadow-lg shadow-brand/40">
               <ShoppingBag className="h-7 w-7" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold tracking-tight">Order Management</h1>
-                <span className="text-[10px] font-bold uppercase tracking-wider rounded-md bg-blue-500/30 border border-blue-400/40 px-2.5 py-0.5 text-blue-200">
+                <span className="text-[10px] font-bold uppercase tracking-wider rounded-md bg-brand/30 border border-red-400/40 px-2.5 py-0.5 text-red-200">
                   Heart of Admin Panel
                 </span>
               </div>
-              <p className="text-xs text-blue-200/80 mt-1">
+              <p className="text-xs text-red-200/80 mt-1">
                 Full 12-stage lifecycle management, shipment tracking, customer contacts & order inspection.
               </p>
             </div>
@@ -334,7 +334,7 @@ export default function AdminOrdersPage() {
           <div className="flex items-center gap-3">
             <Link
               href="/admin"
-              className="rounded-xl border border-blue-400/30 bg-blue-950/40 px-4 py-2 text-xs font-semibold text-blue-200 hover:bg-blue-900/60 transition flex items-center gap-1.5"
+              className="rounded-xl border border-red-400/30 bg-white/10 px-4 py-2 text-xs font-semibold text-red-200 hover:bg-white/20 transition flex items-center gap-1.5"
             >
               <ArrowLeft className="h-4 w-4" />
               <span>Admin Console</span>
@@ -342,7 +342,7 @@ export default function AdminOrdersPage() {
             <button
               onClick={() => fetchOrders()}
               disabled={loading}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 transition shadow-md shadow-blue-600/30 flex items-center gap-1.5"
+              className="rounded-xl bg-brand px-4 py-2 text-xs font-semibold text-white hover:bg-brand-hover transition shadow-md shadow-brand/30 flex items-center gap-1.5"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               <span>Refresh</span>
@@ -353,55 +353,55 @@ export default function AdminOrdersPage() {
 
       {/* Key Metrics Ribbon */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 text-xs">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-          <span className="text-slate-500 font-medium">Total Orders</span>
-          <p className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{metrics.total}</p>
-          <p className="mt-1 text-[11px] text-blue-600 font-medium">All recorded orders</p>
+        <div className="rounded-2xl border border-line bg-surface p-4 shadow-xs">
+          <span className="text-muted font-medium">Total Orders</span>
+          <p className="mt-2 text-2xl font-black text-fg">{metrics.total}</p>
+          <p className="mt-1 text-[11px] text-brand-ink font-medium">All recorded orders</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-          <span className="text-slate-500 font-medium">Confirmed</span>
-          <p className="mt-2 text-2xl font-black text-blue-600">{metrics.confirmed}</p>
-          <p className="mt-1 text-[11px] text-slate-500">Ready for warehouse</p>
+        <div className="rounded-2xl border border-line bg-surface p-4 shadow-xs">
+          <span className="text-muted font-medium">Confirmed</span>
+          <p className="mt-2 text-2xl font-black text-brand-ink">{metrics.confirmed}</p>
+          <p className="mt-1 text-[11px] text-muted">Ready for warehouse</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-          <span className="text-slate-500 font-medium">Processing & Packed</span>
-          <p className="mt-2 text-2xl font-black text-indigo-600">{metrics.processing + metrics.packed}</p>
-          <p className="mt-1 text-[11px] text-slate-500">{metrics.processing} proc, {metrics.packed} packed</p>
+        <div className="rounded-2xl border border-line bg-surface p-4 shadow-xs">
+          <span className="text-muted font-medium">Processing & Packed</span>
+          <p className="mt-2 text-2xl font-black text-brand-ink">{metrics.processing + metrics.packed}</p>
+          <p className="mt-1 text-[11px] text-muted">{metrics.processing} proc, {metrics.packed} packed</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-          <span className="text-slate-500 font-medium">Dispatched</span>
+        <div className="rounded-2xl border border-line bg-surface p-4 shadow-xs">
+          <span className="text-muted font-medium">Dispatched</span>
           <p className="mt-2 text-2xl font-black text-teal-600">{metrics.dispatched + metrics.outForDelivery}</p>
-          <p className="mt-1 text-[11px] text-slate-500">In courier transit</p>
+          <p className="mt-1 text-[11px] text-muted">In courier transit</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-          <span className="text-slate-500 font-medium">Delivered</span>
+        <div className="rounded-2xl border border-line bg-surface p-4 shadow-xs">
+          <span className="text-muted font-medium">Delivered</span>
           <p className="mt-2 text-2xl font-black text-emerald-600">{metrics.delivered}</p>
           <p className="mt-1 text-[11px] text-emerald-600 font-medium">Fulfilled</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
-          <span className="text-slate-500 font-medium">Cancelled / Ret</span>
+        <div className="rounded-2xl border border-line bg-surface p-4 shadow-xs">
+          <span className="text-muted font-medium">Cancelled / Ret</span>
           <p className="mt-2 text-2xl font-black text-rose-600">{metrics.cancelled + metrics.returnRequested + metrics.returned}</p>
-          <p className="mt-1 text-[11px] text-slate-500">{metrics.cancelled} cancelled</p>
+          <p className="mt-1 text-[11px] text-muted">{metrics.cancelled} cancelled</p>
         </div>
       </div>
 
       {/* Filters & Search Bar */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900 space-y-4">
+      <div className="rounded-2xl border border-line bg-surface p-4 shadow-xs space-y-4">
         {/* Search & Secondary Filters */}
         <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
             <input
               type="text"
               placeholder="Search by Order # (e.g. KF100001), Customer Name, Phone, Email, or Tracking AWB..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-10 pr-4 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-800 dark:bg-slate-800/60 dark:text-white"
+              className="w-full rounded-xl border border-line bg-surface-2 pl-10 pr-4 py-2.5 text-xs text-fg placeholder:text-muted focus:border-brand focus:bg-surface focus:outline-hidden"
             />
           </div>
 
@@ -409,7 +409,7 @@ export default function AdminOrdersPage() {
             <select
               value={paymentMethodFilter}
               onChange={(e) => setPaymentMethodFilter(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-800 dark:bg-slate-800 dark:text-slate-200"
+              className="rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-xs font-semibold text-fg-2 focus:border-brand focus:bg-surface focus:outline-hidden"
             >
               <option value="ALL">All Payment Methods</option>
               <option value="UPI">UPI Payments</option>
@@ -419,7 +419,7 @@ export default function AdminOrdersPage() {
             <select
               value={paymentStatusFilter}
               onChange={(e) => setPaymentStatusFilter(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-800 dark:bg-slate-800 dark:text-slate-200"
+              className="rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-xs font-semibold text-fg-2 focus:border-brand focus:bg-surface focus:outline-hidden"
             >
               <option value="ALL">All Payment Statuses</option>
               <option value="PAID">PAID</option>
@@ -432,7 +432,7 @@ export default function AdminOrdersPage() {
         </div>
 
         {/* 12-Status Tabs Carousel/Bar */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar border-t border-slate-100 pt-3 dark:border-slate-800">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar border-t border-line pt-3">
           {CANONICAL_STATUSES.map((tab) => {
             const isActive = filterStatus === tab.id;
             return (
@@ -441,8 +441,8 @@ export default function AdminOrdersPage() {
                 onClick={() => setFilterStatus(tab.id)}
                 className={`whitespace-nowrap rounded-xl px-3 py-1.5 font-semibold transition ${
                   isActive
-                    ? "bg-blue-600 text-white shadow-xs"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    ? "bg-brand text-white shadow-xs"
+                    : "bg-surface-3 text-fg-2 hover:bg-surface-3"
                 }`}
               >
                 {tab.label}
@@ -453,25 +453,25 @@ export default function AdminOrdersPage() {
       </div>
 
       {/* Orders Table */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900 overflow-hidden">
+      <div className="rounded-2xl border border-line bg-surface shadow-xs overflow-hidden">
         {loading ? (
           <div className="py-20 text-center space-y-3">
-            <RefreshCw className="h-8 w-8 animate-spin mx-auto text-blue-500" />
-            <p className="text-xs text-slate-500">Loading orders from FiguresWorld master database...</p>
+            <RefreshCw className="h-8 w-8 animate-spin mx-auto text-brand-ink" />
+            <p className="text-xs text-muted">Loading orders from FiguresWorld master database...</p>
           </div>
         ) : orders.length === 0 ? (
           <div className="py-16 text-center space-y-3">
-            <ShoppingBag className="h-10 w-10 mx-auto text-slate-400" />
-            <p className="text-sm font-bold text-slate-800 dark:text-slate-200">No orders found</p>
-            <p className="text-xs text-slate-500">
+            <ShoppingBag className="h-10 w-10 mx-auto text-muted" />
+            <p className="text-sm font-bold text-fg">No orders found</p>
+            <p className="text-xs text-muted">
               No orders match the selected filters or search criteria. Try selecting "All Orders" or clearing search.
             </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+            <table className="w-full min-w-[720px] text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/80 font-bold text-slate-700 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-300">
+                <tr className="border-b border-line bg-surface-2 font-bold text-fg-2">
                   <th className="py-3.5 px-4">Order #</th>
                   <th className="py-3.5 px-4">Customer & Phone</th>
                   <th className="py-3.5 px-4">Products</th>
@@ -482,7 +482,7 @@ export default function AdminOrdersPage() {
                   <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-line">
                 {orders.map((order) => {
                   const customerName = order.customer?.name || order.shippingAddress?.fullName || "Customer";
                   const phone = order.customer?.phone || order.shippingAddress?.phone || "N/A";
@@ -492,18 +492,18 @@ export default function AdminOrdersPage() {
                   return (
                     <tr
                       key={order._id}
-                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition group"
+                      className="hover:bg-surface-2 transition group"
                     >
                       {/* Order Number & Placed Date */}
                       <td className="py-3.5 px-4 align-top">
                         <Link
                           href={`/admin/orders/${order.orderNumber}`}
-                          className="font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
+                          className="font-bold text-brand-ink hover:text-brand-hover flex items-center gap-1"
                         >
                           <span>#{order.orderNumber}</span>
                           <ArrowUpRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </Link>
-                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                        <span className="text-[10px] text-muted block mt-0.5">
                           {new Date(order.placedAt).toLocaleString("en-IN", {
                             day: "numeric",
                             month: "short",
@@ -516,40 +516,40 @@ export default function AdminOrdersPage() {
 
                       {/* Customer & Phone */}
                       <td className="py-3.5 px-4 align-top">
-                        <p className="font-semibold text-slate-900 dark:text-white">{customerName}</p>
+                        <p className="font-semibold text-fg">{customerName}</p>
                         {phone !== "N/A" && (
                           <a
                             href={`tel:${phone}`}
-                            className="text-[11px] text-slate-500 hover:text-blue-600 flex items-center gap-1 mt-0.5"
+                            className="text-[11px] text-muted hover:text-brand-hover flex items-center gap-1 mt-0.5"
                           >
-                            <Phone className="h-3 w-3 text-slate-400" />
+                            <Phone className="h-3 w-3 text-muted" />
                             <span>{phone}</span>
                           </a>
                         )}
-                        <span className="text-[11px] text-slate-400 block truncate max-w-[160px]">
+                        <span className="text-[11px] text-muted block truncate max-w-[160px]">
                           {order.customerEmail}
                         </span>
                       </td>
 
                       {/* Products Summary */}
                       <td className="py-3.5 px-4 align-top">
-                        <p className="font-medium text-slate-800 dark:text-slate-200">
+                        <p className="font-medium text-fg">
                           {order.items[0]?.name || "Figure Item"}
                           {order.items.length > 1 && (
-                            <span className="text-slate-400 text-[10px] ml-1">+{order.items.length - 1} more</span>
+                            <span className="text-muted text-[10px] ml-1">+{order.items.length - 1} more</span>
                           )}
                         </p>
-                        <span className="text-[11px] text-slate-500">
+                        <span className="text-[11px] text-muted">
                           {order.itemsCount} {order.itemsCount === 1 ? "unit" : "units"} total
                         </span>
                       </td>
 
                       {/* Total Amount */}
                       <td className="py-3.5 px-4 align-top">
-                        <span className="font-black text-slate-900 dark:text-white">
+                        <span className="font-black text-fg">
                           {formatPrice(order.pricing.grandTotal)}
                         </span>
-                        <span className="text-[10px] text-slate-400 block">
+                        <span className="text-[10px] text-muted block">
                           incl. ₹{order.pricing.shippingFee} shipping
                         </span>
                       </td>
@@ -557,7 +557,7 @@ export default function AdminOrdersPage() {
                       {/* Payment */}
                       <td className="py-3.5 px-4 align-top space-y-1">
                         <div className="flex items-center gap-1.5">
-                          <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                          <span className="rounded-md bg-surface-3 px-1.5 py-0.5 text-[10px] font-bold text-fg-2">
                             {order.paymentMethod}
                           </span>
                           {getPaymentStatusBadge(order.paymentStatus, order.paymentMethod)}
@@ -573,14 +573,14 @@ export default function AdminOrdersPage() {
                       <td className="py-3.5 px-4 align-top">
                         {tracking ? (
                           <div>
-                            <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                            <span className="font-semibold text-fg flex items-center gap-1">
                               <Truck className="h-3 w-3 text-teal-600" />
                               <span>{courier || "Courier"}</span>
                             </span>
-                            <span className="font-mono text-[11px] text-slate-500 block">{tracking}</span>
+                            <span className="font-mono text-[11px] text-muted block">{tracking}</span>
                           </div>
                         ) : (
-                          <span className="text-[11px] text-slate-400 italic">Not yet dispatched</span>
+                          <span className="text-[11px] text-muted italic">Not yet dispatched</span>
                         )}
                       </td>
 
@@ -588,7 +588,7 @@ export default function AdminOrdersPage() {
                       <td className="py-3.5 px-4 align-top text-right">
                         <Link
                           href={`/admin/orders/${order.orderNumber}`}
-                          className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-blue-600 hover:text-white transition shadow-2xs dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-blue-600 dark:hover:text-white"
+                          className="inline-flex items-center gap-1 rounded-xl bg-surface-3 px-3 py-1.5 text-xs font-semibold text-fg-2 hover:bg-brand hover:text-white transition shadow-2xs"
                         >
                           <span>Inspect</span>
                           <ChevronRight className="h-3 w-3" />

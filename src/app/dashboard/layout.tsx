@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { Logo } from "@/components/ui/Logo";
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -19,7 +20,6 @@ import {
   LogOut,
   Menu,
   X,
-  ShieldAlert,
 } from "lucide-react";
 
 interface NavItem {
@@ -51,55 +51,63 @@ export default function DashboardLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col md:flex-row">
-      {/* Mobile Header */}
-      <div className="flex md:hidden items-center justify-between px-4 py-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30">
+    <div className="min-h-screen bg-bg flex flex-col md:flex-row">
+      {/* Mobile header — not sticky: the global storefront header is already sticky above it */}
+      <div className="flex md:hidden items-center justify-between px-4 py-3 bg-surface border-b border-line">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-600 text-white font-bold text-sm shadow-md shadow-purple-600/30">
-            FW
-          </div>
-          <span className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-white">
-            FiguresWorld <span className="text-purple-600">Admin</span>
+          <Logo href="/dashboard" />
+          <span className="font-extrabold text-sm tracking-tight text-fg">
+            Figure World <span className="text-brand-ink">Admin</span>
           </span>
         </div>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+          className="p-2 rounded-lg text-fg-2 hover:bg-surface-3"
           aria-label="Toggle navigation menu"
+          aria-expanded={mobileMenuOpen}
         >
           {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </div>
 
-      {/* Sidebar Navigation */}
+      {/* Mobile drawer backdrop */}
+      {mobileMenuOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation menu"
+          onClick={() => setMobileMenuOpen(false)}
+          className="fixed inset-0 z-40 bg-black/40 md:hidden animate-fade-in"
+        />
+      )}
+
+      {/* Sidebar navigation — mobile: overlay drawer; desktop: sticks just below the global header */}
       <aside
-        className={`fixed md:sticky top-0 z-40 h-screen w-64 shrink-0 flex-col justify-between border-r border-slate-200/80 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 md:flex transition-transform duration-200 ${
-          mobileMenuOpen ? "flex" : "hidden md:flex"
+        className={`fixed inset-y-0 left-0 z-50 h-screen w-64 shrink-0 flex-col justify-between overflow-y-auto border-r border-line bg-surface p-4 md:sticky md:top-[112px] md:z-10 md:h-[calc(100vh-112px)] md:flex ${
+          mobileMenuOpen ? "flex animate-fade-in" : "hidden md:flex"
         }`}
       >
         <div className="space-y-6">
           {/* Logo & Brand */}
-          <div className="flex items-center justify-between px-2 pt-2">
-            <Link href="/dashboard" className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white font-black text-base shadow-lg shadow-purple-600/30">
-                FW
-              </div>
+          <div className="flex items-center justify-between px-1 pt-1">
+            <div className="flex items-center gap-3">
+              <Logo href="/dashboard" />
               <div>
-                <h2 className="text-sm font-black tracking-tight text-slate-900 dark:text-white leading-tight">
-                  FiguresWorld
+                <h2 className="text-sm font-black tracking-tight text-fg leading-tight">
+                  Figure World
                 </h2>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-brand-ink">
                     Admin Suite
                   </span>
                 </div>
               </div>
-            </Link>
+            </div>
             {mobileMenuOpen && (
               <button
                 onClick={() => setMobileMenuOpen(false)}
-                className="md:hidden p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="md:hidden p-1.5 rounded-lg text-muted hover:bg-surface-3"
+                aria-label="Close navigation menu"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -107,7 +115,7 @@ export default function DashboardLayout({
           </div>
 
           {/* Navigation Links */}
-          <nav className="space-y-1">
+          <nav className="space-y-0.5">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const isActive =
@@ -120,13 +128,14 @@ export default function DashboardLayout({
                   key={item.name}
                   href={item.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition-all duration-150 ${
+                  aria-current={isActive ? "page" : undefined}
+                  className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-semibold transition-colors duration-150 ${
                     isActive
-                      ? "bg-purple-600 text-white shadow-md shadow-purple-600/25"
-                      : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-white"
+                      ? "bg-brand-soft text-brand-ink before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-brand"
+                      : "text-fg-2 hover:bg-surface-3 hover:text-fg"
                   }`}
                 >
-                  <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-white" : "text-slate-500 dark:text-slate-400"}`} />
+                  <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-brand-ink" : "text-muted"}`} />
                   <span>{item.name}</span>
                 </Link>
               );
@@ -135,30 +144,28 @@ export default function DashboardLayout({
         </div>
 
         {/* Bottom Profile & Actions */}
-        <div className="border-t border-slate-200/80 pt-4 dark:border-slate-800 space-y-3">
+        <div className="mt-6 border-t border-line pt-4 space-y-3">
           <Link
             href="/"
-            className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition"
+            className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-fg-2 hover:bg-surface-3 hover:text-fg transition"
           >
-            <Store className="h-4 w-4 text-slate-500" />
+            <Store className="h-4 w-4 text-muted" />
             <span>View Live Store</span>
           </Link>
 
-          <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-2.5 dark:border-slate-800 dark:bg-slate-800/40">
-            <div className="flex items-center justify-between">
-              <div className="truncate max-w-[130px]">
-                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                  {user?.name || "Admin"}
-                </p>
-                <p className="text-[10px] text-slate-400 truncate">{user?.email}</p>
+          <div className="rounded-xl border border-line bg-surface-2 p-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-fg truncate">{user?.name || "Admin"}</p>
+                <p className="text-[10px] text-muted truncate">{user?.email}</p>
               </div>
-              <span className="rounded-md bg-purple-100 px-1.5 py-0.5 text-[9px] font-bold text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
+              <span className="shrink-0 rounded-md bg-brand-soft px-1.5 py-0.5 text-[9px] font-bold text-brand-ink">
                 {user?.role || "ADMIN"}
               </span>
             </div>
             <button
               onClick={() => logout()}
-              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-rose-950/30 transition"
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-surface py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-900/60 dark:text-rose-400 dark:hover:bg-rose-950/30 transition"
             >
               <LogOut className="h-3.5 w-3.5" />
               <span>Sign Out</span>
@@ -169,16 +176,14 @@ export default function DashboardLayout({
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top telemetry bar */}
-        <header className="hidden md:flex items-center justify-between px-8 py-3.5 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 sticky top-0 z-20">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span className="font-semibold text-slate-700 dark:text-slate-300">Dashboard</span>
-              <span>/</span>
-              <span className="text-purple-600 dark:text-purple-400 font-bold capitalize">
-                {pathname.replace("/dashboard", "").replace("/", "") || "Overview"}
-              </span>
-            </div>
+        {/* Breadcrumb bar — not sticky, so it never slides under the global header */}
+        <header className="hidden md:flex items-center justify-between px-8 py-3.5 bg-surface border-b border-line">
+          <div className="flex items-center gap-2 text-xs text-muted">
+            <span className="font-semibold text-fg-2">Dashboard</span>
+            <span>/</span>
+            <span className="text-brand-ink font-bold capitalize">
+              {pathname.replace("/dashboard", "").replace("/", "") || "Overview"}
+            </span>
           </div>
 
           <div className="flex items-center gap-4">
@@ -187,11 +192,7 @@ export default function DashboardLayout({
               <span>Production Telemetry Active</span>
             </div>
 
-            <Link
-              href="/"
-              target="_blank"
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition shadow-2xs"
-            >
+            <Link href="/" target="_blank" className="btn btn-secondary btn-sm">
               <Store className="h-3.5 w-3.5" />
               <span>Storefront</span>
             </Link>
@@ -199,9 +200,7 @@ export default function DashboardLayout({
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
-          {children}
-        </main>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">{children}</main>
       </div>
     </div>
   );

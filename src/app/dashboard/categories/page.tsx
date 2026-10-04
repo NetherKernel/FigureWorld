@@ -162,10 +162,10 @@ export default function DashboardCategoriesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+          <h1 className="text-2xl font-black tracking-tight text-fg">
             Categories & Compliance
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-muted mt-1">
             Store departments, display ordering, and 18+ legal compliance boundaries.
           </p>
         </div>
@@ -173,14 +173,14 @@ export default function DashboardCategoriesPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={fetchCategories}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300 transition"
+            className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-2 text-xs font-semibold text-fg-2 hover:bg-surface-2 transition"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             <span>Refresh</span>
           </button>
           <button
             onClick={openCreateModal}
-            className="flex items-center gap-1.5 rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white hover:bg-purple-500 transition shadow-sm shadow-purple-600/30"
+            className="flex items-center gap-1.5 rounded-xl bg-brand px-4 py-2 text-xs font-bold text-white hover:bg-brand-hover transition shadow-sm shadow-brand/30"
           >
             <Plus className="h-4 w-4" />
             <span>Add Category</span>
@@ -202,10 +202,10 @@ export default function DashboardCategoriesPage() {
       )}
 
       {/* Categories Grid / Table */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+      <div className="rounded-3xl border border-line bg-surface p-6 shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-800">
+          <table className="w-full min-w-[600px] text-left text-xs">
+            <thead className="border-b border-line text-[11px] font-bold uppercase tracking-wider text-muted">
               <tr>
                 <th className="pb-3">Order</th>
                 <th className="pb-3">Category Name</th>
@@ -214,22 +214,22 @@ export default function DashboardCategoriesPage() {
                 <th className="pb-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-line">
               {categories.map((cat) => (
-                <tr key={cat._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                  <td className="py-3.5 font-bold text-slate-400">
+                <tr key={cat._id} className="hover:bg-surface-2">
+                  <td className="py-3.5 font-bold text-muted">
                     #{cat.displayOrder || 1}
                   </td>
                   <td className="py-3.5">
-                    <p className="font-bold text-slate-900 dark:text-white">{cat.name}</p>
+                    <p className="font-bold text-fg">{cat.name}</p>
                     {cat.description && (
-                      <p className="text-[11px] text-slate-500 line-clamp-1 max-w-xs mt-0.5">
+                      <p className="text-[11px] text-muted line-clamp-1 max-w-xs mt-0.5">
                         {cat.description}
                       </p>
                     )}
                   </td>
                   <td className="py-3.5">
-                    <span className="font-mono text-[11px] text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50 px-2 py-0.5 rounded-md">
+                    <span className="font-mono text-[11px] text-brand-ink bg-brand-soft px-2 py-0.5 rounded-md">
                       {cat.slug}
                     </span>
                   </td>
@@ -248,14 +248,14 @@ export default function DashboardCategoriesPage() {
                   <td className="py-3.5 text-right space-x-2">
                     <button
                       onClick={() => openEditModal(cat)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/40 transition"
+                      className="p-1.5 rounded-lg text-muted hover:text-fg hover:bg-surface-3 transition"
                       title="Edit Category"
                     >
                       <Edit2 className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(cat._id, cat.name)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+                      className="p-1.5 rounded-lg text-muted hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
                       title="Delete Category"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -271,14 +271,14 @@ export default function DashboardCategoriesPage() {
       {/* Create / Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">
+          <div className="w-full max-w-lg rounded-3xl bg-surface p-6 shadow-2xl border border-line space-y-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-base font-bold text-fg">
               {editingCategory ? "Edit Category & Compliance" : "Create New Category"}
             </h2>
 
             <form onSubmit={handleSave} className="space-y-4 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block font-semibold text-fg-2 mb-1">
                   Category Name
                 </label>
                 <input
@@ -291,13 +291,13 @@ export default function DashboardCategoriesPage() {
                       setSlug(e.target.value.toLowerCase().replace(/\s+/g, "-"));
                     }
                   }}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="w-full rounded-xl border border-line px-3 py-2 bg-surface text-fg"
                   placeholder="e.g. Scale Figures"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block font-semibold text-fg-2 mb-1">
                   URL Slug
                 </label>
                 <input
@@ -305,33 +305,33 @@ export default function DashboardCategoriesPage() {
                   required
                   value={slug}
                   onChange={(e) => setSlug(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white font-mono"
+                  className="w-full rounded-xl border border-line px-3 py-2 bg-surface text-fg font-mono"
                   placeholder="e.g. scale-figures"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block font-semibold text-fg-2 mb-1">
                   Description
                 </label>
                 <textarea
                   rows={2}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="w-full rounded-xl border border-line px-3 py-2 bg-surface text-fg"
                   placeholder="Category purpose and product range..."
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block font-semibold text-fg-2 mb-1">
                   Display Order
                 </label>
                 <input
                   type="number"
                   value={displayOrder}
                   onChange={(e) => setDisplayOrder(parseInt(e.target.value) || 1)}
-                  className="w-full rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="w-full rounded-xl border border-line px-3 py-2 bg-surface text-fg"
                 />
               </div>
 
@@ -358,7 +358,7 @@ export default function DashboardCategoriesPage() {
                         min="18"
                         value={minAge}
                         onChange={(e) => setMinAge(parseInt(e.target.value) || 18)}
-                        className="w-full rounded-xl border border-amber-200 bg-white px-3 py-1.5 dark:border-amber-800 dark:bg-slate-800"
+                        className="w-full rounded-xl border border-amber-200 bg-surface px-3 py-1.5 dark:border-amber-800"
                       />
                     </div>
 
@@ -381,7 +381,7 @@ export default function DashboardCategoriesPage() {
                         value={regions}
                         onChange={(e) => setRegions(e.target.value)}
                         placeholder="UK, NY-NYC, CA-SF"
-                        className="w-full rounded-xl border border-amber-200 bg-white px-3 py-1.5 dark:border-amber-800 dark:bg-slate-800"
+                        className="w-full rounded-xl border border-amber-200 bg-surface px-3 py-1.5 dark:border-amber-800"
                       />
                     </div>
                   </div>
@@ -392,14 +392,14 @@ export default function DashboardCategoriesPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
+                  className="rounded-xl border border-line px-4 py-2 text-xs font-semibold text-fg-2 hover:bg-surface-2"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white hover:bg-purple-500 shadow-md transition"
+                  className="rounded-xl bg-brand px-4 py-2 text-xs font-bold text-white hover:bg-brand-hover shadow-md transition"
                 >
                   {submitting ? "Saving..." : editingCategory ? "Update Category" : "Create Category"}
                 </button>

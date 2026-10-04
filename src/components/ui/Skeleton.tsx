@@ -15,10 +15,10 @@ export function Skeleton({ className = "", variant = "rounded", ...props }: Skel
   return (
     <div
       aria-hidden="true"
-      className={`relative overflow-hidden bg-slate-200 dark:bg-slate-800 ${variantClasses} ${className}`}
+      className={`relative overflow-hidden bg-surface-3 ${variantClasses} ${className}`}
       {...props}
     >
-      <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/20 dark:via-white/5 to-transparent" />
+      <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/40 to-transparent dark:via-white/5" />
     </div>
   );
 }

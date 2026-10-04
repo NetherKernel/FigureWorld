@@ -1,22 +1,53 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { Lock, Mail, User, Phone, ArrowRight, Layers, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Logo } from "@/components/ui/Logo";
+import { AlertCircle, Eye, EyeOff, Info, Loader2 } from "lucide-react";
 
-export default function RegisterPage() {
+const MIN_PASSWORD_LENGTH = 6;
+
+/** Only allow same-origin relative paths as post-signup destinations (prevents open redirects). */
+function safeRedirect(value: string | null): string | null {
+  if (!value) return null;
+  if (!value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) return null;
+  return value;
+}
+
+function ProblemAlert({ message }: { message: string }) {
+  return (
+    <div
+      role="alert"
+      className="mb-4 flex animate-pop-in gap-3 rounded-xl border border-brand/30 bg-brand-soft p-4 text-brand-ink"
+    >
+      <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="text-sm font-bold">There was a problem</p>
+        <p className="mt-0.5 text-[13px] leading-5 text-fg-2">{message}</p>
+      </div>
+    </div>
+  );
+}
+
+function RegisterForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { register } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedRedirect = safeRedirect(searchParams.get("redirect"));
+  const loginHref = requestedRedirect
+    ? `/auth/login?redirect=${encodeURIComponent(requestedRedirect)}`
+    : "/auth/login";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,8 +58,8 @@ export default function RegisterPage() {
       return;
     }
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters long.");
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters long.`);
       return;
     }
 
@@ -37,146 +68,147 @@ export default function RegisterPage() {
     setIsSubmitting(false);
 
     if (result.success) {
-      router.push("/profile");
+      router.push(requestedRedirect || "/profile");
     } else {
       setError(result.error || "Failed to create account. Please check your details.");
     }
   };
 
   return (
-    <div className="mx-auto flex min-h-[80vh] max-w-md flex-col justify-center px-4 py-12">
-      <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-xl dark:border-slate-800 dark:bg-slate-900">
-        {/* Brand header */}
-        <div className="text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">
-            <Layers className="h-6 w-6" />
-          </div>
-          <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Create an Account
-          </h1>
-          <p className="mt-1 text-xs text-slate-500">
-            Join FiguresWorld to save shipping addresses & track orders
-          </p>
-        </div>
+    <div className="flex flex-col items-center bg-bg px-4 pb-12 pt-6 sm:pt-10">
+      <Logo size="lg" />
 
-        {/* Error Alert */}
-        {error && (
-          <div className="mt-6 flex items-start gap-3 rounded-xl bg-rose-50 p-3.5 text-xs text-rose-700 dark:bg-rose-950/40 dark:text-rose-400">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
+      <div className="mt-6 w-full max-w-[360px] animate-fade-up">
+        {error && <ProblemAlert message={error} />}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Full Name
-            </label>
-            <div className="relative mt-1">
-              <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <div className="card p-6">
+          <h1 className="text-[28px] font-normal leading-tight text-fg">Create account</h1>
+
+          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+            <div>
+              <label htmlFor="register-name" className="label">
+                Your name
+              </label>
               <input
+                id="register-name"
                 type="text"
                 required
+                autoComplete="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Roronoa Zoro"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+                placeholder="First and last name"
+                className="input h-10"
               />
             </div>
-          </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Email Address
-            </label>
-            <div className="relative mt-1">
-              <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <div>
+              <label htmlFor="register-phone" className="label">
+                Mobile number <span className="font-normal text-muted">(optional)</span>
+              </label>
               <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="collector@example.com"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Phone Number (Optional)
-            </label>
-            <div className="relative mt-1">
-              <Phone className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
+                id="register-phone"
                 type="tel"
+                autoComplete="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="+1 (555) 000-0000"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+                className="input h-10"
               />
             </div>
-          </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Password (min 6 chars)
-            </label>
-            <div className="relative mt-1">
-              <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <div>
+              <label htmlFor="register-email" className="label">
+                Email
+              </label>
               <input
-                type="password"
+                id="register-email"
+                type="email"
                 required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="input h-10"
               />
             </div>
-          </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Confirm Password
-            </label>
-            <div className="relative mt-1">
-              <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <div>
+              <label htmlFor="register-password" className="label">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  id="register-password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                  aria-describedby="register-password-hint"
+                  className="input h-10 pr-11"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center rounded-r-lg text-muted transition hover:text-fg"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p id="register-password-hint" className="mt-1.5 flex items-center gap-1.5 text-xs text-fg-2">
+                <Info className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
+                Passwords must be at least {MIN_PASSWORD_LENGTH} characters.
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="register-confirm" className="label">
+                Re-enter password
+              </label>
               <input
-                type="password"
+                id="register-confirm"
+                type={showPassword ? "text" : "password"}
                 required
+                autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+                className="input h-10"
               />
             </div>
+
+            <button type="submit" disabled={isSubmitting} className="btn btn-primary min-h-10 w-full">
+              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+              {isSubmitting ? "Creating account..." : "Create your Figure World account"}
+            </button>
+          </form>
+
+          <p className="mt-4 text-xs leading-5 text-fg-2">
+            By continuing, you agree to Figure World&apos;s Conditions of Use and Privacy Notice.
+          </p>
+
+          <div className="mt-5 border-t border-line pt-4 text-[13px] text-fg-2">
+            Already have an account?{" "}
+            <Link href={loginHref} className="link inline-flex min-h-10 items-center">
+              Sign in &rsaquo;
+            </Link>
           </div>
-
-          <div className="rounded-xl bg-slate-50 p-3 text-[11px] text-slate-500 dark:bg-slate-950/40">
-            <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Encrypted password hashing with bcryptjs (12 salt rounds)
-            </span>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-xs font-bold text-white shadow-md shadow-indigo-600/20 transition hover:bg-indigo-700 disabled:opacity-60"
-          >
-            {isSubmitting ? "Creating account..." : "Complete Registration"}
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-xs text-slate-500">
-          Already have an account?{" "}
-          <Link href="/auth/login" className="font-bold text-indigo-600 hover:underline dark:text-indigo-400">
-            Sign In
-          </Link>
-        </p>
+        </div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[50vh] items-center justify-center bg-bg text-sm text-muted">
+          Loading...
+        </div>
+      }
+    >
+      <RegisterForm />
+    </Suspense>
   );
 }

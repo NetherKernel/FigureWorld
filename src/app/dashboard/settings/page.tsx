@@ -77,7 +77,7 @@ export default function DashboardSettingsPage() {
 
   if (loading || !settings) {
     return (
-      <div className="flex h-64 items-center justify-center text-xs text-slate-400">
+      <div className="flex h-64 items-center justify-center text-xs text-muted">
         Loading system configuration...
       </div>
     );
@@ -88,17 +88,17 @@ export default function DashboardSettingsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+          <h1 className="text-2xl font-black tracking-tight text-fg">
             Store & System Settings
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-muted mt-1">
             Brand identity, GST tax compliance, UPI credentials, and automated notification toggles.
           </p>
         </div>
 
         <button
           onClick={fetchSettings}
-          className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300 transition w-fit"
+          className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-2 text-xs font-semibold text-fg-2 hover:bg-surface-2 transition w-fit"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           <span>Reload</span>
@@ -120,91 +120,91 @@ export default function DashboardSettingsPage() {
 
       <form onSubmit={handleSave} className="space-y-6 text-xs">
         {/* Section 1: Store & Entity Identity */}
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900 space-y-4">
-          <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3 dark:border-slate-800">
-            <Store className="h-4 w-4 text-purple-600" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+        <div className="rounded-3xl border border-line bg-surface p-6 shadow-xs space-y-4">
+          <div className="flex items-center gap-2.5 border-b border-line pb-3">
+            <Store className="h-4 w-4 text-brand-ink" />
+            <h2 className="text-sm font-bold text-fg">
               Brand & Business Identity
             </h2>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-fg-2 mb-1">
                 Storefront Name
               </label>
               <input
                 type="text"
                 value={settings.storeName}
                 onChange={(e) => setSettings({ ...settings, storeName: e.target.value })}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-xl border border-line px-3 py-2 bg-surface text-fg"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-fg-2 mb-1">
                 Legal Registered Entity
               </label>
               <input
                 type="text"
                 value={settings.legalEntity}
                 onChange={(e) => setSettings({ ...settings, legalEntity: e.target.value })}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-xl border border-line px-3 py-2 bg-surface text-fg"
               />
             </div>
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block font-semibold text-fg-2 mb-1">
               Registered Physical Address
             </label>
             <textarea
               rows={2}
               value={settings.address}
               onChange={(e) => setSettings({ ...settings, address: e.target.value })}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              className="w-full rounded-xl border border-line px-3 py-2 bg-surface text-fg"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-fg-2 mb-1">
                 Customer Support Email
               </label>
               <input
                 type="email"
                 value={settings.supportEmail}
                 onChange={(e) => setSettings({ ...settings, supportEmail: e.target.value })}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-xl border border-line px-3 py-2 bg-surface text-fg"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-fg-2 mb-1">
                 Support Helpline Phone
               </label>
               <input
                 type="text"
                 value={settings.supportPhone}
                 onChange={(e) => setSettings({ ...settings, supportPhone: e.target.value })}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-xl border border-line px-3 py-2 bg-surface text-fg"
               />
             </div>
           </div>
         </div>
 
         {/* Section 2: Tax & Legal Compliance */}
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900 space-y-4">
-          <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3 dark:border-slate-800">
+        <div className="rounded-3xl border border-line bg-surface p-6 shadow-xs space-y-4">
+          <div className="flex items-center gap-2.5 border-b border-line pb-3">
             <Shield className="h-4 w-4 text-emerald-600" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+            <h2 className="text-sm font-bold text-fg">
               Tax & GST Compliance
             </h2>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-fg-2 mb-1">
                 GSTIN (15-Character Tax Identifier)
               </label>
               <input
@@ -212,12 +212,12 @@ export default function DashboardSettingsPage() {
                 maxLength={15}
                 value={settings.gstin}
                 onChange={(e) => setSettings({ ...settings, gstin: e.target.value.toUpperCase() })}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white font-mono uppercase"
+                className="w-full rounded-xl border border-line px-3 py-2 bg-surface text-fg font-mono uppercase"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-fg-2 mb-1">
                 PAN (Permanent Account Number)
               </label>
               <input
@@ -225,79 +225,79 @@ export default function DashboardSettingsPage() {
                 maxLength={10}
                 value={settings.pan}
                 onChange={(e) => setSettings({ ...settings, pan: e.target.value.toUpperCase() })}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white font-mono uppercase"
+                className="w-full rounded-xl border border-line px-3 py-2 bg-surface text-fg font-mono uppercase"
               />
             </div>
           </div>
         </div>
 
         {/* Section 3: Payments & Shipping Policies */}
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900 space-y-4">
-          <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3 dark:border-slate-800">
+        <div className="rounded-3xl border border-line bg-surface p-6 shadow-xs space-y-4">
+          <div className="flex items-center gap-2.5 border-b border-line pb-3">
             <CreditCard className="h-4 w-4 text-blue-600" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+            <h2 className="text-sm font-bold text-fg">
               Payment Gateways & Shipping Policies
             </h2>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-fg-2 mb-1">
                 Merchant UPI ID (VPA for Intent QR)
               </label>
               <input
                 type="text"
                 value={settings.merchantUpiId}
                 onChange={(e) => setSettings({ ...settings, merchantUpiId: e.target.value })}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white font-mono"
+                className="w-full rounded-xl border border-line px-3 py-2 bg-surface text-fg font-mono"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-fg-2 mb-1">
                 Cash on Delivery (COD) Max Ceiling (₹)
               </label>
               <input
                 type="number"
                 value={settings.codMaxLimit}
                 onChange={(e) => setSettings({ ...settings, codMaxLimit: parseFloat(e.target.value) || 0 })}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-xl border border-line px-3 py-2 bg-surface text-fg"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-fg-2 mb-1">
                 Free Shipping Cart Threshold (₹)
               </label>
               <input
                 type="number"
                 value={settings.freeShippingThreshold}
                 onChange={(e) => setSettings({ ...settings, freeShippingThreshold: parseFloat(e.target.value) || 0 })}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-xl border border-line px-3 py-2 bg-surface text-fg"
               />
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-fg-2 mb-1">
                 Flat Standard Delivery Fee (₹)
               </label>
               <input
                 type="number"
                 value={settings.flatShippingRate}
                 onChange={(e) => setSettings({ ...settings, flatShippingRate: parseFloat(e.target.value) || 0 })}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-xl border border-line px-3 py-2 bg-surface text-fg"
               />
             </div>
           </div>
         </div>
 
         {/* Section 4: Automated Communications & Inventory */}
-        <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900 space-y-4">
-          <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3 dark:border-slate-800">
+        <div className="rounded-3xl border border-line bg-surface p-6 shadow-xs space-y-4">
+          <div className="flex items-center gap-2.5 border-b border-line pb-3">
             <Bell className="h-4 w-4 text-amber-600" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+            <h2 className="text-sm font-bold text-fg">
               Automated Alerts & Warehouse Safeguards
             </h2>
           </div>
@@ -308,13 +308,13 @@ export default function DashboardSettingsPage() {
                 type="checkbox"
                 checked={settings.autoWhatsAppNotifications}
                 onChange={(e) => setSettings({ ...settings, autoWhatsAppNotifications: e.target.checked })}
-                className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                className="rounded border-line-strong accent-brand text-brand-ink focus:ring-brand"
               />
               <div>
-                <p className="font-semibold text-slate-800 dark:text-slate-200">
+                <p className="font-semibold text-fg">
                   Auto WhatsApp Customer Notifications
                 </p>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-muted">
                   Automatically send order confirmations, invoice documents, dispatch AWB codes, and delivery notices.
                 </p>
               </div>
@@ -325,13 +325,13 @@ export default function DashboardSettingsPage() {
                 type="checkbox"
                 checked={settings.autoEmailNotifications}
                 onChange={(e) => setSettings({ ...settings, autoEmailNotifications: e.target.checked })}
-                className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                className="rounded border-line-strong accent-brand text-brand-ink focus:ring-brand"
               />
               <div>
-                <p className="font-semibold text-slate-800 dark:text-slate-200">
+                <p className="font-semibold text-fg">
                   Auto Email Invoicing & Receipts
                 </p>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-muted">
                   Email PDF tax invoices to buyers upon order confirmation.
                 </p>
               </div>
@@ -339,7 +339,7 @@ export default function DashboardSettingsPage() {
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block font-semibold text-fg-2 mb-1">
               Low Stock Alarm Threshold (Units)
             </label>
             <input
@@ -347,7 +347,7 @@ export default function DashboardSettingsPage() {
               min="1"
               value={settings.inventoryLowStockThreshold}
               onChange={(e) => setSettings({ ...settings, inventoryLowStockThreshold: parseInt(e.target.value) || 5 })}
-              className="w-48 rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              className="w-48 rounded-xl border border-line px-3 py-2 bg-surface text-fg"
             />
           </div>
         </div>
@@ -357,7 +357,7 @@ export default function DashboardSettingsPage() {
           <button
             type="submit"
             disabled={saving}
-            className="flex items-center gap-2 rounded-2xl bg-purple-600 px-6 py-2.5 text-xs font-bold text-white hover:bg-purple-500 shadow-md shadow-purple-600/30 transition disabled:opacity-50"
+            className="flex items-center gap-2 rounded-2xl bg-brand px-6 py-2.5 text-xs font-bold text-white hover:bg-brand-hover shadow-md shadow-brand/30 transition disabled:opacity-50"
           >
             <Save className="h-4 w-4" />
             <span>{saving ? "Saving Configuration..." : "Save Settings"}</span>

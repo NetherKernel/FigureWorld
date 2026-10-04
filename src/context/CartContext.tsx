@@ -39,6 +39,9 @@ interface CartContextType {
   decreaseQuantity: (productId: string) => void;
   clearCart: () => void;
   refreshCart: () => Promise<void>;
+  /** Most recent add-to-cart event — drives the "Added to Cart" flyout */
+  lastAdded: { item: ICartItem; quantity: number; at: number } | null;
+  dismissLastAdded: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -59,6 +62,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [stockWarnings, setStockWarnings] = useState<string[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [lastAdded, setLastAdded] = useState<CartContextType["lastAdded"]>(null);
 
   // Authoritative server-side calculation & stock validation
   const syncWithServer = useCallback(async (currentItems: ICartItem[]) => {
@@ -201,6 +205,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
 
     setItems(updatedItems);
+    const addedItem = updatedItems.find((it) => it.productId === pId);
+    if (addedItem) {
+      setLastAdded({ item: addedItem, quantity: quantityToAdd, at: Date.now() });
+    }
     await syncWithServer(updatedItems);
     return true;
   };
@@ -278,6 +286,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         decreaseQuantity,
         clearCart,
         refreshCart,
+        lastAdded,
+        dismissLastAdded: () => setLastAdded(null),
       }}
     >
       {children}

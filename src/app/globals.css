@@ -2,43 +2,299 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ------------------------------------------------------------------
+   Design tokens — Figure World (white & red)
+   Every surface/text/border colour flows from these variables so the
+   whole storefront flips cleanly between light and dark themes.
+------------------------------------------------------------------- */
 :root {
-  --background: #f1f5f9;
-  --foreground: #0f172a;
-  --brand-red: #dc2626;
-  --brand-red-hover: #b91c1c;
+  --bg: #f2f2f3;
+  --surface: #ffffff;
+  --surface-2: #f7f7f8;
+  --surface-3: #ececee;
+  --line: #e4e4e7;
+  --line-strong: #d1d1d6;
+  --fg: #0f1111;
+  --fg-2: #3a3a40;
+  --muted: #6b6b73;
+
+  --brand: #d7141a;
+  --brand-hover: #b80f15;
+  --brand-ink: #b3121a;
+  --brand-soft: #fdeced;
+  --brand-ring: rgba(215, 20, 26, 0.35);
+
+  --nav: #d7141a;
+  --nav-2: #ae0f15;
+  --nav-3: #8c0b10;
+  --nav-fg: #ffffff;
+
+  --success: #067d62;
+  --success-soft: #e7f6f1;
+  --warn: #b45309;
+  --warn-soft: #fff6e5;
+  --star: #f5a524;
+
+  --shadow-card: 0 1px 2px rgba(15, 17, 17, 0.06), 0 1px 3px rgba(15, 17, 17, 0.08);
+  --shadow-pop: 0 12px 32px -8px rgba(15, 17, 17, 0.22), 0 4px 12px -4px rgba(15, 17, 17, 0.12);
 }
 
 .dark {
-  --background: #090d16;
-  --foreground: #f8fafc;
-  --brand-red: #ef4444;
-  --brand-red-hover: #dc2626;
+  --bg: #0b0b0d;
+  --surface: #151518;
+  --surface-2: #1b1b1f;
+  --surface-3: #24242a;
+  --line: #2a2a31;
+  --line-strong: #3a3a43;
+  --fg: #f4f4f5;
+  --fg-2: #d4d4d8;
+  --muted: #9d9da7;
+
+  --brand: #ec2b31;
+  --brand-hover: #ff4248;
+  --brand-ink: #ff6a6f;
+  --brand-soft: rgba(236, 43, 49, 0.13);
+  --brand-ring: rgba(255, 66, 72, 0.4);
+
+  --nav: #131316;
+  --nav-2: #1a1a1e;
+  --nav-3: #0e0e10;
+  --nav-fg: #ffffff;
+
+  --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.12);
+  --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, 0.12);
+  --star: #fbbf24;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.02);
+  --shadow-pop: 0 18px 40px -10px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-nav: var(--nav);
+  --color-nav-2: var(--nav-2);
+  --color-nav-3: var(--nav-3);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-star: var(--star);
+  --shadow-card: var(--shadow-card);
+  --shadow-pop: var(--shadow-pop);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --animate-fade-in: fade-in 220ms ease-out both;
+  --animate-fade-up: fade-up 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-pop-in: pop-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-slide-in-right: slide-in-right 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-shimmer: shimmer 1.8s infinite;
+}
+
+html {
+  color-scheme: light;
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html.dark {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  text-rendering: optimizeLegibility;
 }
 
-/* Smooth animated transition when toggling dark / light mode */
-html.theme-transition,
-html.theme-transition *,
-html.theme-transition *::before,
-html.theme-transition *::after {
-  transition: background-color 350ms ease-in-out, border-color 350ms ease-in-out, color 350ms ease-in-out, fill 350ms ease-in-out, stroke 350ms ease-in-out, box-shadow 350ms ease-in-out !important;
-  transition-delay: 0s !important;
+::selection {
+  background: var(--brand);
+  color: #fff;
 }
 
-/* Hide scrollbar for Amazon-style horizontal scrolling carousels */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------
+   Reusable component classes
+------------------------------------------------------------------- */
+@layer components {
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+    box-shadow: var(--shadow-card);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    padding: 0.55rem 1.1rem;
+    transition: background-color 150ms, border-color 150ms, color 150ms, box-shadow 150ms, transform 120ms;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--brand);
+    color: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--brand-hover);
+  }
+  .btn-dark {
+    background: var(--fg);
+    color: var(--bg);
+  }
+  .btn-dark:hover:not(:disabled) {
+    opacity: 0.88;
+  }
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--line-strong);
+    box-shadow: 0 1px 2px rgba(15, 17, 17, 0.06);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--surface-2);
+    border-color: var(--muted);
+  }
+  .btn-ghost {
+    color: var(--fg-2);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--surface-3);
+    color: var(--fg);
+  }
+  .btn-sm {
+    font-size: 0.8125rem;
+    padding: 0.375rem 0.85rem;
+  }
+  .btn-lg {
+    font-size: 0.9375rem;
+    padding: 0.75rem 1.5rem;
+  }
+
+  .input {
+    width: 100%;
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--line-strong);
+    border-radius: 0.5rem;
+    padding: 0.6rem 0.8rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    transition: border-color 150ms, box-shadow 150ms;
+  }
+  .input::placeholder {
+    color: var(--muted);
+  }
+  .input:focus {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px var(--brand-ring);
+  }
+  .input:disabled {
+    background: var(--surface-2);
+    color: var(--muted);
+  }
+
+  .label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--fg);
+    margin-bottom: 0.3rem;
+  }
+
+  .link {
+    color: var(--brand-ink);
+    font-weight: 500;
+  }
+  .link:hover {
+    color: var(--brand-hover);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 0.375rem;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1rem;
+  }
+  .chip-brand {
+    background: var(--brand);
+    color: #fff;
+  }
+  .chip-soft {
+    background: var(--brand-soft);
+    color: var(--brand-ink);
+  }
+  .chip-neutral {
+    background: var(--surface-3);
+    color: var(--fg-2);
+  }
+
+  /* Amazon-style "outline on hover" for header nav items */
+  .nav-item {
+    border: 1px solid transparent;
+    border-radius: 0.25rem;
+    transition: border-color 120ms;
+  }
+  .nav-item:hover,
+  .nav-item:focus-visible {
+    border-color: rgba(255, 255, 255, 0.85);
+    outline: none;
+  }
+
+  .section-title {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+  }
+}
+
+/* Hide scrollbars on horizontal carousels */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -47,8 +303,108 @@ html.theme-transition *::after {
   scrollbar-width: none;
 }
 
+/* ------------------------------------------------------------------
+   Theme switching
+   1. Modern browsers: a circular "ink spread" reveal from the toggle,
+      driven by the View Transitions API (see ThemeContext).
+   2. Fallback: short colour cross-fade on every element.
+------------------------------------------------------------------- */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 2147483646;
+}
+
+html.theme-transition,
+html.theme-transition *,
+html.theme-transition *::before,
+html.theme-transition *::after {
+  transition: background-color 350ms ease, border-color 350ms ease, color 350ms ease, fill 350ms ease,
+    stroke 350ms ease, box-shadow 350ms ease !important;
+  transition-delay: 0s !important;
+}
+
+/* ------------------------------------------------------------------
+   Keyframes
+------------------------------------------------------------------- */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
 @keyframes shimmer {
   100% {
     transform: translateX(100%);
+  }
+}
+@keyframes shrink-x {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scale(0.6);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
   }
 }

@@ -66,19 +66,32 @@ export async function GET(req: Request) {
       filter.status = "active";
     }
 
-    if (category) filter.category = category;
+    // Category accepts either an ObjectId or a category slug (storefront links use slugs)
+    if (category) {
+      if (/^[0-9a-fA-F]{24}$/.test(category)) {
+        filter.category = category;
+      } else {
+        const categoryDoc = await Category.findOne({ slug: category.toLowerCase() });
+        if (!categoryDoc) {
+          return apiSuccess({ products: [] }, "Products retrieved successfully", 200, {
+            page,
+            limit,
+            total: 0,
+            totalPages: 0,
+          });
+        }
+        filter.category = categoryDoc._id;
+      }
+    }
     if (brand) filter.brand = brand;
     if (isFeatured === "true") filter.isFeatured = true;
     if (isRestricted === "true") filter.isRestricted = true;
     if (isRestricted === "false") filter.isRestricted = false;
+    if (searchParams.get("onSale") === "true") filter.discountPrice = { $gt: 0 };
+    if (searchParams.get("inStock") === "true") filter.stock = { $gt: 0 };
+    const minRating = parseFloat(searchParams.get("minRating") || "");
+    if (!Number.isNaN(minRating) && minRating > 0) filter.ratingAverage = { $gte: minRating };
 
-    // Price range
-    if (minPrice || maxPrice) {
-      const priceFilter: Record<string, number> = {};
-      if (minPrice) priceFilter.$gte = parseFloat(minPrice);
-      if (maxPrice) priceFilter.$lte = parseFloat(maxPrice);
-      filter.price = priceFilter;
-    }
 
     let sortOption: any = { createdAt: -1 };
     if (sort === "price-asc") sortOption = { price: 1 };
@@ -98,6 +111,21 @@ export async function GET(req: Request) {
           p.brand?.toLowerCase().includes(term) ||
           p.sku?.toLowerCase().includes(term)
       );
+    }
+
+    // Price range applies to the price the customer actually pays (discount price when on sale)
+    const min = parseFloat(minPrice || "");
+    const max = parseFloat(maxPrice || "");
+    if (!Number.isNaN(min) || !Number.isNaN(max)) {
+      products = products.filter((p: any) => {
+        const paid = p.discountPrice > 0 && p.discountPrice < p.price ? p.discountPrice : p.price;
+        return (Number.isNaN(min) || paid >= min) && (Number.isNaN(max) || paid <= max);
+      });
+    }
+
+    if (sort === "price-asc" || sort === "price-desc") {
+      const paid = (p: any) => (p.discountPrice > 0 && p.discountPrice < p.price ? p.discountPrice : p.price);
+      products = [...products].sort((a: any, b: any) => (sort === "price-asc" ? paid(a) - paid(b) : paid(b) - paid(a)));
     }
 
     const total = products.length;

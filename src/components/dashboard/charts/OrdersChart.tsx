@@ -21,7 +21,7 @@ export default function OrdersChart({ data }: OrdersChartProps) {
 
   if (!data || data.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center text-xs text-slate-400">
+      <div className="flex h-64 items-center justify-center text-xs text-muted">
         No orders data available for selected period.
       </div>
     );
@@ -40,21 +40,18 @@ export default function OrdersChart({ data }: OrdersChartProps) {
   const barWidth = Math.max(8, Math.min(24, (chartWidth / data.length) * 0.55));
 
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl bg-white p-5 shadow-xs border border-slate-100 dark:border-slate-800 dark:bg-slate-900">
+    <div className="relative w-full overflow-hidden rounded-2xl bg-surface p-5 shadow-xs border border-line">
       <div className="flex items-center justify-between pb-3">
         <div>
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Order Volume</h3>
-          <p className="text-[11px] text-slate-500">Daily throughput across lifecycle stages</p>
+          <h3 className="text-sm font-bold text-fg">Order Volume</h3>
+          <p className="text-[11px] text-muted">Daily throughput across lifecycle stages</p>
         </div>
         <div className="flex items-center gap-3 text-[10px]">
-          <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
-            <span className="h-2 w-2 rounded-full bg-blue-500 inline-block" /> Total
+          <span className="flex items-center gap-1 text-muted">
+            <span className="h-2 w-2 rounded-full bg-brand inline-block" /> Total
           </span>
-          <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" /> Delivered
-          </span>
-          <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
-            <span className="h-2 w-2 rounded-full bg-amber-500 inline-block" /> Processing
+          <span className="flex items-center gap-1 text-muted">
+            <span className="h-2 w-2 rounded-full bg-fg-2 opacity-50 inline-block" /> Delivered
           </span>
         </div>
       </div>
@@ -72,16 +69,15 @@ export default function OrdersChart({ data }: OrdersChartProps) {
                   y1={y}
                   x2={width - paddingX}
                   y2={y}
-                  stroke="#e2e8f0"
+                  style={{ stroke: "var(--line)" }}
                   strokeDasharray="3 3"
-                  className="dark:stroke-slate-800"
                 />
                 <text
                   x={paddingX - 8}
                   y={y + 3}
                   textAnchor="end"
                   fontSize="9"
-                  fill="#94a3b8"
+                  style={{ fill: "var(--muted)" }}
                   className="select-none"
                 >
                   {val}
@@ -106,7 +102,7 @@ export default function OrdersChart({ data }: OrdersChartProps) {
                   width={barWidth}
                   height={Math.max(h, 2)}
                   rx="3"
-                  fill={isHovered ? "#2563eb" : "#3b82f6"}
+                  style={{ fill: isHovered ? "var(--brand-hover)" : "var(--brand)" }}
                   className="cursor-pointer transition-all duration-150"
                   onMouseEnter={() => setHoveredIndex(i)}
                   onMouseLeave={() => setHoveredIndex(null)}
@@ -120,7 +116,8 @@ export default function OrdersChart({ data }: OrdersChartProps) {
                     width={barWidth}
                     height={(d.delivered / maxOrders) * chartHeight}
                     rx="3"
-                    fill="#10b981"
+                    style={{ fill: "var(--fg-2)" }}
+                    fillOpacity="0.45"
                     className="pointer-events-none"
                   />
                 )}
@@ -134,7 +131,7 @@ export default function OrdersChart({ data }: OrdersChartProps) {
                     y={height - 10}
                     textAnchor="middle"
                     fontSize="10"
-                    fill="#94a3b8"
+                    style={{ fill: "var(--muted)" }}
                     className="select-none font-medium"
                   >
                     {d.label}
@@ -148,7 +145,7 @@ export default function OrdersChart({ data }: OrdersChartProps) {
         {/* Hover Tooltip */}
         {hoveredIndex !== null && data[hoveredIndex] && (
           <div
-            className="pointer-events-none absolute -top-3 transform -translate-x-1/2 rounded-xl bg-slate-900 px-3 py-2 text-white shadow-xl dark:bg-white dark:text-slate-900 text-xs transition-all z-10 space-y-0.5"
+            className="pointer-events-none absolute -top-3 transform -translate-x-1/2 rounded-xl bg-zinc-900 px-3 py-2 text-white shadow-xl ring-1 ring-white/10 text-xs transition-all z-10 space-y-0.5"
             style={{
               left: `${
                 ((paddingX +
@@ -159,10 +156,10 @@ export default function OrdersChart({ data }: OrdersChartProps) {
             }}
           >
             <p className="font-bold">{data[hoveredIndex].label}</p>
-            <p className="text-[11px] text-blue-400 dark:text-blue-600 font-semibold">
+            <p className="text-[11px] text-red-300 font-semibold">
               Total: {data[hoveredIndex].totalOrders}
             </p>
-            <div className="text-[10px] text-slate-300 dark:text-slate-600 flex gap-2">
+            <div className="text-[10px] text-zinc-300 flex gap-2">
               <span>Delivered: {data[hoveredIndex].delivered}</span>
               <span>Dispatched: {data[hoveredIndex].dispatched}</span>
               <span>Processing: {data[hoveredIndex].processing}</span>

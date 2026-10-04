@@ -18,7 +18,7 @@ export default function RevenueChart({ data }: RevenueChartProps) {
 
   if (!data || data.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center text-xs text-slate-400">
+      <div className="flex h-64 items-center justify-center text-xs text-muted">
         No revenue data available for selected period.
       </div>
     );
@@ -53,17 +53,17 @@ export default function RevenueChart({ data }: RevenueChartProps) {
   } L ${points[0].x} ${paddingTop + chartHeight} Z`;
 
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl bg-white p-5 shadow-xs border border-slate-100 dark:border-slate-800 dark:bg-slate-900">
+    <div className="relative w-full overflow-hidden rounded-2xl bg-surface p-5 shadow-xs border border-line">
       <div className="flex items-center justify-between pb-3">
         <div>
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">Revenue Velocity</h3>
-          <p className="text-[11px] text-slate-500">Gross sales volume over time</p>
+          <h3 className="text-sm font-bold text-fg">Revenue Velocity</h3>
+          <p className="text-[11px] text-muted">Gross sales volume over time</p>
         </div>
         <div className="text-right">
           <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
             ₹{data.reduce((sum, d) => sum + d.revenue, 0).toLocaleString("en-IN")}
           </span>
-          <p className="text-[10px] text-slate-400">Total in timeframe</p>
+          <p className="text-[10px] text-muted">Total in timeframe</p>
         </div>
       </div>
 
@@ -71,8 +71,8 @@ export default function RevenueChart({ data }: RevenueChartProps) {
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full overflow-visible">
           <defs>
             <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.35" />
-              <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.0" />
+              <stop offset="0%" style={{ stopColor: "var(--brand)" }} stopOpacity="0.3" />
+              <stop offset="100%" style={{ stopColor: "var(--brand)" }} stopOpacity="0.0" />
             </linearGradient>
           </defs>
 
@@ -87,16 +87,15 @@ export default function RevenueChart({ data }: RevenueChartProps) {
                   y1={y}
                   x2={width - paddingX}
                   y2={y}
-                  stroke="#e2e8f0"
+                  style={{ stroke: "var(--line)" }}
                   strokeDasharray="3 3"
-                  className="dark:stroke-slate-800"
                 />
                 <text
                   x={paddingX - 8}
                   y={y + 3}
                   textAnchor="end"
                   fontSize="9"
-                  fill="#94a3b8"
+                  style={{ fill: "var(--muted)" }}
                   className="select-none"
                 >
                   ₹{val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}
@@ -112,7 +111,7 @@ export default function RevenueChart({ data }: RevenueChartProps) {
           <path
             d={linePath}
             fill="none"
-            stroke="#8b5cf6"
+            style={{ stroke: "var(--brand)" }}
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -125,8 +124,10 @@ export default function RevenueChart({ data }: RevenueChartProps) {
                 cx={pt.x}
                 cy={pt.y}
                 r={hoveredIndex === i ? "5" : "3.5"}
-                fill={hoveredIndex === i ? "#7c3aed" : "#8b5cf6"}
-                stroke="#ffffff"
+                style={{
+                  fill: hoveredIndex === i ? "var(--brand-hover)" : "var(--brand)",
+                  stroke: "var(--surface)",
+                }}
                 strokeWidth="2"
                 className="cursor-pointer transition-all duration-150"
                 onMouseEnter={() => setHoveredIndex(i)}
@@ -141,7 +142,7 @@ export default function RevenueChart({ data }: RevenueChartProps) {
                   y={height - 10}
                   textAnchor="middle"
                   fontSize="10"
-                  fill="#94a3b8"
+                  style={{ fill: "var(--muted)" }}
                   className="select-none font-medium"
                 >
                   {pt.label}
@@ -154,16 +155,16 @@ export default function RevenueChart({ data }: RevenueChartProps) {
         {/* Hover Tooltip */}
         {hoveredIndex !== null && points[hoveredIndex] && (
           <div
-            className="pointer-events-none absolute -top-2 transform -translate-x-1/2 rounded-xl bg-slate-900 px-3 py-2 text-white shadow-xl dark:bg-white dark:text-slate-900 text-xs transition-all z-10"
+            className="pointer-events-none absolute -top-2 transform -translate-x-1/2 rounded-xl bg-zinc-900 px-3 py-2 text-white shadow-xl ring-1 ring-white/10 text-xs transition-all z-10"
             style={{
               left: `${(points[hoveredIndex].x / width) * 100}%`,
             }}
           >
             <p className="font-bold">{points[hoveredIndex].label}</p>
-            <p className="text-[11px] text-purple-300 dark:text-purple-600 font-semibold">
+            <p className="text-[11px] text-red-300 font-semibold">
               ₹{points[hoveredIndex].revenue.toLocaleString("en-IN")}
             </p>
-            <p className="text-[10px] text-slate-400">
+            <p className="text-[10px] text-zinc-400">
               {points[hoveredIndex].totalOrders} order{points[hoveredIndex].totalOrders !== 1 ? "s" : ""}
             </p>
           </div>

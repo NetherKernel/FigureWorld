@@ -3,7 +3,7 @@ import Skeleton from "../ui/Skeleton";
 
 export function CategoryPillSkeleton() {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+    <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-3 shadow-card">
       <Skeleton className="h-12 w-12 rounded-xl shrink-0" />
       <div className="space-y-1.5 w-24">
         <Skeleton className="h-3.5 w-full" />

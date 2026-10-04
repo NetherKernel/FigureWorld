@@ -183,7 +183,7 @@ export default function AdminCodPage() {
         );
       case "VERIFIED":
         return (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-bold text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2.5 py-0.5 text-[11px] font-bold text-brand-ink border border-brand/50">
             <CheckCircle2 className="h-3 w-3" />
             VERIFIED & CONFIRMED
           </span>
@@ -210,7 +210,7 @@ export default function AdminCodPage() {
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-700">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-3 px-2.5 py-0.5 text-[11px] font-bold text-fg-2">
             {s}
           </span>
         );
@@ -220,7 +220,7 @@ export default function AdminCodPage() {
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-6 animate-fade-in text-xs">
       {/* Header Banner */}
-      <div className="rounded-3xl bg-gradient-to-r from-amber-950 via-slate-900 to-indigo-950 p-6 sm:p-8 text-white shadow-xl">
+      <div className="rounded-3xl bg-gradient-to-r from-amber-950 via-zinc-900 to-red-950 p-6 sm:p-8 text-white shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -231,7 +231,7 @@ export default function AdminCodPage() {
                 <ArrowLeft className="h-3.5 w-3.5" />
                 <span>Admin Console</span>
               </Link>
-              <span className="text-slate-500">•</span>
+              <span className="text-muted">•</span>
               <span className="rounded-md bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300 border border-amber-500/30">
                 Sprint 8: COD Lifecycle
               </span>
@@ -282,35 +282,35 @@ export default function AdminCodPage() {
           className={`rounded-2xl border p-4 text-left transition ${
             filterStatus === "PENDING_VERIFICATION"
               ? "border-amber-500 bg-amber-50/50 dark:border-amber-500/80 dark:bg-amber-950/30 ring-2 ring-amber-500/20"
-              : "border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900"
+              : "border-line bg-surface hover:bg-surface-2"
           }`}
         >
-          <div className="flex items-center justify-between text-slate-500">
+          <div className="flex items-center justify-between text-muted">
             <span className="font-semibold">Pending Verification</span>
             <PhoneCall className="h-4 w-4 text-amber-500" />
           </div>
           <p className="mt-2 text-2xl font-black text-amber-600 dark:text-amber-400">
             {metrics.pendingVerification}
           </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Call Customer to Verify</p>
+          <p className="text-[11px] text-muted mt-0.5">Call Customer to Verify</p>
         </button>
 
         <button
           onClick={() => setFilterStatus("VERIFIED")}
           className={`rounded-2xl border p-4 text-left transition ${
             filterStatus === "VERIFIED"
-              ? "border-indigo-500 bg-indigo-50/50 dark:border-indigo-500/80 dark:bg-indigo-950/30 ring-2 ring-indigo-500/20"
-              : "border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900"
+              ? "border-brand bg-brand-soft ring-2 ring-brand/20"
+              : "border-line bg-surface hover:bg-surface-2"
           }`}
         >
-          <div className="flex items-center justify-between text-slate-500">
+          <div className="flex items-center justify-between text-muted">
             <span className="font-semibold">Verified & Confirmed</span>
-            <CheckCircle2 className="h-4 w-4 text-indigo-500" />
+            <CheckCircle2 className="h-4 w-4 text-brand-ink" />
           </div>
-          <p className="mt-2 text-2xl font-black text-indigo-600 dark:text-indigo-400">
+          <p className="mt-2 text-2xl font-black text-brand-ink">
             {metrics.verified}
           </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Ready for Warehouse Dispatch</p>
+          <p className="text-[11px] text-muted mt-0.5">Ready for Warehouse Dispatch</p>
         </button>
 
         <button
@@ -318,17 +318,17 @@ export default function AdminCodPage() {
           className={`rounded-2xl border p-4 text-left transition ${
             filterStatus === "DISPATCHED"
               ? "border-emerald-500 bg-emerald-50/50 dark:border-emerald-500/80 dark:bg-emerald-950/30 ring-2 ring-emerald-500/20"
-              : "border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900"
+              : "border-line bg-surface hover:bg-surface-2"
           }`}
         >
-          <div className="flex items-center justify-between text-slate-500">
+          <div className="flex items-center justify-between text-muted">
             <span className="font-semibold">Dispatched Orders</span>
             <Truck className="h-4 w-4 text-emerald-500" />
           </div>
           <p className="mt-2 text-2xl font-black text-emerald-600 dark:text-emerald-400">
             {metrics.dispatched}
           </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Courier in transit</p>
+          <p className="text-[11px] text-muted mt-0.5">Courier in transit</p>
         </button>
 
         <button
@@ -336,22 +336,22 @@ export default function AdminCodPage() {
           className={`rounded-2xl border p-4 text-left transition ${
             filterStatus === "REJECTED"
               ? "border-rose-500 bg-rose-50/50 dark:border-rose-500/80 dark:bg-rose-950/30 ring-2 ring-rose-500/20"
-              : "border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900"
+              : "border-line bg-surface hover:bg-surface-2"
           }`}
         >
-          <div className="flex items-center justify-between text-slate-500">
+          <div className="flex items-center justify-between text-muted">
             <span className="font-semibold">Rejected / Cancelled</span>
             <XCircle className="h-4 w-4 text-rose-500" />
           </div>
           <p className="mt-2 text-2xl font-black text-rose-600 dark:text-rose-400">
             {metrics.rejected + metrics.cancelled}
           </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Stock restored to inventory</p>
+          <p className="text-[11px] text-muted mt-0.5">Stock restored to inventory</p>
         </button>
       </div>
 
       {/* Filter Tabs & Search Bar */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="rounded-2xl border border-line bg-surface p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
           {[
             { id: "PENDING_VERIFICATION", label: `Pending Call (${metrics.pendingVerification})` },
@@ -366,7 +366,7 @@ export default function AdminCodPage() {
               className={`rounded-xl px-3.5 py-1.5 font-bold transition text-[11px] whitespace-nowrap ${
                 filterStatus === tab.id
                   ? "bg-amber-600 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                  : "bg-surface-3 text-fg-2 hover:bg-line"
               }`}
             >
               {tab.label}
@@ -375,23 +375,23 @@ export default function AdminCodPage() {
         </div>
 
         <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted" />
           <input
             type="text"
             placeholder="Search order, customer, or phone..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+            className="w-full rounded-xl border border-line bg-bg py-2 pl-9 pr-3 text-fg focus:border-amber-500 focus:bg-surface focus:outline-none"
           />
         </div>
       </div>
 
       {/* COD Orders Table */}
-      <div className="rounded-3xl border border-slate-200 bg-white shadow-xs overflow-hidden dark:border-slate-800 dark:bg-slate-900">
+      <div className="rounded-3xl border border-line bg-surface shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full min-w-[720px] text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/75 dark:border-slate-800 dark:bg-slate-800/40 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              <tr className="border-b border-line bg-surface-2 text-[11px] font-bold text-muted uppercase tracking-wider">
                 <th className="py-3 px-4">Order / Placed</th>
                 <th className="py-3 px-4">Customer & Contact</th>
                 <th className="py-3 px-4">Destination</th>
@@ -401,10 +401,10 @@ export default function AdminCodPage() {
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-line">
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400 font-medium">
+                  <td colSpan={7} className="py-12 text-center text-muted font-medium">
                     {loading ? "Loading COD orders..." : "No orders found in this view."}
                   </td>
                 </tr>
@@ -421,16 +421,16 @@ export default function AdminCodPage() {
                   return (
                     <tr
                       key={o._id}
-                      className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition ${
+                      className={`hover:bg-surface-2 transition ${
                         isPending ? "bg-amber-50/15 dark:bg-amber-950/10" : ""
                       }`}
                     >
                       {/* Order Number */}
                       <td className="py-4 px-4">
-                        <div className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                        <div className="font-mono font-bold text-brand-ink">
                           {o.orderNumber}
                         </div>
-                        <div className="text-slate-400 text-[10px]">
+                        <div className="text-muted text-[10px]">
                           {new Date(o.placedAt).toLocaleString("en-IN", {
                             month: "short",
                             day: "numeric",
@@ -442,10 +442,10 @@ export default function AdminCodPage() {
 
                       {/* Customer & Phone */}
                       <td className="py-4 px-4">
-                        <div className="font-bold text-slate-900 dark:text-white">
+                        <div className="font-bold text-fg">
                           {o.shippingAddress?.fullName || "Guest Customer"}
                         </div>
-                        <div className="text-slate-500 text-[11px] font-mono flex items-center gap-1 mt-0.5">
+                        <div className="text-muted text-[11px] font-mono flex items-center gap-1 mt-0.5">
                           <a
                             href={`tel:${o.shippingAddress?.phone}`}
                             className="text-amber-600 dark:text-amber-400 font-semibold hover:underline inline-flex items-center gap-1"
@@ -455,23 +455,23 @@ export default function AdminCodPage() {
                             <span>{o.shippingAddress?.phone || "N/A"}</span>
                           </a>
                         </div>
-                        <div className="text-slate-400 text-[10px] truncate max-w-[150px]">
+                        <div className="text-muted text-[10px] truncate max-w-[150px]">
                           {o.customerEmail}
                         </div>
                       </td>
 
                       {/* Destination */}
-                      <td className="py-4 px-4 text-slate-600 dark:text-slate-300">
-                        <div className="font-semibold text-slate-900 dark:text-white">
+                      <td className="py-4 px-4 text-fg-2">
+                        <div className="font-semibold text-fg">
                           {o.shippingAddress?.city}, {o.shippingAddress?.state}
                         </div>
-                        <div className="text-[10px] text-slate-400">
+                        <div className="text-[10px] text-muted">
                           PIN: {o.shippingAddress?.pinCode}
                         </div>
                       </td>
 
                       {/* Amount */}
-                      <td className="py-4 px-4 font-bold text-slate-900 dark:text-white">
+                      <td className="py-4 px-4 font-bold text-fg">
                         {formatPrice(o.pricing?.grandTotal || 0)}
                       </td>
 
@@ -483,7 +483,7 @@ export default function AdminCodPage() {
                             className={`rounded-lg px-2 py-0.5 text-[10px] font-bold border transition flex items-center gap-1 ${
                               callCount > 0
                                 ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800"
-                                : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400"
+                                : "bg-surface-3 text-muted border-line"
                             }`}
                           >
                             <MessageSquare className="h-3 w-3" />
@@ -491,7 +491,7 @@ export default function AdminCodPage() {
                           </button>
                         </div>
                         {callCount > 0 && (
-                          <p className="text-[10px] text-slate-400 mt-1 truncate max-w-[160px]">
+                          <p className="text-[10px] text-muted mt-1 truncate max-w-[160px]">
                             Last: {o.codDetails?.callLogs?.[callCount - 1]?.callStatus}
                           </p>
                         )}
@@ -519,7 +519,7 @@ export default function AdminCodPage() {
                               onClick={() =>
                                 executeAction({ orderNumber: o.orderNumber, action: "ACCEPT" })
                               }
-                              className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 transition shadow-xs disabled:opacity-50"
+                              className="rounded-xl bg-brand hover:bg-brand-hover text-white font-bold px-3 py-1.5 transition shadow-xs disabled:opacity-50"
                               title="Accept COD & Mark Verified"
                             >
                               Verify
@@ -552,7 +552,7 @@ export default function AdminCodPage() {
                                   cancellationReason: "Cancelled prior to dispatch.",
                                 })
                               }
-                              className="rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 px-2 py-1.5 font-semibold"
+                              className="rounded-xl border border-line-strong text-fg-2 hover:bg-surface-2 px-2 py-1.5 font-semibold"
                             >
                               Cancel
                             </button>
@@ -560,7 +560,7 @@ export default function AdminCodPage() {
                         ) : isDispatched ? (
                           <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
                             <span className="block font-bold">{o.codDetails?.courierPartner}</span>
-                            <span className="font-mono text-[10px] text-slate-500">
+                            <span className="font-mono text-[10px] text-muted">
                               {o.codDetails?.trackingNumber}
                             </span>
                           </div>
@@ -582,16 +582,16 @@ export default function AdminCodPage() {
       {/* 1. Log Phone Call Modal */}
       {callModalOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 space-y-4">
+          <div className="w-full max-w-md rounded-3xl border border-line bg-surface p-6 shadow-2xl space-y-4">
             <div className="flex items-center gap-3 text-amber-600">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-100 dark:bg-amber-950/60">
                 <PhoneCall className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                <h3 className="text-base font-bold text-fg">
                   Log Customer Phone Call
                 </h3>
-                <p className="text-[11px] text-slate-500 font-mono">
+                <p className="text-[11px] text-muted font-mono">
                   Order: {callModalOrder.orderNumber} • Dial:{" "}
                   <a
                     href={`tel:${callModalOrder.shippingAddress?.phone}`}
@@ -604,13 +604,13 @@ export default function AdminCodPage() {
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-fg-2 mb-1">
                 Call Outcome *
               </label>
               <select
                 value={callStatus}
                 onChange={(e: any) => setCallStatus(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white font-medium"
+                className="w-full rounded-xl border border-line bg-bg p-2.5 text-xs text-fg focus:border-amber-500 focus:bg-surface focus:outline-none font-medium"
               >
                 <option value="ANSWERED">ANSWERED — Customer Confirmed Order</option>
                 <option value="NO_ANSWER">NO ANSWER — Phone Rang, No Response</option>
@@ -620,7 +620,7 @@ export default function AdminCodPage() {
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-fg-2 mb-1">
                 Call Verification Notes
               </label>
               <textarea
@@ -628,7 +628,7 @@ export default function AdminCodPage() {
                 value={callNotes}
                 onChange={(e) => setCallNotes(e.target.value)}
                 placeholder="e.g. Customer verified delivery address. Available for delivery Saturday morning."
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-900 focus:border-amber-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+                className="w-full rounded-xl border border-line bg-bg p-2.5 text-xs text-fg focus:border-amber-500 focus:bg-surface focus:outline-none"
               />
             </div>
 
@@ -636,7 +636,7 @@ export default function AdminCodPage() {
               <button
                 type="button"
                 onClick={() => setCallModalOrder(null)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300"
+                className="rounded-xl border border-line bg-surface px-4 py-2 text-xs font-semibold text-fg-2 hover:bg-surface-2"
               >
                 Cancel
               </button>
@@ -662,29 +662,29 @@ export default function AdminCodPage() {
       {/* 2. Dispatch Order Modal */}
       {dispatchModalOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 space-y-4">
+          <div className="w-full max-w-md rounded-3xl border border-line bg-surface p-6 shadow-2xl space-y-4">
             <div className="flex items-center gap-3 text-emerald-600">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 dark:bg-emerald-950/60">
                 <Truck className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                <h3 className="text-base font-bold text-fg">
                   Dispatch COD Order
                 </h3>
-                <p className="text-[11px] text-slate-500 font-mono">
+                <p className="text-[11px] text-muted font-mono">
                   Order: {dispatchModalOrder.orderNumber} • ₹{dispatchModalOrder.pricing.grandTotal} COD
                 </p>
               </div>
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-fg-2 mb-1">
                 Courier Partner *
               </label>
               <select
                 value={courierPartner}
                 onChange={(e) => setCourierPartner(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-900 focus:border-emerald-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white font-medium"
+                className="w-full rounded-xl border border-line bg-bg p-2.5 text-xs text-fg focus:border-emerald-500 focus:bg-surface focus:outline-none font-medium"
               >
                 <option value="Blue Dart Express">Blue Dart Express</option>
                 <option value="Delhivery Surface">Delhivery Surface</option>
@@ -695,7 +695,7 @@ export default function AdminCodPage() {
             </div>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-fg-2 mb-1">
                 Airway Bill / Tracking Number
               </label>
               <input
@@ -703,7 +703,7 @@ export default function AdminCodPage() {
                 value={trackingNumber}
                 onChange={(e) => setTrackingNumber(e.target.value)}
                 placeholder="e.g. BD-849201948 (leave blank to auto-generate)"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs font-mono text-slate-900 focus:border-emerald-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+                className="w-full rounded-xl border border-line bg-bg p-2.5 text-xs font-mono text-fg focus:border-emerald-500 focus:bg-surface focus:outline-none"
               />
             </div>
 
@@ -711,7 +711,7 @@ export default function AdminCodPage() {
               <button
                 type="button"
                 onClick={() => setDispatchModalOrder(null)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300"
+                className="rounded-xl border border-line bg-surface px-4 py-2 text-xs font-semibold text-fg-2 hover:bg-surface-2"
               >
                 Cancel
               </button>
@@ -737,27 +737,27 @@ export default function AdminCodPage() {
       {/* 3. Reject COD Modal */}
       {rejectModalOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 space-y-4">
+          <div className="w-full max-w-md rounded-3xl border border-line bg-surface p-6 shadow-2xl space-y-4">
             <div className="flex items-center gap-3 text-rose-600">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-100 dark:bg-rose-950/60">
                 <XCircle className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                <h3 className="text-base font-bold text-fg">
                   Reject COD Order
                 </h3>
-                <p className="text-[11px] text-slate-500 font-mono">
+                <p className="text-[11px] text-muted font-mono">
                   Order: {rejectModalOrder.orderNumber}
                 </p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-600 dark:text-slate-300">
+            <p className="text-xs text-fg-2">
               Rejecting this COD order will cancel the order and <strong>automatically return all reserved products to warehouse inventory stock</strong>.
             </p>
 
             <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block font-semibold text-fg-2 mb-1">
                 Rejection Reason
               </label>
               <textarea
@@ -765,7 +765,7 @@ export default function AdminCodPage() {
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
                 placeholder="e.g. Customer cancelled on phone call, fake phone number, or delivery unreachable."
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-900 focus:border-rose-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+                className="w-full rounded-xl border border-line bg-bg p-2.5 text-xs text-fg focus:border-rose-500 focus:bg-surface focus:outline-none"
               />
             </div>
 
@@ -773,7 +773,7 @@ export default function AdminCodPage() {
               <button
                 type="button"
                 onClick={() => setRejectModalOrder(null)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300"
+                className="rounded-xl border border-line bg-surface px-4 py-2 text-xs font-semibold text-fg-2 hover:bg-surface-2"
               >
                 Back
               </button>
@@ -787,7 +787,7 @@ export default function AdminCodPage() {
                       rejectionReason || "Customer cancelled or unreachable during COD phone verification.",
                   })
                 }
-                className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-md hover:bg-rose-700 transition"
+                className="rounded-xl border border-rose-300 bg-surface px-4 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-950/40 transition"
               >
                 Reject & Restore Stock
               </button>
@@ -799,15 +799,15 @@ export default function AdminCodPage() {
       {/* 4. Call History Logs Modal */}
       {historyModalOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
-          <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+          <div className="w-full max-w-lg rounded-3xl border border-line bg-surface p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
                 <PhoneForwarded className="h-5 w-5 text-amber-500" />
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                <h3 className="text-base font-bold text-fg">
                   Phone Verification History
                 </h3>
               </div>
-              <span className="font-mono text-xs text-slate-500">
+              <span className="font-mono text-xs text-muted">
                 {historyModalOrder.orderNumber}
               </span>
             </div>
@@ -815,29 +815,29 @@ export default function AdminCodPage() {
             <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
               {(!historyModalOrder.codDetails?.callLogs ||
                 historyModalOrder.codDetails.callLogs.length === 0) ? (
-                <p className="text-slate-400 py-6 text-center italic">
+                <p className="text-muted py-6 text-center italic">
                   No phone verification calls have been logged yet for this order.
                 </p>
               ) : (
                 historyModalOrder.codDetails.callLogs.map((log, idx) => (
                   <div
                     key={idx}
-                    className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-800/40 space-y-1"
+                    className="rounded-2xl border border-line bg-surface-2 p-3 space-y-1"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-900 dark:text-white">
+                      <span className="font-bold text-fg">
                         Outcome: {log.callStatus}
                       </span>
-                      <span className="text-[10px] text-slate-400 font-mono">
+                      <span className="text-[10px] text-muted font-mono">
                         {new Date(log.calledAt).toLocaleString("en-IN")}
                       </span>
                     </div>
                     {log.notes && (
-                      <p className="text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed">
+                      <p className="text-fg-2 text-[11px] leading-relaxed">
                         {log.notes}
                       </p>
                     )}
-                    <p className="text-[10px] text-slate-400">Agent: {log.calledBy}</p>
+                    <p className="text-[10px] text-muted">Agent: {log.calledBy}</p>
                   </div>
                 ))
               )}
@@ -847,7 +847,7 @@ export default function AdminCodPage() {
               <button
                 type="button"
                 onClick={() => setHistoryModalOrder(null)}
-                className="rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-4 py-2 font-semibold text-slate-700 dark:text-slate-200"
+                className="rounded-xl bg-surface-3 hover:bg-surface-3 px-4 py-2 font-semibold text-fg-2"
               >
                 Close
               </button>

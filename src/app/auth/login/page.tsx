@@ -4,7 +4,30 @@ import React, { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { Eye, EyeOff, Lock, Mail, ArrowRight, Layers, AlertCircle } from "lucide-react";
+import { Logo } from "@/components/ui/Logo";
+import { Eye, EyeOff, AlertCircle, ChevronRight, Loader2 } from "lucide-react";
+
+/** Only allow same-origin relative paths as post-login destinations (prevents open redirects). */
+function safeRedirect(value: string | null): string | null {
+  if (!value) return null;
+  if (!value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) return null;
+  return value;
+}
+
+function ProblemAlert({ message }: { message: string }) {
+  return (
+    <div
+      role="alert"
+      className="mb-4 flex animate-pop-in gap-3 rounded-xl border border-brand/30 bg-brand-soft p-4 text-brand-ink"
+    >
+      <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="text-sm font-bold">There was a problem</p>
+        <p className="mt-0.5 text-[13px] leading-5 text-fg-2">{message}</p>
+      </div>
+    </div>
+  );
+}
 
 function LoginForm() {
   const [email, setEmail] = useState("");
@@ -16,7 +39,11 @@ function LoginForm() {
   const { login } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") || "/profile";
+  const requestedRedirect = safeRedirect(searchParams.get("redirect"));
+  const redirect = requestedRedirect || "/profile";
+  const registerHref = requestedRedirect
+    ? `/auth/register?redirect=${encodeURIComponent(requestedRedirect)}`
+    : "/auth/register";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,127 +67,116 @@ function LoginForm() {
   };
 
   return (
-    <div className="mx-auto flex min-h-[75vh] max-w-md flex-col justify-center px-4 py-12">
-      <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-xl dark:border-slate-800 dark:bg-slate-900">
-        {/* Brand header */}
-        <div className="text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">
-            <Layers className="h-6 w-6" />
-          </div>
-          <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Welcome Back
-          </h1>
-          <p className="mt-1 text-xs text-slate-500">
-            Sign in to manage your collector orders and saved addresses
-          </p>
-        </div>
+    <div className="flex flex-col items-center bg-bg px-4 pb-12 pt-6 sm:pt-10">
+      <Logo size="lg" />
 
-        {/* Error Alert */}
-        {error && (
-          <div className="mt-6 flex items-start gap-3 rounded-xl bg-rose-50 p-3.5 text-xs text-rose-700 dark:bg-rose-950/40 dark:text-rose-400">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
+      <div className="mt-6 w-full max-w-[360px] animate-fade-up">
+        {error && <ProblemAlert message={error} />}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Email Address
-            </label>
-            <div className="relative mt-1">
-              <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <div className="card p-6">
+          <h1 className="text-[28px] font-normal leading-tight text-fg">Sign in</h1>
+
+          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+            <div>
+              <label htmlFor="login-email" className="label">
+                Email
+              </label>
               <input
+                id="login-email"
                 type="email"
                 required
+                autoComplete="email"
+                autoFocus
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+                className="input h-10"
               />
             </div>
-          </div>
 
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Password
-              </label>
-              <Link
-                href="/auth/forgot-password"
-                className="text-[11px] font-semibold text-indigo-600 hover:underline dark:text-indigo-400"
-              >
-                Forgot password?
-              </Link>
+            <div>
+              <div className="flex items-baseline justify-between gap-2">
+                <label htmlFor="login-password" className="label">
+                  Password
+                </label>
+                <Link href="/auth/forgot-password" className="link text-[13px]">
+                  Forgot password?
+                </Link>
+              </div>
+              <div className="relative">
+                <input
+                  id="login-password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input h-10 pr-11"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center rounded-r-lg text-muted transition hover:text-fg"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
-            <div className="relative mt-1">
-              <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type={showPassword ? "text" : "password"}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-10 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
+
+            <button type="submit" disabled={isSubmitting} className="btn btn-primary min-h-10 w-full">
+              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+              {isSubmitting ? "Signing in..." : "Sign in"}
+            </button>
+          </form>
+
+          <p className="mt-4 text-xs leading-5 text-fg-2">
+            By continuing, you agree to Figure World&apos;s Conditions of Use and Privacy Notice.
+          </p>
+
+          <details className="group mt-4 border-t border-line pt-3">
+            <summary className="flex min-h-10 cursor-pointer list-none items-center gap-1 text-[13px] text-fg-2 hover:text-fg [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" aria-hidden="true" />
+              Demo accounts
+            </summary>
+            <div className="animate-fade-in pb-1 pt-1">
+              <p className="text-xs text-muted">Fill in a sample account to explore the store.</p>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => fillDemo("customer@figuresworld.com", "Customer@123456")}
+                  className="btn btn-secondary btn-sm min-h-10 px-2"
+                >
+                  Customer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fillDemo("staff@figuresworld.com", "Staff@123456")}
+                  className="btn btn-secondary btn-sm min-h-10 px-2"
+                >
+                  Staff
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fillDemo("admin@figuresworld.com", "Admin@123456")}
+                  className="btn btn-secondary btn-sm min-h-10 px-2"
+                >
+                  Admin
+                </button>
+              </div>
             </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-xs font-bold text-white shadow-md shadow-indigo-600/20 transition hover:bg-indigo-700 disabled:opacity-60"
-          >
-            {isSubmitting ? "Signing in..." : "Sign In"}
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </form>
-
-        {/* Demo Quick-Fill Buttons */}
-        <div className="mt-6 rounded-2xl border border-slate-100 bg-slate-50/80 p-3.5 dark:border-slate-800/80 dark:bg-slate-950/50">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Demo Test Logins
-          </span>
-          <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
-            <button
-              type="button"
-              onClick={() => fillDemo("customer@figuresworld.com", "Customer@123456")}
-              className="rounded-lg border border-slate-200 bg-white py-1 font-semibold text-slate-700 hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
-            >
-              Customer
-            </button>
-            <button
-              type="button"
-              onClick={() => fillDemo("staff@figuresworld.com", "Staff@123456")}
-              className="rounded-lg border border-slate-200 bg-white py-1 font-semibold text-blue-600 hover:border-blue-300 dark:border-slate-800 dark:bg-slate-900 dark:text-blue-400"
-            >
-              Staff
-            </button>
-            <button
-              type="button"
-              onClick={() => fillDemo("admin@figuresworld.com", "Admin@123456")}
-              className="rounded-lg border border-slate-200 bg-white py-1 font-semibold text-purple-600 hover:border-purple-300 dark:border-slate-800 dark:bg-slate-900 dark:text-purple-400"
-            >
-              Admin
-            </button>
-          </div>
+          </details>
         </div>
 
-        {/* Footer link */}
-        <p className="mt-6 text-center text-xs text-slate-500">
-          Don&apos;t have an account?{" "}
-          <Link href="/auth/register" className="font-bold text-indigo-600 hover:underline dark:text-indigo-400">
-            Create an account
-          </Link>
-        </p>
+        <div className="mt-6 flex items-center gap-3">
+          <span className="h-px flex-1 bg-line" />
+          <span className="text-xs text-muted">New to Figure World?</span>
+          <span className="h-px flex-1 bg-line" />
+        </div>
+
+        <Link href={registerHref} className="btn btn-secondary mt-3 min-h-10 w-full">
+          Create your Figure World account
+        </Link>
       </div>
     </div>
   );
@@ -168,7 +184,13 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="min-h-[50vh] flex items-center justify-center text-xs text-slate-400">Loading sign in...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-[50vh] items-center justify-center bg-bg text-sm text-muted">
+          Loading sign in...
+        </div>
+      }
+    >
       <LoginForm />
     </Suspense>
   );

@@ -3,9 +3,9 @@ import Skeleton from "../ui/Skeleton";
 
 export function ProductCardSkeleton() {
   return (
-    <div className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all dark:border-slate-800 dark:bg-slate-900">
+    <div className="flex flex-col rounded-xl border border-line bg-surface p-4 shadow-card transition-all">
       {/* Product Image Skeleton */}
-      <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800/80">
+      <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-surface-2">
         <Skeleton className="h-full w-full" />
         {/* Scale/Tag Pill Skeleton */}
         <div className="absolute left-3 top-3">
@@ -26,7 +26,7 @@ export function ProductCardSkeleton() {
       </div>
 
       {/* Price & Action Skeleton */}
-      <div className="mt-4 flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+      <div className="mt-4 flex items-center justify-between pt-2 border-t border-line">
         <div>
           <Skeleton className="h-5 w-16" />
         </div>

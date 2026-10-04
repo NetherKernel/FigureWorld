@@ -3,7 +3,25 @@
 import React, { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Lock, ArrowRight, Layers, AlertCircle, CheckCircle2, KeyRound } from "lucide-react";
+import { Logo } from "@/components/ui/Logo";
+import { AlertCircle, CheckCircle2, Eye, EyeOff, Info, Loader2 } from "lucide-react";
+
+const MIN_PASSWORD_LENGTH = 6;
+
+function ProblemAlert({ message }: { message: string }) {
+  return (
+    <div
+      role="alert"
+      className="mb-4 flex animate-pop-in gap-3 rounded-xl border border-brand/30 bg-brand-soft p-4 text-brand-ink"
+    >
+      <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="text-sm font-bold">There was a problem</p>
+        <p className="mt-0.5 text-[13px] leading-5 text-fg-2">{message}</p>
+      </div>
+    </div>
+  );
+}
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -12,6 +30,7 @@ function ResetPasswordForm() {
   const [token, setToken] = useState(tokenFromUrl);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -27,8 +46,8 @@ function ResetPasswordForm() {
       return;
     }
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters long.");
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters long.`);
       return;
     }
 
@@ -64,107 +83,122 @@ function ResetPasswordForm() {
   };
 
   return (
-    <div className="mx-auto flex min-h-[75vh] max-w-md flex-col justify-center px-4 py-12">
-      <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-xl dark:border-slate-800 dark:bg-slate-900">
-        <div className="text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">
-            <KeyRound className="h-6 w-6" />
-          </div>
-          <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Set New Password
-          </h1>
-          <p className="mt-1 text-xs text-slate-500">
-            Enter your new secure password below to regain account access
-          </p>
-        </div>
+    <div className="flex flex-col items-center bg-bg px-4 pb-12 pt-6 sm:pt-10">
+      <Logo size="lg" />
 
-        {error && (
-          <div className="mt-6 flex items-start gap-3 rounded-xl bg-rose-50 p-3.5 text-xs text-rose-700 dark:bg-rose-950/40 dark:text-rose-400">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
+      <div className="mt-6 w-full max-w-[360px] animate-fade-up">
+        {error && <ProblemAlert message={error} />}
 
-        {success ? (
-          <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center text-xs dark:border-emerald-800/40 dark:bg-emerald-950/40">
-            <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600" />
-            <h3 className="mt-2 text-sm font-bold text-emerald-800 dark:text-emerald-300">
-              Password Reset Complete!
-            </h3>
-            <p className="mt-1 text-emerald-700 dark:text-emerald-400">
-              Redirecting you to the sign in page...
-            </p>
-            <Link
-              href="/auth/login"
-              className="mt-4 inline-block font-bold text-indigo-600 hover:underline dark:text-indigo-400"
-            >
-              Click here if not redirected automatically
-            </Link>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-            {!tokenFromUrl && (
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Reset Token
-                </label>
-                <div className="relative mt-1">
-                  <input
-                    type="text"
-                    required
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    placeholder="Enter cryptographic reset token"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 px-4 font-mono text-xs text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-                  />
+        <div className="card p-6">
+          <h1 className="text-[28px] font-normal leading-tight text-fg">Create new password</h1>
+
+          {success ? (
+            <div className="mt-4 space-y-4">
+              <div role="status" className="flex animate-pop-in gap-3 rounded-xl bg-success-soft p-4 text-success">
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-sm font-bold">Password changed</p>
+                  <p className="mt-0.5 text-[13px] leading-5 text-fg-2">
+                    Your password has been updated. Taking you to sign in...
+                  </p>
                 </div>
               </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                New Password (min 6 chars)
-              </label>
-              <div className="relative mt-1">
-                <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-                />
-              </div>
+              <Link href="/auth/login" className="btn btn-primary min-h-10 w-full">
+                Sign in now
+              </Link>
             </div>
+          ) : (
+            <>
+              <p className="mt-2 text-[13px] leading-5 text-fg-2">
+                We&apos;ll ask for this password whenever you sign in.
+              </p>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Confirm New Password
-              </label>
-              <div className="relative mt-1">
-                <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="password"
-                  required
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pl-10 pr-4 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-800 dark:bg-slate-950 dark:text-white"
-                />
-              </div>
-            </div>
+              <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+                {!tokenFromUrl && (
+                  <div>
+                    <label htmlFor="reset-token" className="label">
+                      Reset code
+                    </label>
+                    <input
+                      id="reset-token"
+                      type="text"
+                      required
+                      autoComplete="one-time-code"
+                      value={token}
+                      onChange={(e) => setToken(e.target.value)}
+                      placeholder="Paste the code from your reset link"
+                      className="input h-10 font-mono text-xs"
+                    />
+                  </div>
+                )}
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-xs font-bold text-white shadow-md shadow-indigo-600/20 transition hover:bg-indigo-700 disabled:opacity-60"
-            >
-              {isSubmitting ? "Resetting password..." : "Update Password"}
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </form>
-        )}
+                <div>
+                  <label htmlFor="reset-password" className="label">
+                    New password
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="reset-password"
+                      type={showPassword ? "text" : "password"}
+                      required
+                      autoComplete="new-password"
+                      autoFocus={!!tokenFromUrl}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                      aria-describedby="reset-password-hint"
+                      className="input h-10 pr-11"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-pressed={showPassword}
+                      className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center rounded-r-lg text-muted transition hover:text-fg"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <p id="reset-password-hint" className="mt-1.5 flex items-center gap-1.5 text-xs text-fg-2">
+                    <Info className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
+                    Passwords must be at least {MIN_PASSWORD_LENGTH} characters.
+                  </p>
+                </div>
+
+                <div>
+                  <label htmlFor="reset-confirm" className="label">
+                    Re-enter password
+                  </label>
+                  <input
+                    id="reset-confirm"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="input h-10"
+                  />
+                </div>
+
+                <button type="submit" disabled={isSubmitting} className="btn btn-primary min-h-10 w-full">
+                  {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                  {isSubmitting ? "Saving..." : "Save changes"}
+                </button>
+              </form>
+
+              <p className="mt-4 text-xs leading-5 text-fg-2">
+                By continuing, you agree to Figure World&apos;s Conditions of Use and Privacy Notice.
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="mt-6 text-center text-[13px] text-fg-2">
+          Need a new link?{" "}
+          <Link href="/auth/forgot-password" className="link inline-flex min-h-10 items-center">
+            Request another &rsaquo;
+          </Link>
+        </div>
       </div>
     </div>
   );
@@ -172,7 +206,13 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={<div className="min-h-[50vh] flex items-center justify-center text-xs text-slate-400">Loading reset form...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-[50vh] items-center justify-center bg-bg text-sm text-muted">
+          Loading...
+        </div>
+      }
+    >
       <ResetPasswordForm />
     </Suspense>
   );

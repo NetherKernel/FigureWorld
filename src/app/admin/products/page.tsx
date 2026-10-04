@@ -231,25 +231,25 @@ export default function AdminProductsPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-5 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-line pb-5">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Link
               href="/admin"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-muted hover:text-brand-hover"
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
             </Link>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-100 text-purple-700 dark:bg-purple-900/60 dark:text-purple-300">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-brand-ink">
               <Package className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+              <h1 className="text-2xl font-bold tracking-tight text-fg">
                 Product Catalog Management
               </h1>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted">
                 Manage items, modify prices, update stock, control statuses, and configure 18+ compliance.
               </p>
             </div>
@@ -259,13 +259,13 @@ export default function AdminProductsPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => fetchProducts()}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3.5 py-2 text-xs font-semibold text-fg-2 shadow-xs hover:bg-surface-2"
           >
             <RefreshCw className="h-3.5 w-3.5" /> Refresh
           </button>
           <Link
             href="/admin/products/new"
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-indigo-600/20 hover:bg-indigo-700 transition"
+            className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-xs font-semibold text-white shadow-md shadow-brand/20 hover:bg-brand-hover transition"
           >
             <Plus className="h-4 w-4" /> Add New Product
           </Link>
@@ -288,17 +288,17 @@ export default function AdminProductsPage() {
       )}
 
       {/* Search & Filter Controls */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+      <div className="rounded-2xl border border-line bg-surface p-4 shadow-xs">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {/* Search input */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by name, SKU, brand..."
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+              className="w-full rounded-xl border border-line bg-bg py-2 pl-9 pr-3 text-xs font-medium text-fg placeholder:text-muted focus:border-brand focus:bg-surface focus:outline-none"
             />
           </div>
 
@@ -307,7 +307,7 @@ export default function AdminProductsPage() {
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+              className="w-full rounded-xl border border-line bg-bg py-2 px-3 text-xs font-medium text-fg focus:border-brand focus:bg-surface focus:outline-none"
             >
               <option value="">All Categories</option>
               {categories.map((cat) => (
@@ -323,7 +323,7 @@ export default function AdminProductsPage() {
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+              className="w-full rounded-xl border border-line bg-bg py-2 px-3 text-xs font-medium text-fg focus:border-brand focus:bg-surface focus:outline-none"
             >
               <option value="">All Statuses (Active & Draft)</option>
               <option value="active">Active only</option>
@@ -338,7 +338,7 @@ export default function AdminProductsPage() {
             <select
               value={restrictedFilter}
               onChange={(e) => setRestrictedFilter(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 px-3 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+              className="w-full rounded-xl border border-line bg-bg py-2 px-3 text-xs font-medium text-fg focus:border-brand focus:bg-surface focus:outline-none"
             >
               <option value="">All Products</option>
               <option value="true">18+ Restricted Only (Katanas, etc.)</option>
@@ -349,11 +349,11 @@ export default function AdminProductsPage() {
       </div>
 
       {/* Products Data Table */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900">
+      <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="w-full min-w-[720px] text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-slate-200 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-950/60 text-slate-500 font-semibold uppercase tracking-wider">
+              <tr className="border-b border-line bg-surface-2 text-muted font-semibold uppercase tracking-wider">
                 <th className="px-4 py-3.5">Product</th>
                 <th className="px-4 py-3.5">Category</th>
                 <th className="px-4 py-3.5">Price</th>
@@ -363,19 +363,19 @@ export default function AdminProductsPage() {
                 <th className="px-4 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+            <tbody className="divide-y divide-line font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
-                    <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-indigo-500" />
+                  <td colSpan={7} className="px-4 py-12 text-center text-muted">
+                    <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-brand-ink" />
                     Loading product catalog...
                   </td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
+                  <td colSpan={7} className="px-4 py-12 text-center text-muted">
                     <Package className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                    <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
+                    <p className="text-sm font-semibold text-fg-2">
                       No products found
                     </p>
                     <p className="text-xs mt-1">Try adjusting your search criteria or add a new product.</p>
@@ -389,20 +389,20 @@ export default function AdminProductsPage() {
                     "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=200";
 
                   return (
-                    <tr key={p._id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition">
+                    <tr key={p._id} className="hover:bg-surface-2 transition">
                       {/* Product Thumbnail & Name */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <img
                             src={primaryImage}
                             alt={p.name}
-                            className="h-12 w-12 shrink-0 rounded-xl object-cover border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800"
+                            className="h-12 w-12 shrink-0 rounded-xl object-cover border border-line bg-surface-3"
                           />
                           <div className="min-w-0 max-w-xs">
-                            <p className="font-bold text-slate-900 dark:text-white truncate">
+                            <p className="font-bold text-fg truncate">
                               {p.name}
                             </p>
-                            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted">
                               <span className="font-mono">{p.sku}</span>
                               {p.brand && <span>• {p.brand}</span>}
                               {p.isFeatured && (
@@ -417,7 +417,7 @@ export default function AdminProductsPage() {
 
                       {/* Category */}
                       <td className="px-4 py-3">
-                        <span className="inline-flex items-center rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        <span className="inline-flex items-center rounded-lg bg-surface-3 px-2.5 py-1 text-[11px] font-medium text-fg-2">
                           {getCategoryName(p.category)}
                         </span>
                       </td>
@@ -425,7 +425,7 @@ export default function AdminProductsPage() {
                       {/* Price & Discount */}
                       <td className="px-4 py-3">
                         <div>
-                          <span className="font-bold text-slate-900 dark:text-white">
+                          <span className="font-bold text-fg">
                             ${p.price.toFixed(2)}
                           </span>
                           {p.discountPrice && (
@@ -454,7 +454,7 @@ export default function AdminProductsPage() {
                                 ? "text-rose-600"
                                 : p.stock <= 5
                                 ? "text-amber-600"
-                                : "text-slate-800 dark:text-slate-200"
+                                : "text-fg"
                             }`}
                           >
                             {p.stock} units
@@ -472,8 +472,8 @@ export default function AdminProductsPage() {
                             p.status === "active"
                               ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300"
                               : p.status === "draft"
-                              ? "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400"
-                              : "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300"
+                              ? "bg-surface-3 text-fg-2 hover:bg-line"
+                              : "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
                           }`}
                         >
                           {p.status === "active" ? (
@@ -482,7 +482,7 @@ export default function AdminProductsPage() {
                             </>
                           ) : (
                             <>
-                              <EyeOff className="h-3 w-3 text-slate-500" /> {p.status}
+                              <EyeOff className="h-3 w-3 text-muted" /> {p.status}
                             </>
                           )}
                         </button>
@@ -496,7 +496,7 @@ export default function AdminProductsPage() {
                             {p.ageRequirement ? `${p.ageRequirement}+ Required` : "Restricted"}
                           </span>
                         ) : (
-                          <span className="text-[11px] text-slate-400">Standard</span>
+                          <span className="text-[11px] text-muted">Standard</span>
                         )}
                       </td>
 
@@ -508,7 +508,7 @@ export default function AdminProductsPage() {
                             type="button"
                             onClick={() => handleOpenQuickEdit(p)}
                             title="Quick Edit Price & Stock"
-                            className="rounded-lg border border-slate-200 bg-slate-50 p-1.5 text-slate-600 hover:bg-slate-100 hover:text-indigo-600 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300"
+                            className="rounded-lg border border-line bg-surface-2 p-1.5 text-fg-2 hover:bg-surface-3 hover:text-brand-hover"
                           >
                             <DollarSign className="h-3.5 w-3.5" />
                           </button>
@@ -517,7 +517,7 @@ export default function AdminProductsPage() {
                           <Link
                             href={`/admin/products/${p._id}/edit`}
                             title="Edit Product"
-                            className="rounded-lg border border-slate-200 bg-slate-50 p-1.5 text-slate-600 hover:bg-slate-100 hover:text-indigo-600 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300"
+                            className="rounded-lg border border-line bg-surface-2 p-1.5 text-fg-2 hover:bg-surface-3 hover:text-brand-hover"
                           >
                             <Edit className="h-3.5 w-3.5" />
                           </Link>
@@ -527,7 +527,7 @@ export default function AdminProductsPage() {
                             href={`/products/${p.slug || p._id}`}
                             target="_blank"
                             title="View Storefront Page"
-                            className="rounded-lg border border-slate-200 bg-slate-50 p-1.5 text-slate-600 hover:bg-slate-100 hover:text-indigo-600 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300"
+                            className="rounded-lg border border-line bg-surface-2 p-1.5 text-fg-2 hover:bg-surface-3 hover:text-brand-hover"
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
                           </Link>
@@ -555,19 +555,19 @@ export default function AdminProductsPage() {
       {/* Quick Edit Price & Stock Modal */}
       {quickEditProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+          <div className="w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-fg">
               Quick Update: Price & Stock
             </h3>
-            <p className="text-xs text-slate-500 mt-1 truncate">{quickEditProduct.name}</p>
+            <p className="text-xs text-muted mt-1 truncate">{quickEditProduct.name}</p>
 
             <form onSubmit={handleSaveQuickEdit} className="mt-5 space-y-4 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                <label className="block font-semibold text-fg-2">
                   Regular Price ($) *
                 </label>
                 <div className="relative mt-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted font-bold">$</span>
                   <input
                     type="number"
                     step="0.01"
@@ -575,17 +575,17 @@ export default function AdminProductsPage() {
                     required
                     value={editPrice}
                     onChange={(e) => setEditPrice(parseFloat(e.target.value) || 0)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-7 pr-3 font-semibold text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+                    className="w-full rounded-xl border border-line bg-bg py-2 pl-7 pr-3 font-semibold text-fg focus:border-brand focus:bg-surface focus:outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                  Discount Price ($) <span className="font-normal text-slate-400">(Optional)</span>
+                <label className="block font-semibold text-fg-2">
+                  Discount Price ($) <span className="font-normal text-muted">(Optional)</span>
                 </label>
                 <div className="relative mt-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted font-bold">$</span>
                   <input
                     type="number"
                     step="0.01"
@@ -593,40 +593,40 @@ export default function AdminProductsPage() {
                     value={editDiscountPrice}
                     onChange={(e) => setEditDiscountPrice(e.target.value)}
                     placeholder="Leave empty if no discount"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-7 pr-3 font-semibold text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+                    className="w-full rounded-xl border border-line bg-bg py-2 pl-7 pr-3 font-semibold text-fg focus:border-brand focus:bg-surface focus:outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                <label className="block font-semibold text-fg-2">
                   Inventory Stock Count *
                 </label>
                 <div className="relative mt-1">
-                  <Boxes className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Boxes className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
                   <input
                     type="number"
                     min="0"
                     required
                     value={editStock}
                     onChange={(e) => setEditStock(parseInt(e.target.value, 10) || 0)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 font-semibold text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-white"
+                    className="w-full rounded-xl border border-line bg-bg py-2 pl-9 pr-3 font-semibold text-fg focus:border-brand focus:bg-surface focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-line">
                 <button
                   type="button"
                   onClick={() => setQuickEditProduct(null)}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300"
+                  className="rounded-xl border border-line bg-surface px-4 py-2 font-semibold text-fg-2 hover:bg-surface-2"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingQuickEdit}
-                  className="rounded-xl bg-indigo-600 px-4 py-2 font-semibold text-white shadow-md shadow-indigo-600/20 hover:bg-indigo-700 disabled:opacity-50"
+                  className="rounded-xl bg-brand px-4 py-2 font-semibold text-white shadow-md shadow-brand/20 hover:bg-brand-hover disabled:opacity-50"
                 >
                   {savingQuickEdit ? "Saving..." : "Save Changes"}
                 </button>
@@ -639,18 +639,18 @@ export default function AdminProductsPage() {
       {/* Delete Confirmation Modal */}
       {deleteProductTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-2xl border border-rose-200 bg-white p-6 shadow-2xl dark:border-rose-900/50 dark:bg-slate-900">
+          <div className="w-full max-w-md rounded-2xl border border-rose-200 bg-surface p-6 shadow-2xl dark:border-rose-900/50">
             <div className="flex items-center gap-3 text-rose-600">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-100 dark:bg-rose-950/60">
                 <Trash2 className="h-5 w-5" />
               </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Delete Product</h3>
+              <h3 className="text-base font-bold text-fg">Delete Product</h3>
             </div>
 
-            <p className="mt-3 text-xs text-slate-600 dark:text-slate-300">
+            <p className="mt-3 text-xs text-fg-2">
               Are you sure you want to permanently delete{" "}
-              <strong className="text-slate-900 dark:text-white">{deleteProductTarget.name}</strong> (SKU:{" "}
-              <code className="font-mono text-indigo-600 dark:text-indigo-400">{deleteProductTarget.sku}</code>)?
+              <strong className="text-fg">{deleteProductTarget.name}</strong> (SKU:{" "}
+              <code className="font-mono text-brand-ink">{deleteProductTarget.sku}</code>)?
               This action cannot be undone.
             </p>
 
@@ -658,7 +658,7 @@ export default function AdminProductsPage() {
               <button
                 type="button"
                 onClick={() => setDeleteProductTarget(null)}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300"
+                className="rounded-xl border border-line bg-surface px-4 py-2 text-xs font-semibold text-fg-2 hover:bg-surface-2"
               >
                 Cancel
               </button>
@@ -666,7 +666,7 @@ export default function AdminProductsPage() {
                 type="button"
                 disabled={deleting}
                 onClick={handleDeleteProduct}
-                className="rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-rose-600/20 hover:bg-rose-700 disabled:opacity-50"
+                className="rounded-xl border border-rose-300 bg-surface px-4 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-950/40 transition disabled:opacity-50"
               >
                 {deleting ? "Deleting..." : "Confirm Delete"}
               </button>

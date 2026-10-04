@@ -51,17 +51,17 @@ export default function DashboardCustomersPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+          <h1 className="text-2xl font-black tracking-tight text-fg">
             Customer Accounts Directory
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-muted mt-1">
             Registered buyers, lifetime ordering velocity, and contact details.
           </p>
         </div>
 
         <button
           onClick={() => fetchCustomers(query)}
-          className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300 transition w-fit"
+          className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-2 text-xs font-semibold text-fg-2 hover:bg-surface-2 transition w-fit"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           <span>Refresh</span>
@@ -70,57 +70,57 @@ export default function DashboardCustomersPage() {
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-2xl border border-line bg-surface p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Registered Customers</span>
-            <Users className="h-5 w-5 text-purple-600" />
+            <span className="text-xs font-semibold text-muted">Registered Customers</span>
+            <Users className="h-5 w-5 text-brand-ink" />
           </div>
-          <p className="mt-3 text-2xl font-black text-slate-900 dark:text-white">
+          <p className="mt-3 text-2xl font-black text-fg">
             {customers.length}
           </p>
-          <p className="mt-1 text-[11px] text-slate-400">Total verified storefront accounts</p>
+          <p className="mt-1 text-[11px] text-muted">Total verified storefront accounts</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-2xl border border-line bg-surface p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Total Lifetime Spend</span>
+            <span className="text-xs font-semibold text-muted">Total Lifetime Spend</span>
             <ShoppingBag className="h-5 w-5 text-emerald-600" />
           </div>
-          <p className="mt-3 text-2xl font-black text-slate-900 dark:text-white">
+          <p className="mt-3 text-2xl font-black text-fg">
             ₹{totalSpentAll.toLocaleString("en-IN")}
           </p>
           <p className="mt-1 text-[11px] text-emerald-600 font-medium">Cumulative customer revenue</p>
         </div>
 
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+        <div className="rounded-2xl border border-line bg-surface p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Avg Spend per Customer</span>
+            <span className="text-xs font-semibold text-muted">Avg Spend per Customer</span>
             <span className="text-xs font-bold text-blue-600">₹/User</span>
           </div>
-          <p className="mt-3 text-2xl font-black text-slate-900 dark:text-white">
+          <p className="mt-3 text-2xl font-black text-fg">
             ₹{customers.length > 0 ? Math.round(totalSpentAll / customers.length).toLocaleString("en-IN") : "0"}
           </p>
-          <p className="mt-1 text-[11px] text-slate-400">Average customer lifetime value (LTV)</p>
+          <p className="mt-1 text-[11px] text-muted">Average customer lifetime value (LTV)</p>
         </div>
       </div>
 
       {/* Search Input */}
       <div className="relative">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search customers by name, email, or phone..."
-          className="w-full rounded-2xl border border-slate-200 bg-white pl-10 pr-4 py-2.5 text-xs text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-white shadow-xs focus:ring-2 focus:ring-purple-500 outline-none"
+          className="w-full rounded-2xl border border-line bg-surface pl-10 pr-4 py-2.5 text-xs text-fg shadow-xs focus:ring-2 focus:ring-brand outline-none"
         />
       </div>
 
       {/* Customers Table */}
-      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+      <div className="rounded-3xl border border-line bg-surface p-6 shadow-xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-800">
+          <table className="w-full min-w-[600px] text-left text-xs">
+            <thead className="border-b border-line text-[11px] font-bold uppercase tracking-wider text-muted">
               <tr>
                 <th className="pb-3">Customer</th>
                 <th className="pb-3">Contact</th>
@@ -130,25 +130,25 @@ export default function DashboardCustomersPage() {
                 <th className="pb-3">Joined Date</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            <tbody className="divide-y divide-line">
               {customers.length > 0 ? (
                 customers.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                  <tr key={c.id} className="hover:bg-surface-2">
                     <td className="py-3.5">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 font-bold text-xs shrink-0">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand-ink font-bold text-xs shrink-0">
                           {c.name.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900 dark:text-white">{c.name}</p>
-                          <p className="text-[11px] text-slate-400 font-mono">{c.email}</p>
+                          <p className="font-bold text-fg">{c.name}</p>
+                          <p className="text-[11px] text-muted font-mono">{c.email}</p>
                         </div>
                       </div>
                     </td>
                     <td className="py-3.5">
                       <div className="space-y-0.5">
-                        <p className="text-slate-700 dark:text-slate-300 font-medium">{c.phone}</p>
-                        <p className="text-[10px] text-slate-400">{c.addressesCount} saved address(es)</p>
+                        <p className="text-fg-2 font-medium">{c.phone}</p>
+                        <p className="text-[10px] text-muted">{c.addressesCount} saved address(es)</p>
                       </div>
                     </td>
                     <td className="py-3.5">
@@ -157,21 +157,21 @@ export default function DashboardCustomersPage() {
                       </span>
                     </td>
                     <td className="py-3.5">
-                      <p className="font-black text-slate-900 dark:text-white">
+                      <p className="font-black text-fg">
                         ₹{c.totalSpent.toLocaleString("en-IN")}
                       </p>
                     </td>
-                    <td className="py-3.5 text-slate-500">
+                    <td className="py-3.5 text-muted">
                       {c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleDateString() : "Never"}
                     </td>
-                    <td className="py-3.5 text-slate-400">
+                    <td className="py-3.5 text-muted">
                       {new Date(c.createdAt).toLocaleDateString()}
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400">
+                  <td colSpan={6} className="py-8 text-center text-muted">
                     No matching customer accounts found.
                   </td>
                 </tr>

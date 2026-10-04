@@ -2,226 +2,155 @@
 
 import React from "react";
 import Link from "next/link";
-import {
-  ChevronUp,
-  Globe,
-  ShieldCheck,
-  Truck,
-  CreditCard,
-  MessageSquare,
-  ShieldAlert,
-  ArrowRight,
-} from "lucide-react";
+import { usePathname } from "next/navigation";
+import { CreditCard, MessageCircle, PackageCheck, RotateCcw, ShieldCheck, Truck } from "lucide-react";
+import { Logo } from "@/components/ui/Logo";
+
+const COLUMNS = [
+  {
+    title: "Get to Know Us",
+    links: [
+      { label: "About Figure World", href: "/#about" },
+      { label: "Authenticity Guarantee", href: "/#guarantees" },
+      { label: "Studio Partners", href: "/products?sort=rating" },
+      { label: "New Arrivals", href: "/products?sort=newest" },
+    ],
+  },
+  {
+    title: "Shop with Us",
+    links: [
+      { label: "Scale Figures", href: "/products?category=anime-figures" },
+      { label: "Resin Statues", href: "/products?category=collectibles" },
+      { label: "Katanas & Replicas (18+)", href: "/products?category=katanas-replicas" },
+      { label: "Today's Deals", href: "/products?onSale=true" },
+    ],
+  },
+  {
+    title: "Your Account",
+    links: [
+      { label: "Your Account", href: "/profile" },
+      { label: "Your Orders", href: "/profile#orders" },
+      { label: "Your Addresses", href: "/profile#addresses" },
+      { label: "Your Cart", href: "/cart" },
+    ],
+  },
+  {
+    title: "Let Us Help You",
+    links: [
+      { label: "Shipping Rates & Policies", href: "/#delivery" },
+      { label: "Returns & Replacements", href: "/#guarantees" },
+      { label: "18+ Replica Policy", href: "/products?category=katanas-replicas" },
+      { label: "Help & Support", href: "mailto:support@figureworld.in" },
+    ],
+  },
+];
+
+const ASSURANCES = [
+  { icon: ShieldCheck, title: "100% Authentic", text: "Licensed imports only" },
+  { icon: PackageCheck, title: "Collector-safe packing", text: "Double-boxed & padded" },
+  { icon: Truck, title: "Pan-India delivery", text: "Tracked to your door" },
+  { icon: CreditCard, title: "UPI & Cash on Delivery", text: "No gateway fees" },
+  { icon: RotateCcw, title: "Damage protection", text: "Free replacement" },
+];
 
 export function Footer() {
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  const pathname = usePathname();
+  const year = new Date().getFullYear();
+
+  // Minimal Amazon-style footer on sign-in / registration pages
+  if (pathname?.startsWith("/auth")) {
+    return (
+      <footer className="mt-10 border-t border-line bg-surface-2 py-6 text-center text-xs text-muted">
+        <div className="mb-2 flex justify-center gap-6">
+          <Link href="/#guarantees" className="link">
+            Conditions of Use
+          </Link>
+          <Link href="/#guarantees" className="link">
+            Privacy Notice
+          </Link>
+          <a href="mailto:support@figureworld.in" className="link">
+            Help
+          </a>
+        </div>
+        <p>© {year} Figure World. All rights reserved.</p>
+      </footer>
+    );
+  }
 
   return (
-    <footer className="w-full bg-[#232F3E] text-white selection:bg-red-500 selection:text-white border-t border-slate-700">
-      {/* 1. AMAZON-STYLE "BACK TO TOP" BAR */}
+    <footer className="mt-auto w-full text-white">
       <button
         type="button"
-        onClick={scrollToTop}
-        className="w-full py-3.5 bg-[#37475A] hover:bg-[#485769] text-center text-xs font-semibold text-slate-200 hover:text-white transition flex items-center justify-center gap-1.5 cursor-pointer"
-        aria-label="Back to top of page"
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        className="w-full bg-[#2b2b31] py-4 text-center text-[13px] font-medium transition hover:bg-[#36363d] dark:bg-[#1c1c21] dark:hover:bg-[#25252b]"
       >
-        <span>Back to top</span>
-        <ChevronUp className="h-4 w-4" />
+        Back to top
       </button>
 
-      {/* 2. 4-COLUMN MEGA DIRECTORY LINKS */}
-      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-xs">
-          {/* Column 1: Get to Know Us */}
-          <div className="space-y-3">
-            <h3 className="font-bold text-sm text-white uppercase tracking-wider">
-              Get to Know Us
-            </h3>
-            <ul className="space-y-2 text-slate-300">
-              <li>
-                <Link href="/about" className="hover:underline hover:text-white">
-                  About Figure World
-                </Link>
-              </li>
-              <li>
-                <Link href="/products" className="hover:underline hover:text-white">
-                  Studio Partnerships
-                </Link>
-              </li>
-              <li>
-                <Link href="#guarantees" className="hover:underline hover:text-white">
-                  Authenticity Verification
-                </Link>
-              </li>
-              <li>
-                <Link href="/dashboard" className="hover:underline hover:text-white text-red-400 font-semibold">
-                  Admin Dashboard Portal
-                </Link>
-              </li>
-              <li>
-                <Link href="/api/health" className="hover:underline hover:text-white">
-                  System Health & Uptime
-                </Link>
-              </li>
-            </ul>
-          </div>
+      {/* Assurance strip */}
+      <div className="bg-brand dark:bg-[#7c0d11]">
+        <div className="no-scrollbar mx-auto flex max-w-[1500px] gap-6 overflow-x-auto px-4 py-4 sm:justify-between lg:px-8">
+          {ASSURANCES.map(({ icon: Icon, title, text }) => (
+            <div key={title} className="flex shrink-0 items-center gap-2.5">
+              <Icon className="h-7 w-7 shrink-0 opacity-90" strokeWidth={1.75} />
+              <div className="leading-tight">
+                <p className="text-sm font-bold">{title}</p>
+                <p className="text-xs text-white/80">{text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
-          {/* Column 2: Connect with Us */}
-          <div className="space-y-3">
-            <h3 className="font-bold text-sm text-white uppercase tracking-wider">
-              Connect with Us
-            </h3>
-            <ul className="space-y-2 text-slate-300">
-              <li className="flex items-center gap-1.5">
-                <MessageSquare className="h-3.5 w-3.5 text-emerald-400" />
-                <a href="https://whatsapp.com" target="_blank" rel="noopener noreferrer" className="hover:underline hover:text-white">
-                  WhatsApp Support Hotline
-                </a>
-              </li>
-              <li>
-                <a href="#instagram" className="hover:underline hover:text-white">
-                  Instagram Collectibles
-                </a>
-              </li>
-              <li>
-                <a href="#youtube" className="hover:underline hover:text-white">
-                  YouTube Figure Unboxings
-                </a>
-              </li>
-              <li>
-                <a href="#discord" className="hover:underline hover:text-white">
-                  Collector Discord Community
-                </a>
-              </li>
-              <li>
-                <a href="#community" className="hover:underline hover:text-white">
-                  Customer Testimonials
-                </a>
-              </li>
-            </ul>
-          </div>
+      <div className="bg-[#1d1d22] dark:bg-[#111114]">
+        <div className="mx-auto grid max-w-[1100px] grid-cols-2 gap-x-6 gap-y-8 px-6 py-12 md:grid-cols-4">
+          {COLUMNS.map((col) => (
+            <div key={col.title}>
+              <h3 className="mb-3 text-base font-bold">{col.title}</h3>
+              <ul className="space-y-2">
+                {col.links.map((l) => (
+                  <li key={l.label}>
+                    <Link href={l.href} className="text-sm text-white/75 transition hover:text-white hover:underline">
+                      {l.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
 
-          {/* Column 3: Payment & Shipping Products */}
-          <div className="space-y-3">
-            <h3 className="font-bold text-sm text-white uppercase tracking-wider">
-              Payment & Shipping
-            </h3>
-            <ul className="space-y-2 text-slate-300">
-              <li className="flex items-center gap-1.5">
-                <CreditCard className="h-3.5 w-3.5 text-red-400" />
-                <Link href="/checkout" className="hover:underline hover:text-white">
-                  Direct UPI QR Payment
-                </Link>
-              </li>
-              <li>
-                <Link href="/checkout" className="hover:underline hover:text-white">
-                  Cash on Delivery (COD)
-                </Link>
-              </li>
-              <li className="flex items-center gap-1.5">
-                <Truck className="h-3.5 w-3.5 text-blue-400" />
-                <Link href="/dashboard/shipments" className="hover:underline hover:text-white">
-                  Blue Dart & Delhivery Express
-                </Link>
-              </li>
-              <li>
-                <Link href="#guarantees" className="hover:underline hover:text-white">
-                  Collector Box Safe Guarantee
-                </Link>
-              </li>
-              <li>
-                <span className="text-amber-400 font-semibold">Flat ₹100 Flat-Rate Shipping</span>
-              </li>
-            </ul>
-          </div>
-
-          {/* Column 4: Let Us Help You */}
-          <div className="space-y-3">
-            <h3 className="font-bold text-sm text-white uppercase tracking-wider">
-              Let Us Help You
-            </h3>
-            <ul className="space-y-2 text-slate-300">
-              <li>
-                <Link href="/profile" className="hover:underline hover:text-white">
-                  Your Account & Orders
-                </Link>
-              </li>
-              <li>
-                <Link href="/dashboard/shipments" className="hover:underline hover:text-white">
-                  Track Your Package
-                </Link>
-              </li>
-              <li className="flex items-center gap-1.5">
-                <ShieldAlert className="h-3.5 w-3.5 text-rose-400" />
-                <Link href="#compliance" className="hover:underline hover:text-rose-300 font-semibold">
-                  18+ Katana Compliance Notice
-                </Link>
-              </li>
-              <li>
-                <Link href="/cart" className="hover:underline hover:text-white">
-                  Cart & Pre-Orders
-                </Link>
-              </li>
-              <li>
-                <Link href="/auth/login" className="hover:underline hover:text-white">
-                  Help Center & FAQs
-                </Link>
-              </li>
-            </ul>
+        <div className="border-t border-white/10">
+          <div className="mx-auto flex max-w-[1100px] flex-col items-center gap-4 px-6 py-8 sm:flex-row sm:justify-between">
+            <Logo />
+            <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
+              <span className="rounded border border-white/25 px-3 py-1.5 text-white/85">English</span>
+              <span className="rounded border border-white/25 px-3 py-1.5 text-white/85">₹ INR - Indian Rupee</span>
+              <span className="rounded border border-white/25 px-3 py-1.5 text-white/85">India</span>
+            </div>
+            <a
+              href="mailto:support@figureworld.in"
+              className="flex items-center gap-1.5 text-sm text-white/80 transition hover:text-white"
+            >
+              <MessageCircle className="h-4 w-4" /> support@figureworld.in
+            </a>
           </div>
         </div>
       </div>
 
-      {/* 3. AMAZON-STYLE MID-FOOTER (LOGO + REGIONAL SELECTORS) */}
-      <div className="border-t border-[#3a4553] bg-[#131A22] py-8">
-        <div className="mx-auto max-w-7xl px-4 flex flex-col sm:flex-row items-center justify-center gap-6 text-xs text-slate-300">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <img
-              src="/logo.jpg"
-              alt="Figure World Logo"
-              className="h-9 w-auto object-contain rounded bg-black"
-            />
+      <div className="bg-[#141417] py-6 text-center text-xs text-white/60 dark:bg-[#0a0a0c]">
+        <div className="mb-2 flex flex-wrap justify-center gap-x-6 gap-y-1">
+          <Link href="/#guarantees" className="hover:text-white hover:underline">
+            Conditions of Use & Sale
           </Link>
-
-          {/* Selector Pills */}
-          <div className="flex flex-wrap items-center justify-center gap-3 text-xs">
-            <div className="flex items-center gap-1.5 rounded border border-[#848688] px-3 py-1.5 hover:border-white transition">
-              <Globe className="h-3.5 w-3.5 text-slate-400" />
-              <span>English</span>
-            </div>
-
-            <div className="flex items-center gap-1.5 rounded border border-[#848688] px-3 py-1.5 hover:border-white transition font-mono">
-              <span className="text-red-400 font-bold">₹</span>
-              <span>INR - Indian Rupee</span>
-            </div>
-
-            <div className="flex items-center gap-1.5 rounded border border-[#848688] px-3 py-1.5 hover:border-white transition">
-              <span>🇮🇳</span>
-              <span>India</span>
-            </div>
-          </div>
+          <Link href="/#guarantees" className="hover:text-white hover:underline">
+            Privacy Notice
+          </Link>
+          <Link href="/products?category=katanas-replicas" className="hover:text-white hover:underline">
+            Age-Restricted Products Policy
+          </Link>
         </div>
-      </div>
-
-      {/* 4. AMAZON-STYLE BOTTOM COMPLIANCE & COPYRIGHT BAR */}
-      <div className="bg-[#131A22] border-t border-[#232F3E] py-6 text-[11px] text-slate-400 text-center space-y-2">
-        <div className="mx-auto max-w-5xl px-4">
-          <p className="leading-relaxed text-slate-400">
-            <span className="text-red-400 font-bold">18+ Age & Weapon Regulations Notice:</span> All swords, katanas, and ornamental blades displayed on Figure World are intended exclusively for adult collector display and cosmetic cosplay purposes. Blades are engineered with unsharpened safety edges. Mandatory age verification (18+) and geographic shipping eligibility are validated server-side.
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-4 pt-3 text-xs">
-            <Link href="/products" className="hover:underline hover:text-white">Conditions of Use & Sale</Link>
-            <Link href="#compliance" className="hover:underline hover:text-white">Privacy Notice</Link>
-            <Link href="#guarantees" className="hover:underline hover:text-white">Collector Authenticity</Link>
-            <Link href="/dashboard" className="hover:underline hover:text-white">Admin Operations</Link>
-          </div>
-          <p className="pt-2 text-slate-400">
-            © {new Date().getFullYear()}, Figure World, Inc. or its affiliates. All rights reserved. <span className="text-white font-semibold">COLLECT × DISPLAY × BEYOND</span>.
-          </p>
-        </div>
+        <p>© {year} Figure World. All characters and trademarks belong to their respective owners.</p>
       </div>
     </footer>
   );
