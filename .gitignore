@@ -42,4 +42,6 @@ next-env.d.ts
 
 # uploads
 /public/uploads/*
+# private generated files (invoice PDFs)
+/storage/
 !/public/uploads/.gitkeep

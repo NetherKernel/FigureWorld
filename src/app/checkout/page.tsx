@@ -195,7 +195,7 @@ function StepCard({
       ref={sectionRef}
       aria-labelledby={titleId}
       aria-current={status === "active" ? "step" : undefined}
-      className={`card scroll-mt-32 overflow-hidden ${status === "active" ? "border-line-strong" : ""}`}
+      className={`card scroll-mt-[130px] overflow-hidden ${status === "active" ? "border-line-strong" : ""}`}
     >
       <div className="flex items-start gap-3 p-4 sm:px-5">
         <span
@@ -318,7 +318,144 @@ function humanizeStatus(status: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : "—";
 }
 
-const CONTAINER = "mx-auto max-w-[1200px] px-3 sm:px-4 lg:px-6 py-4 sm:py-6";
+interface IAppliedCoupon {
+  code: string;
+  discount: number;
+  /** Cart contents the discount was previewed against */
+  cartKey: string;
+}
+
+type CouponPreview = { coupon: { code: string; discount: number }; error: null } | { coupon: null; error: string };
+
+/** Preview a promotion code against the cart. Never consumes the coupon. */
+async function previewCoupon(
+  code: string,
+  cartItems: Array<{ productId: string; quantity: number }>
+): Promise<CouponPreview> {
+  try {
+    const res = await fetch("/api/cart/calculate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: cartItems.map((it) => ({ productId: it.productId, quantity: it.quantity })),
+        couponCode: code,
+      }),
+    });
+    const data = await res.json();
+    if (data.success && data.data?.coupon) {
+      return { coupon: { code: data.data.coupon.code, discount: data.data.coupon.discount }, error: null };
+    }
+    return {
+      coupon: null,
+      error:
+        data.data?.couponError ||
+        data.error?.message ||
+        data.message ||
+        "This promotion code could not be applied.",
+    };
+  } catch {
+    return { coupon: null, error: "We couldn't check that code right now. Please try again." };
+  }
+}
+
+function CouponBox({
+  idSuffix,
+  value,
+  onValueChange,
+  onApply,
+  onRemove,
+  applying,
+  applied,
+  stale,
+  error,
+}: {
+  idSuffix: string;
+  value: string;
+  onValueChange: (v: string) => void;
+  onApply: () => void;
+  onRemove: () => void;
+  applying: boolean;
+  applied: IAppliedCoupon | null;
+  stale: boolean;
+  error: string | null;
+}) {
+  const inputId = `promo-code-${idSuffix}`;
+  const errorId = `${inputId}-error`;
+  return (
+    <div className="space-y-2">
+      {applied ? (
+        <div
+          className="flex items-start gap-2 rounded-lg border border-success/30 bg-success-soft p-2.5 text-sm"
+          aria-live="polite"
+        >
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+          <p className="min-w-0 flex-1 text-fg-2">
+            {stale ? (
+              <span className="text-muted">Checking {applied.code} against your updated cart…</span>
+            ) : (
+              <>
+                <span className="font-semibold text-success">{applied.code} applied</span> — you save{" "}
+                <span className="font-semibold text-fg">{formatPrice(applied.discount)}</span>
+              </>
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={onRemove}
+            className="link -my-2 min-h-10 shrink-0 px-1 text-sm"
+            aria-label={`Remove promotion code ${applied.code}`}
+          >
+            Remove
+          </button>
+        </div>
+      ) : (
+        <>
+          <label htmlFor={inputId} className="label">
+            Add a gift card or promotion code
+          </label>
+          <div className="flex gap-2">
+            <input
+              id={inputId}
+              type="text"
+              value={value}
+              onChange={(e) => onValueChange(e.target.value.toUpperCase())}
+              onKeyDown={(e) => {
+                // Enter applies the code instead of submitting the checkout form
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  onApply();
+                }
+              }}
+              placeholder="Enter code"
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              maxLength={40}
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? errorId : undefined}
+              className="input min-h-10 min-w-0 flex-1 font-mono uppercase"
+            />
+            <button
+              type="button"
+              onClick={onApply}
+              disabled={applying || !value.trim()}
+              className="btn btn-secondary btn-sm min-h-10 shrink-0"
+            >
+              {applying ? "Applying…" : "Apply"}
+            </button>
+          </div>
+        </>
+      )}
+      {error && (
+        <p id={errorId} role="alert" className="text-sm font-medium text-brand-ink">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const CONTAINER ="mx-auto max-w-[1200px] px-3 sm:px-4 lg:px-6 py-4 sm:py-6";
 
 export default function CheckoutPage() {
   const { items, summary, clearCart } = useCart();
@@ -364,6 +501,62 @@ export default function CheckoutPage() {
   const [stepError, setStepError] = useState<string | null>(null);
   const stepRefs = useRef<Record<number, HTMLElement | null>>({});
   const didMountRef = useRef(false);
+
+  // Promotion code (preview via /api/cart/calculate; consumed only when the order is placed)
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<IAppliedCoupon | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+
+  // Identifies the current cart contents — an applied coupon is only trusted for the cart it was previewed on
+  const cartKey = items.map((it) => `${it.productId}:${it.quantity}`).join("|");
+  const couponActive = appliedCoupon !== null && appliedCoupon.cartKey === cartKey;
+  const couponStale = appliedCoupon !== null && !couponActive;
+  const couponDiscount = couponActive ? appliedCoupon.discount : 0;
+  const orderTotal = Math.max(0, summary.subtotal - couponDiscount) + 100;
+
+  const applyCoupon = async () => {
+    const code = couponInput.trim().toUpperCase();
+    if (!code) {
+      setCouponError("Enter a promotion code.");
+      return;
+    }
+    setApplyingCoupon(true);
+    setCouponError(null);
+    const result = await previewCoupon(code, items);
+    if (result.coupon) {
+      setAppliedCoupon({ ...result.coupon, cartKey });
+      setCouponInput("");
+    } else {
+      setAppliedCoupon(null);
+      setCouponError(result.error);
+    }
+    setApplyingCoupon(false);
+  };
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponError(null);
+  };
+
+  // Re-validate an applied coupon whenever the cart contents change so the preview never goes stale
+  useEffect(() => {
+    if (!appliedCoupon || appliedCoupon.cartKey === cartKey || items.length === 0) return;
+    let cancelled = false;
+    const code = appliedCoupon.code;
+    previewCoupon(code, items).then((result) => {
+      if (cancelled) return;
+      if (result.coupon) {
+        setAppliedCoupon({ ...result.coupon, cartKey });
+      } else {
+        setAppliedCoupon(null);
+        setCouponError(`${code} was removed because your cart changed. ${result.error}`);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [appliedCoupon, cartKey, items]);
 
   // Auto-fill logged in user contact info (once per signed-in user).
   // Done during render rather than in an effect, per React's "adjusting state when a prop changes" pattern.
@@ -441,7 +634,7 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (paymentMethod === "COD" && summary.subtotal + 100 > 15000) {
+    if (paymentMethod === "COD" && orderTotal > 15000) {
       setError("Cash on Delivery is limited to orders up to ₹15,000. Please select Direct UPI payment.");
       return;
     }
@@ -467,6 +660,7 @@ export default function CheckoutPage() {
         paymentMethod,
         upiId: paymentMethod === "UPI" ? upiId.trim() : undefined,
         ageConfirmed,
+        couponCode: couponActive ? appliedCoupon.code : undefined,
       };
 
       const res = await fetch("/api/checkout", {
@@ -492,7 +686,7 @@ export default function CheckoutPage() {
   };
 
   // Step-aware form submit: steps 1 and 2 advance the checkout; step 3 places the order.
-  const codUnavailable = summary.subtotal + 100 > 15000;
+  const codUnavailable = orderTotal > 15000;
   const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     if (step === 1) {
       e.preventDefault();
@@ -1009,8 +1203,24 @@ export default function CheckoutPage() {
      Checkout
   =================================================================== */
   const itemCount = items.reduce((n, it) => n + it.quantity, 0);
-  const orderTotal = summary.subtotal + 100;
   const deliveryWindow = `${deliveryDate(3)} – ${deliveryDate(5)}`;
+
+  const renderCouponBox = (idSuffix: string) => (
+    <CouponBox
+      idSuffix={idSuffix}
+      value={couponInput}
+      onValueChange={(v) => {
+        setCouponInput(v);
+        setCouponError(null);
+      }}
+      onApply={applyCoupon}
+      onRemove={removeCoupon}
+      applying={applyingCoupon}
+      applied={appliedCoupon}
+      stale={couponStale}
+      error={couponError}
+    />
+  );
 
   const stepStatus = (n: 1 | 2 | 3): StepStatus => {
     if (n === step) return "active";
@@ -1430,6 +1640,9 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
+                {/* Promotion code — on smaller screens it lives here; on desktop it's in the Order Summary */}
+                <div className="rounded-lg border border-line p-3 sm:p-4 lg:hidden">{renderCouponBox("review")}</div>
+
                 {/* 18+ compliance gate */}
                 {summary.hasRestrictedItems && (
                   <div className="rounded-lg border border-brand/30 bg-brand-soft p-3 sm:p-4">
@@ -1468,7 +1681,7 @@ export default function CheckoutPage() {
                 <div className="flex flex-col gap-3 rounded-lg border border-line bg-surface-2 p-3 sm:flex-row sm:items-center sm:p-4">
                   <button
                     type="submit"
-                    disabled={submitting}
+                    disabled={submitting || couponStale}
                     className="btn btn-primary btn-lg w-full shrink-0 sm:w-auto"
                   >
                     {submitting ? "Placing your order…" : "Place your order"}
@@ -1486,12 +1699,12 @@ export default function CheckoutPage() {
           </div>
 
           {/* ---------------- Right: order summary ---------------- */}
-          <aside aria-label="Order summary" className="lg:sticky lg:top-24">
+          <aside aria-label="Order summary" className="lg:sticky lg:top-[116px]">
             <div className="card p-4 sm:p-5">
               <div className="hidden lg:block">
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || couponStale}
                   className="btn btn-primary btn-lg w-full"
                 >
                   {primaryLabel}
@@ -1504,12 +1717,20 @@ export default function CheckoutPage() {
               <dl className="mt-3 space-y-1.5 text-sm text-fg-2">
                 <SummaryRow label={`Items (${itemCount}):`} value={formatPrice(summary.subtotal)} />
                 <SummaryRow label="Delivery:" value={formatPrice(100)} />
+                {couponActive && (
+                  <SummaryRow
+                    label={`Promotion applied (${appliedCoupon.code}):`}
+                    value={<span className="font-semibold text-success">−{formatPrice(couponDiscount)}</span>}
+                  />
+                )}
                 <SummaryRow
                   label={<span className="text-lg font-bold text-brand-ink">Order Total:</span>}
                   value={<span className="text-lg font-bold text-brand-ink">{formatPrice(orderTotal)}</span>}
                   className="mt-2 border-t border-line pt-3"
                 />
               </dl>
+
+              <div className="mt-4 hidden border-t border-line pt-4 lg:block">{renderCouponBox("summary")}</div>
 
               {error && step === 3 && (
                 <Notice tone="error" icon={AlertTriangle} className="mt-3 hidden lg:flex">
@@ -1542,7 +1763,7 @@ export default function CheckoutPage() {
               <p className="text-xs text-muted">Order total</p>
               <p className="text-lg font-bold leading-tight text-brand-ink tabular-nums">{formatPrice(orderTotal)}</p>
             </div>
-            <button type="submit" disabled={submitting} className="btn btn-primary min-h-11 shrink-0 px-5">
+            <button type="submit" disabled={submitting || couponStale} className="btn btn-primary min-h-11 shrink-0 px-5">
               {primaryLabel}
             </button>
           </div>

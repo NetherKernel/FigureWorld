@@ -5,6 +5,7 @@ import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { validateRequestBody } from "@/lib/validation";
 import { evaluateCoupon } from "@/lib/coupon";
 import { AppError } from "@/lib/errors";
+import { calculateDeliveryFee } from "@/lib/delivery-rates";
 
 const calculateCartSchema = z.object({
   items: z.array(
@@ -17,6 +18,15 @@ const calculateCartSchema = z.object({
   ),
   // Optional coupon preview — validated but never consumed here
   couponCode: z.string().max(40).optional(),
+  shippingAddress: z
+    .object({
+      postalCode: z.string().optional(),
+      pinCode: z.string().optional(),
+      city: z.string().optional(),
+      state: z.string().optional(),
+      country: z.string().optional(),
+    })
+    .optional(),
 });
 
 export interface IVerifiedCartItem {
@@ -131,8 +141,16 @@ export async function POST(req: Request) {
     }
 
     // Authoritative Shipping Calculation:
-    // Flat ₹100 when cart has items (as specified in user example: Subtotal ₹4,998 + Shipping ₹100 = Total ₹5,098)
-    const shippingFee = subtotal > 0 ? 100 : 0;
+    const deliveryCalc = await calculateDeliveryFee({
+      subtotal,
+      address: data.shippingAddress || null,
+      items: verifiedItems.map((it) => ({
+        productId: it.productId,
+        isRestricted: it.isRestricted,
+        quantity: it.validQuantity,
+      })),
+    });
+    const shippingFee = deliveryCalc.fee;
 
     let discount = 0;
     let coupon: { code: string; discount: number } | null = null;
@@ -158,6 +176,9 @@ export async function POST(req: Request) {
       itemCount: verifiedItems.reduce((acc, it) => acc + it.validQuantity, 0),
       hasStockIssues: stockWarnings.length > 0,
       hasRestrictedItems: verifiedItems.some((it) => it.isRestricted && it.validQuantity > 0),
+      deliveryRule: deliveryCalc.ruleName,
+      estimatedDeliveryDays: deliveryCalc.estimatedDays,
+      isFreeShipping: deliveryCalc.isFreeShipping,
     };
 
     return apiSuccess(

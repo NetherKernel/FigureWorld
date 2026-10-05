@@ -24,13 +24,13 @@ import { Logo } from "@/components/ui/Logo";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { formatPrice } from "@/lib/format";
 import { STORE_CATEGORIES, StoreProduct, effectivePrice, primaryImage, productHref } from "@/lib/product-view";
-
-const PIN_STORAGE_KEY = "fw_delivery_pin";
+import { DELIVERY_PIN_KEY, useStoredValue } from "@/lib/use-stored-value";
 
 const SUBNAV_LINKS = [
   { label: "Today's Deals", href: "/products?onSale=true", highlight: true },
   { label: "Best Sellers", href: "/products?sort=rating" },
   { label: "New Arrivals", href: "/products?sort=newest" },
+  { label: "Action Figures", href: "/products?category=action-figures" },
   { label: "Scale Figures", href: "/products?category=anime-figures" },
   { label: "Statues", href: "/products?category=collectibles" },
   { label: "Katanas 18+", href: "/products?category=katanas-replicas" },
@@ -43,7 +43,15 @@ const SUBNAV_LINKS = [
 function buildSearchUrl(query: string, category: string) {
   const params = new URLSearchParams();
   if (query.trim()) params.set("search", query.trim());
-  if (category) params.set("category", category);
+  if (category) {
+    const parent = STORE_CATEGORIES.find((c) => c.subcategories?.some((s) => s.slug === category));
+    if (parent) {
+      params.set("category", parent.slug);
+      params.set("subcategory", category);
+    } else {
+      params.set("category", category);
+    }
+  }
   const qs = params.toString();
   return qs ? `/products?${qs}` : "/products";
 }
@@ -57,46 +65,77 @@ export function Header() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [locationOpen, setLocationOpen] = useState(false);
-  const [pin, setPin] = useState("");
+  const [pin, savePin] = useStoredValue(DELIVERY_PIN_KEY);
   const [subnavHidden, setSubnavHidden] = useState(false);
 
   const accountTimer = useRef<number | null>(null);
   const isStaff = user?.role === "ADMIN" || user?.role === "STAFF";
   const firstName = user?.name?.split(" ")[0];
 
-  // Restore saved delivery PIN
-  useEffect(() => {
-    try {
-      setPin(localStorage.getItem(PIN_STORAGE_KEY) || "");
-    } catch {
-      /* storage unavailable */
-    }
-  }, []);
-
   // Close menus on navigation
-  useEffect(() => {
+  const [lastPath, setLastPath] = useState(pathname);
+  if (pathname !== lastPath) {
+    setLastPath(pathname);
     setDrawerOpen(false);
     setAccountOpen(false);
-  }, [pathname]);
+  }
 
-  // Collapse the sub-navigation when scrolling down, reveal on scroll up
+  // Collapse the sub-navigation when scrolling down, reveal on scroll up.
+  // Showing/hiding the bar changes the sticky header's height. With the browser's default scroll
+  // anchoring, scrollY then shifts by that height to keep the content still — and this handler
+  // read that shift as the user reversing direction, toggling the bar back: an endless flicker.
+  // Switching anchoring off only around each toggle isn't reliable (Chrome applies a delayed
+  // catch-up shift when it comes back on), so it stays off while the header is mounted; the page
+  // content simply follows the header's bottom edge as the bar slides.
   useEffect(() => {
+    const SHOW_ABOVE = 60; // always visible this close to the top
+    const HIDE_BELOW = 160; // only collapse once clearly past the header
+    const MIN_TRAVEL = 24; // px scrolled in one direction before toggling (works for slow trackpad scrolls too)
+    const SETTLE_MS = 400; // > the 300ms max-height transition
+    const root = document.documentElement;
+    root.style.overflowAnchor = "none";
     let lastY = window.scrollY;
+    let turnY = lastY; // where the current scroll direction started
+    let lastDir = 0;
     let ticking = false;
+    let hidden = false;
+    let settleUntil = 0;
+
+    const apply = (next: boolean) => {
+      if (next === hidden) return;
+      hidden = next;
+      settleUntil = performance.now() + SETTLE_MS;
+      setSubnavHidden(next);
+    };
+
     const onScroll = () => {
       if (ticking) return;
       ticking = true;
       window.requestAnimationFrame(() => {
-        const y = window.scrollY;
-        if (y < 80) setSubnavHidden(false);
-        else if (y > lastY + 6) setSubnavHidden(true);
-        else if (y < lastY - 6) setSubnavHidden(false);
-        lastY = y;
         ticking = false;
+        const y = window.scrollY;
+        if (performance.now() < settleUntil) {
+          // Bar is still animating — don't start a new toggle yet
+          lastY = turnY = y;
+          return;
+        }
+        // Direction changed: measure travel from where it turned
+        const dir = Math.sign(y - lastY);
+        if (dir !== 0 && dir !== lastDir) {
+          lastDir = dir;
+          turnY = lastY;
+        }
+        if (y < SHOW_ABOVE) apply(false);
+        else if (y - turnY > MIN_TRAVEL && y > HIDE_BELOW) apply(true);
+        else if (turnY - y > MIN_TRAVEL) apply(false);
+        lastY = y;
       });
     };
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      root.style.removeProperty("overflow-anchor");
+    };
   }, []);
 
   // Lock page scroll while the drawer is open; close overlays with Escape
@@ -128,15 +167,6 @@ export function Header() {
     accountTimer.current = window.setTimeout(() => setAccountOpen(false), 160);
   };
 
-  const savePin = (value: string) => {
-    setPin(value);
-    try {
-      localStorage.setItem(PIN_STORAGE_KEY, value);
-    } catch {
-      /* storage unavailable */
-    }
-  };
-
   const handleLogout = async () => {
     setAccountOpen(false);
     setDrawerOpen(false);
@@ -150,7 +180,7 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full select-none text-white shadow-[0_2px_8px_rgba(0,0,0,0.18)]">
+      <header className="sticky top-0 z-40 w-full select-none print:hidden text-white shadow-[0_2px_8px_rgba(0,0,0,0.18)]">
         {/* ROW 1 — brand bar */}
         <div className="bg-nav dark:border-b dark:border-white/5">
           <div className="mx-auto flex h-[60px] max-w-[1500px] items-center gap-1 px-2 sm:gap-2 sm:px-3">
@@ -182,7 +212,7 @@ export function Header() {
             <SearchBar className="mx-1 hidden flex-1 md:flex lg:mx-2" onNavigate={(url) => router.push(url)} />
 
             <div className="ml-auto flex items-center gap-0.5 sm:gap-1 md:ml-0">
-              <ThemeToggle className="mx-1 sm:mx-2" />
+              <ThemeToggle className="mx-0.5 sm:mx-2" />
 
               {/* Account & Lists — hover flyout on desktop, tap on touch */}
               <div className="relative" onMouseEnter={openAccount} onMouseLeave={closeAccountSoon}>
@@ -202,7 +232,8 @@ export function Header() {
                     </span>
                   </span>
                   <span className="flex items-center gap-0.5 whitespace-nowrap text-sm font-semibold sm:hidden">
-                    {user ? firstName : "Sign in"} <ChevronRight className="h-3.5 w-3.5 opacity-70" />
+                    <span className="max-w-[72px] truncate max-[379px]:hidden">{user ? firstName : "Sign in"}</span>
+                    <ChevronRight className="h-3.5 w-3.5 opacity-70 max-[379px]:hidden" />
                     <UserIcon className="h-6 w-6" />
                   </span>
                 </button>
@@ -234,7 +265,7 @@ export function Header() {
                   <ShoppingCart className="h-8 w-8" strokeWidth={1.75} />
                   <span
                     key={summary.itemCount}
-                    className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 animate-pop-in items-center justify-center rounded-full bg-white px-1 text-xs font-extrabold text-brand-ink ring-2 ring-nav dark:bg-brand dark:text-white"
+                    className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 animate-pop-in items-center justify-center rounded-full bg-brand px-1 text-xs font-extrabold text-white ring-2 ring-nav"
                   >
                     {summary.itemCount}
                   </span>
@@ -275,7 +306,7 @@ export function Header() {
               </Link>
             ))}
             <span className="ml-auto hidden shrink-0 whitespace-nowrap pl-4 text-[13px] font-semibold xl:inline">
-              Use code <span className="rounded bg-white px-1.5 py-0.5 font-bold text-brand-ink dark:bg-brand dark:text-white">WELCOME10</span>{" "}
+              Use code <span className="rounded bg-brand px-1.5 py-0.5 font-bold text-white">WELCOME10</span>{" "}
               for 10% off your first order
             </span>
           </div>
@@ -343,20 +374,35 @@ function SearchBar({ className = "", onNavigate }: { className?: string; onNavig
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const categoryLabel = STORE_CATEGORIES.find((c) => c.slug === category)?.label || "All";
+  const getCategoryLabel = (slug: string) => {
+    if (!slug) return "All";
+    for (const c of STORE_CATEGORIES) {
+      if (c.slug === slug) return c.label;
+      const sub = c.subcategories?.find((s) => s.slug === slug);
+      if (sub) return sub.label;
+    }
+    return "All";
+  };
+
+  const categoryLabel = getCategoryLabel(category);
 
   // Debounced suggestion fetch
   useEffect(() => {
     const term = query.trim();
-    if (term.length < 2) {
-      setSuggestions([]);
-      return;
-    }
+    if (term.length < 2) return;
     const controller = new AbortController();
     const t = window.setTimeout(async () => {
       try {
         const params = new URLSearchParams({ search: term, limit: "6" });
-        if (category) params.set("category", category);
+        if (category) {
+          const parent = STORE_CATEGORIES.find((c) => c.subcategories?.some((s) => s.slug === category));
+          if (parent) {
+            params.set("category", parent.slug);
+            params.set("subcategory", category);
+          } else {
+            params.set("category", category);
+          }
+        }
         const res = await fetch(`/api/products?${params}`, { signal: controller.signal });
         const json = await res.json();
         setSuggestions(json?.success ? json.data.products : []);
@@ -384,8 +430,9 @@ function SearchBar({ className = "", onNavigate }: { className?: string; onNavig
       e?.preventDefault();
       setOpen(false);
       inputRef.current?.blur();
-      if (active >= 0 && suggestions[active]) {
-        onNavigate(productHref(suggestions[active]));
+      const picked = query.trim().length >= 2 ? suggestions[active] : undefined;
+      if (active >= 0 && picked) {
+        onNavigate(productHref(picked));
         return;
       }
       onNavigate(buildSearchUrl(query, category));
@@ -394,17 +441,18 @@ function SearchBar({ className = "", onNavigate }: { className?: string; onNavig
   );
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (!open || suggestions.length === 0) return;
+    if (visibleSuggestions.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActive((i) => (i + 1) % suggestions.length);
+      setActive((i) => (i + 1) % visibleSuggestions.length);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActive((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
+      setActive((i) => (i <= 0 ? visibleSuggestions.length - 1 : i - 1));
     }
   };
 
   const showDropdown = open && query.trim().length >= 2;
+  const visibleSuggestions = showDropdown ? suggestions : [];
 
   return (
     <div ref={wrapRef} className={`relative ${className}`}>
@@ -425,9 +473,14 @@ function SearchBar({ className = "", onNavigate }: { className?: string; onNavig
           >
             <option value="">All Departments</option>
             {STORE_CATEGORIES.map((c) => (
-              <option key={c.slug} value={c.slug}>
-                {c.label}
-              </option>
+              <optgroup key={c.slug} label={c.label}>
+                <option value={c.slug}>All {c.label}</option>
+                {c.subcategories?.map((sub) => (
+                  <option key={sub.slug} value={sub.slug}>
+                    {c.label} &gt; {sub.label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </label>
@@ -444,6 +497,8 @@ function SearchBar({ className = "", onNavigate }: { className?: string; onNavig
           onKeyDown={onKeyDown}
           placeholder="Search Figure World"
           aria-label="Search Figure World"
+          role="combobox"
+          aria-controls="search-suggestions"
           aria-autocomplete="list"
           aria-expanded={showDropdown}
           autoComplete="off"
@@ -453,7 +508,7 @@ function SearchBar({ className = "", onNavigate }: { className?: string; onNavig
         <button
           type="submit"
           aria-label="Go"
-          className="flex w-12 shrink-0 items-center justify-center bg-nav-3 text-white transition hover:brightness-110 dark:bg-brand dark:hover:bg-brand-hover"
+          className="flex w-12 shrink-0 items-center justify-center bg-brand text-white transition hover:bg-brand-hover"
         >
           <Search className="h-5 w-5" strokeWidth={2.5} />
         </button>
@@ -461,10 +516,11 @@ function SearchBar({ className = "", onNavigate }: { className?: string; onNavig
 
       {showDropdown && (
         <div
+          id="search-suggestions"
           role="listbox"
           className="absolute inset-x-0 top-full z-50 mt-1 animate-pop-in overflow-hidden rounded-lg border border-line bg-surface text-fg shadow-pop"
         >
-          {suggestions.map((p, i) => (
+          {visibleSuggestions.map((p, i) => (
             <button
               key={p._id}
               type="button"
@@ -590,6 +646,11 @@ function AccountFlyout({
                 Seller dashboard
               </Link>
             )}
+            {user?.role === "DEVELOPER" && (
+              <Link href="/developer" onClick={onClose} className={`${linkCls} font-semibold !text-brand-ink`}>
+                Developer console
+              </Link>
+            )}
             {user && (
               <button type="button" onClick={onLogout} className={`${linkCls} w-full text-left`}>
                 Sign out
@@ -621,6 +682,8 @@ function SideDrawer({
   cartCount: number;
   onLogout: () => void;
 }) {
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+
   const row =
     "flex items-center justify-between rounded-md px-5 py-3 text-sm text-fg transition hover:bg-surface-3";
 
@@ -677,21 +740,107 @@ function SideDrawer({
           </DrawerSection>
 
           <DrawerSection title="Shop by Category">
-            {STORE_CATEGORIES.map((c) => (
-              <Link
-                key={c.slug}
-                href={`/products?category=${c.slug}`}
-                onClick={onClose}
-                className={row}
-                tabIndex={open ? 0 : -1}
-              >
-                <span className="flex items-center gap-2">
-                  {c.label}
-                  {"restricted" in c && c.restricted && <span className="chip chip-brand">18+</span>}
-                </span>
-                <ChevronRight className="h-4 w-4 text-muted" />
-              </Link>
-            ))}
+            {STORE_CATEGORIES.map((c) => {
+              const hasSub = (c.subcategories?.length ?? 0) > 0;
+              const isExpanded = expandedCategory === c.slug;
+
+              return (
+                <div key={c.slug} className="overflow-hidden">
+                  <div className="flex items-center justify-between rounded-md px-5 py-2.5 text-sm text-fg transition hover:bg-surface-3 group">
+                    <Link
+                      href={`/products?category=${c.slug}`}
+                      onClick={onClose}
+                      className="flex-1 flex items-center gap-2 group-hover:text-brand-ink transition"
+                      tabIndex={open ? 0 : -1}
+                    >
+                      <span className="font-medium">{c.label}</span>
+                      {"restricted" in c && c.restricted && <span className="chip chip-brand">18+</span>}
+                    </Link>
+                    {hasSub ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedCategory(isExpanded ? null : c.slug);
+                        }}
+                        aria-label={`Toggle ${c.label} subcategories`}
+                        className="p-1 -mr-2 rounded-md text-muted hover:text-fg hover:bg-surface-2 transition"
+                        tabIndex={open ? 0 : -1}
+                      >
+                        <ChevronRight
+                          className={`h-4 w-4 transition-transform duration-200 ${
+                            isExpanded ? "rotate-90 text-brand-ink" : ""
+                          }`}
+                        />
+                      </button>
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted opacity-40" />
+                    )}
+                  </div>
+
+                  {hasSub && isExpanded && (
+                    <div className="bg-surface-2/60 border-y border-line/40 pl-8 pr-4 py-1.5 space-y-0.5">
+                      <Link
+                        href={`/products?category=${c.slug}`}
+                        onClick={onClose}
+                        className="block py-1.5 px-2 text-xs font-bold text-brand-ink hover:underline"
+                        tabIndex={open ? 0 : -1}
+                      >
+                        All {c.label} &rarr;
+                      </Link>
+                      {c.subcategories?.map((sub) => (
+                        <Link
+                          key={sub.slug}
+                          href={`/products?category=${c.slug}&subcategory=${sub.slug}`}
+                          onClick={onClose}
+                          className="block py-1.5 px-2 text-xs text-fg-2 hover:text-brand-ink hover:bg-surface-3 rounded transition"
+                          tabIndex={open ? 0 : -1}
+                        >
+                          {sub.label}
+                          {"restricted" in sub && sub.restricted && (
+                            <span className="ml-1.5 text-[10px] text-amber-600 font-bold">18+</span>
+                          )}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </DrawerSection>
+
+          <DrawerSection title="Anime Franchises & Subcategories">
+            <div className="px-5 py-2">
+              <p className="text-[11px] text-muted mb-2.5">
+                Popular anime universes & collections:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { label: "Dragon Ball", slug: "dragon-ball" },
+                  { label: "Jujutsu Kaisen", slug: "jujutsu-kaisen" },
+                  { label: "Marvel", slug: "marvel" },
+                  { label: "DC Comics", slug: "dc-comics" },
+                  { label: "One Piece", slug: "one-piece" },
+                  { label: "Naruto", slug: "naruto" },
+                  { label: "Demon Slayer", slug: "demon-slayer" },
+                  { label: "Attack on Titan", slug: "attack-on-titan" },
+                  { label: "Bleach", slug: "bleach" },
+                  { label: "Chainsaw Man", slug: "chainsaw-man" },
+                  { label: "Solo Leveling", slug: "solo-leveling" },
+                  { label: "Pokemon", slug: "pokemon" },
+                ].map((f) => (
+                  <Link
+                    key={f.slug}
+                    href={`/products?category=action-figures&subcategory=${f.slug}`}
+                    onClick={onClose}
+                    tabIndex={open ? 0 : -1}
+                    className="inline-flex items-center px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-surface-2 hover:bg-brand-soft text-fg-2 hover:text-brand-ink border border-line hover:border-brand/40 transition active:scale-95"
+                  >
+                    {f.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
           </DrawerSection>
 
           <DrawerSection title="Help & Settings">
@@ -731,6 +880,13 @@ function SideDrawer({
               <Link href="/dashboard" onClick={onClose} className={`${row} font-semibold text-brand-ink`} tabIndex={open ? 0 : -1}>
                 <span className="flex items-center gap-2">
                   <LayoutDashboard className="h-4 w-4" /> Seller Dashboard
+                </span>
+              </Link>
+            )}
+            {user?.role === "DEVELOPER" && (
+              <Link href="/developer" onClick={onClose} className={`${row} font-semibold text-brand-ink`} tabIndex={open ? 0 : -1}>
+                <span className="flex items-center gap-2">
+                  <LayoutDashboard className="h-4 w-4" /> Developer Console
                 </span>
               </Link>
             )}

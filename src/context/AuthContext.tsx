@@ -7,7 +7,7 @@ export interface UserSession {
   id: string;
   name: string;
   email: string;
-  role: "CUSTOMER" | "ADMIN" | "STAFF";
+  role: "CUSTOMER" | "ADMIN" | "STAFF" | "DEVELOPER";
   phone?: string;
   avatar?: string;
 }
@@ -15,7 +15,7 @@ export interface UserSession {
 interface AuthContextType {
   user: UserSession | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; user?: UserSession }>;
   register: (name: string, email: string, password: string, phone?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -64,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setUser(json.data.user);
-      return { success: true };
+      return { success: true, user: json.data.user as UserSession };
     } catch {
       return { success: false, error: "Network error occurred during sign in" };
     }

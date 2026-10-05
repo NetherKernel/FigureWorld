@@ -83,7 +83,7 @@ export interface IInvoice extends Document {
   gstDetails: IInvoiceGstDetails;
   items: IInvoiceItem[];
   pricing: IInvoicePricing;
-  paymentMethod: "UPI" | "COD";
+  paymentMethod: "UPI" | "COD" | "CASH" | "CARD";
   paymentStatus: string;
   paymentRef?: string;
   pdfUrl: string;
@@ -231,7 +231,7 @@ const InvoiceSchema = new Schema<IInvoice>(
     },
     paymentMethod: {
       type: String,
-      enum: ["UPI", "COD"],
+      enum: ["UPI", "COD", "CASH", "CARD"],
       required: true,
     },
     paymentStatus: {
@@ -266,6 +266,9 @@ const InvoiceSchema = new Schema<IInvoice>(
     timestamps: true,
   }
 );
+
+// Dev hot reload re-runs this file: drop the cached model so schema edits apply without a server restart
+if (process.env.NODE_ENV !== "production" && mongoose.models.Invoice) mongoose.deleteModel("Invoice");
 
 const InvoiceModel: Model<IInvoice> =
   mongoose.models.Invoice || mongoose.model<IInvoice>("Invoice", InvoiceSchema);

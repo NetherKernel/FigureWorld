@@ -24,6 +24,7 @@ import { Price } from "@/components/ui/Price";
 import { StarRating } from "@/components/ui/StarRating";
 import { useCart } from "@/context/CartContext";
 import { formatPrice } from "@/lib/format";
+import { DELIVERY_PIN_KEY, useStoredValue } from "@/lib/use-stored-value";
 import {
   FALLBACK_PRODUCT_IMAGE,
   StoreProduct,
@@ -64,15 +65,7 @@ export default function ProductDetailPage() {
   const [busy, setBusy] = useState<"cart" | "buy" | null>(null);
   const [added, setAdded] = useState(false);
   const [shareMsg, setShareMsg] = useState("");
-  const [pin, setPin] = useState("");
-
-  useEffect(() => {
-    try {
-      setPin(localStorage.getItem("fw_delivery_pin") || "");
-    } catch {
-      /* storage unavailable */
-    }
-  }, []);
+  const [pin] = useStoredValue(DELIVERY_PIN_KEY);
 
   useEffect(() => {
     if (!idOrSlug) return;
@@ -253,9 +246,9 @@ export default function ProductDetailPage() {
         </ol>
       </nav>
 
-      <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-6 px-3 pt-4 sm:px-4 md:grid-cols-2 lg:grid-cols-[minmax(0,5fr)_minmax(0,5fr)_minmax(260px,3fr)] lg:gap-8">
+      <div className="mx-auto grid max-w-[1500px] grid-cols-1 gap-x-8 gap-y-4 px-3 pt-4 [grid-template-areas:'head'_'gallery'_'buy'_'body'] sm:px-4 md:grid-cols-2 md:[grid-template-areas:'gallery_head'_'gallery_buy'_'body_body'] lg:grid-cols-[minmax(0,5fr)_minmax(0,5fr)_minmax(260px,3fr)] lg:grid-rows-[auto_1fr] lg:[grid-template-areas:'gallery_head_buy'_'gallery_body_buy']">
         {/* ---------- Gallery ---------- */}
-        <div className="md:sticky md:top-[116px] md:self-start">
+        <div className="[grid-area:gallery] md:sticky md:top-[116px] md:self-start">
           <Gallery
             images={imagesList}
             active={activeImageIndex}
@@ -279,8 +272,8 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
-        {/* ---------- Details ---------- */}
-        <div className="min-w-0">
+        {/* ---------- Title ---------- */}
+        <div className="min-w-0 [grid-area:head]">
           <h1 className="text-xl font-medium leading-snug text-fg sm:text-2xl">{product.name}</h1>
           {product.brand && (
             <Link href={`/products?search=${encodeURIComponent(product.brand)}`} className="link mt-1 inline-block text-sm">
@@ -294,12 +287,17 @@ export default function ProductDetailPage() {
             </div>
           )}
           {product.isFeatured && (
-            <span className="mt-2 inline-flex items-center gap-1 rounded-sm bg-fg px-2 py-0.5 text-xs font-bold text-bg">
+            <span className="mt-2 flex w-fit items-center gap-1 rounded-sm bg-fg px-2 py-0.5 text-xs font-bold text-bg">
               Figure World&apos;s <span className="text-brand">Choice</span>
             </span>
           )}
+        </div>
 
-          <hr className="my-3 border-line" />
+        {/* ---------- Details ---------- */}
+        <div className="min-w-0 [grid-area:body]">
+          {/* Price is shown in the buy box on smaller screens */}
+          <div className="hidden lg:block">
+          <hr className="mb-3 border-line" />
 
           {off > 0 && <span className="rounded-sm bg-brand px-2 py-1 text-xs font-bold text-white">Limited time deal</span>}
           <div className="mt-2 flex flex-wrap items-start gap-2">
@@ -313,6 +311,7 @@ export default function ProductDetailPage() {
           )}
           <p className="mt-1 text-sm text-fg">Inclusive of all taxes</p>
           {product.status === "preorder" && <p className="mt-2 chip chip-soft">Pre-order — ships on release</p>}
+          </div>
 
           {/* Offer/feature icons */}
           <div className="no-scrollbar mt-4 flex gap-4 overflow-x-auto border-y border-line py-4">
@@ -373,9 +372,22 @@ export default function ProductDetailPage() {
         </div>
 
         {/* ---------- Buy box ---------- */}
-        <aside className="md:col-span-2 lg:col-span-1">
+        <aside className="[grid-area:buy]">
           <div className="rounded-xl border border-line p-4 shadow-card lg:sticky lg:top-[116px]">
-            <Price amount={price} size="lg" />
+            {off > 0 && (
+              <span className="mb-2 inline-block rounded-sm bg-brand px-2 py-1 text-xs font-bold text-white lg:hidden">
+                Limited time deal
+              </span>
+            )}
+            <div className="flex flex-wrap items-start gap-2">
+              {off > 0 && <span className="text-2xl font-light text-brand-ink lg:hidden">-{off}%</span>}
+              <Price amount={price} size="lg" />
+            </div>
+            {hasDiscount(product) && (
+              <p className="mt-1 text-sm text-muted lg:hidden">
+                M.R.P.: <span className="line-through">{formatPrice(product.price)}</span> · Inclusive of all taxes
+              </p>
+            )}
             <p className="mt-2 text-sm text-fg">
               {formatPrice(100)} delivery <span className="font-bold">{deliveryDate(etaDays)}</span>.
             </p>

@@ -1,7 +1,6 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { flushSync } from "react-dom";
+import React, { createContext, useCallback, useContext, useSyncExternalStore } from "react";
 
 type Theme = "light" | "dark";
 
@@ -37,13 +36,19 @@ type ViewTransitionDocument = Document & {
   startViewTransition?: (cb: () => void) => { ready: Promise<void> };
 };
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("light");
+/** The <html> class (set by the inline script before paint) is the single source of truth. */
+function subscribeToThemeClass(callback: () => void) {
+  const observer = new MutationObserver(callback);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+  return () => observer.disconnect();
+}
 
-  // Sync React state with the class the inline script already applied
-  useEffect(() => {
-    setThemeState(document.documentElement.classList.contains("dark") ? "dark" : "light");
-  }, []);
+function readThemeClass(): Theme {
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+}
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const theme = useSyncExternalStore<Theme>(subscribeToThemeClass, readThemeClass, () => "light");
 
   const setTheme = useCallback((next: Theme, origin?: ThemeOrigin) => {
     try {
@@ -55,10 +60,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const doc = document as ViewTransitionDocument;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    const commit = () => {
-      flushSync(() => setThemeState(next));
-      applyThemeClass(next);
-    };
+    const commit = () => applyThemeClass(next);
 
     // Cool path: circular ink-spread reveal from the toggle button
     if (doc.startViewTransition && !reduceMotion) {

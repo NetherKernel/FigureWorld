@@ -61,7 +61,7 @@ function validateImageMagicBytes(buffer: Buffer): boolean {
 export async function POST(req: Request) {
   try {
     // Admin or Staff role required
-    const user = await requireRole(req, "ADMIN", "STAFF");
+    const user = await requireRole(req, "ADMIN", "STAFF", "DEVELOPER");
 
     const formData = await req.formData();
     const file = formData.get("file") as File | null;

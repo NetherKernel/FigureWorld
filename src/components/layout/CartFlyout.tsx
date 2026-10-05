@@ -35,7 +35,7 @@ export function CartFlyout() {
       role="status"
       aria-live="polite"
       key={lastAdded.at}
-      className="fixed inset-x-3 bottom-3 z-[60] animate-fade-up sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-[124px] sm:w-[380px] sm:animate-slide-in-right"
+      className="fixed inset-x-3 bottom-3 z-[60] print:hidden animate-fade-up sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-[124px] sm:w-[380px] sm:animate-slide-in-right"
     >
       <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-pop">
         <div className="flex items-start gap-3 p-4">

@@ -17,7 +17,6 @@ import {
   EyeOff,
   ShieldAlert,
   ArrowLeft,
-  ExternalLink,
   RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -29,6 +28,7 @@ interface IProduct {
   sku: string;
   brand?: string;
   category: { _id: string; name: string; slug: string } | string;
+  subcategory?: { _id: string; name: string; slug: string } | string;
   price: number;
   discountPrice?: number;
   stock: number;
@@ -417,9 +417,16 @@ export default function AdminProductsPage() {
 
                       {/* Category */}
                       <td className="px-4 py-3">
-                        <span className="inline-flex items-center rounded-lg bg-surface-3 px-2.5 py-1 text-[11px] font-medium text-fg-2">
-                          {getCategoryName(p.category)}
-                        </span>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex items-center rounded-lg bg-surface-3 px-2 py-0.5 text-[11px] font-semibold text-fg-2">
+                            {getCategoryName(p.category)}
+                          </span>
+                          {p.subcategory && (
+                            <span className="inline-flex items-center text-[10px] text-muted font-medium">
+                              › {getCategoryName(p.subcategory)}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Price & Discount */}
@@ -520,16 +527,6 @@ export default function AdminProductsPage() {
                             className="rounded-lg border border-line bg-surface-2 p-1.5 text-fg-2 hover:bg-surface-3 hover:text-brand-hover"
                           >
                             <Edit className="h-3.5 w-3.5" />
-                          </Link>
-
-                          {/* View in Storefront */}
-                          <Link
-                            href={`/products/${p.slug || p._id}`}
-                            target="_blank"
-                            title="View Storefront Page"
-                            className="rounded-lg border border-line bg-surface-2 p-1.5 text-fg-2 hover:bg-surface-3 hover:text-brand-hover"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
                           </Link>
 
                           {/* Delete Product (Admin only) */}

@@ -58,7 +58,7 @@ export async function GET(
       pricing: invoice.pricing,
       paymentMethod: invoice.paymentMethod,
       paymentStatus: invoice.paymentStatus,
-      pdfUrl: invoice.pdfUrl,
+      pdfUrl: `/api/invoices/${invoice.invoiceNumber}/pdf`,
       sentToCustomer: invoice.sentToCustomer,
       sentAt: invoice.sentAt,
     });
@@ -99,7 +99,7 @@ export async function POST(
         pricing: invoice.pricing,
         paymentMethod: invoice.paymentMethod,
         paymentStatus: invoice.paymentStatus,
-        pdfUrl: invoice.pdfUrl,
+        pdfUrl: `/api/invoices/${invoice.invoiceNumber}/pdf`,
         sentToCustomer: invoice.sentToCustomer,
         sentAt: invoice.sentAt,
       },

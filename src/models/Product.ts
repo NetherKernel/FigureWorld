@@ -35,6 +35,7 @@ export interface IProduct extends Document {
   stock: number;
   lowStockThreshold: number;
   category: mongoose.Types.ObjectId;
+  subcategory?: mongoose.Types.ObjectId;
   brand?: string;
   series?: string;
   sku: string;
@@ -145,6 +146,12 @@ const ProductSchema = new Schema<IProduct>(
       required: [true, "Product category is required"],
       index: true,
     },
+    subcategory: {
+      type: Schema.Types.ObjectId,
+      ref: "Category",
+      default: null,
+      index: true,
+    },
     brand: {
       type: String,
       trim: true,
@@ -227,6 +234,7 @@ const ProductSchema = new Schema<IProduct>(
   },
   {
     timestamps: true,
+    strictPopulate: false,
   }
 );
 
@@ -238,6 +246,10 @@ ProductSchema.pre("save", function () {
     this.name = this.title;
   }
 });
+
+if (mongoose.models.Product && !mongoose.models.Product.schema.paths.subcategory) {
+  delete (mongoose.models as any).Product;
+}
 
 const ProductModel: Model<IProduct> =
   mongoose.models.Product || mongoose.model<IProduct>("Product", ProductSchema);

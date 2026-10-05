@@ -28,6 +28,7 @@ const createProductSchema = z.object({
   discountPrice: z.number().min(0).optional(),
   stock: z.number().int().min(0).default(0),
   category: z.string().min(1, "Category ID is required"),
+  subcategory: z.string().optional(),
   brand: z.string().optional(),
   sku: z.string().min(2, "SKU is required").toUpperCase().trim(),
   weight: z.number().min(0).default(500),
@@ -46,6 +47,7 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const category = searchParams.get("category");
+    const subcategory = searchParams.get("subcategory");
     const brand = searchParams.get("brand");
     const search = searchParams.get("search");
     const status = searchParams.get("status");
@@ -55,7 +57,7 @@ export async function GET(req: Request) {
     const maxPrice = searchParams.get("maxPrice");
     const sort = searchParams.get("sort") || "newest";
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-    const limit = Math.min(50, Math.max(1, parseInt(searchParams.get("limit") || "20", 10)));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10)));
 
     const filter: Record<string, unknown> = {};
 
@@ -68,21 +70,57 @@ export async function GET(req: Request) {
 
     // Category accepts either an ObjectId or a category slug (storefront links use slugs)
     if (category) {
+      let categoryDoc: any = null;
       if (/^[0-9a-fA-F]{24}$/.test(category)) {
-        filter.category = category;
+        categoryDoc = await Category.findById(category);
       } else {
-        const categoryDoc = await Category.findOne({ slug: category.toLowerCase() });
-        if (!categoryDoc) {
-          return apiSuccess({ products: [] }, "Products retrieved successfully", 200, {
-            page,
-            limit,
-            total: 0,
-            totalPages: 0,
-          });
-        }
-        filter.category = categoryDoc._id;
+        categoryDoc = await Category.findOne({ slug: category.toLowerCase().trim() });
+      }
+
+      if (!categoryDoc) {
+        return apiSuccess({ products: [] }, "Products retrieved successfully", 200, {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0,
+        });
+      }
+
+      // Check if this category has child subcategories (e.g. Action Figures -> Dragon Ball, Marvel, etc.)
+      const subcategories = await Category.find({ parentCategory: categoryDoc._id }).select("_id");
+      if (subcategories.length > 0) {
+        const subIds = subcategories.map((s) => s._id);
+        filter.$or = [
+          { category: categoryDoc._id },
+          { category: { $in: subIds } },
+          { subcategory: { $in: subIds } },
+        ];
+      } else {
+        filter.$or = [{ category: categoryDoc._id }, { subcategory: categoryDoc._id }];
       }
     }
+
+    // Direct Subcategory filter (e.g. ?subcategory=dragon-ball)
+    if (subcategory) {
+      let subDoc: any = null;
+      if (/^[0-9a-fA-F]{24}$/.test(subcategory)) {
+        subDoc = await Category.findById(subcategory);
+      } else {
+        subDoc = await Category.findOne({ slug: subcategory.toLowerCase().trim() });
+      }
+
+      if (!subDoc) {
+        return apiSuccess({ products: [] }, "Products retrieved successfully", 200, {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0,
+        });
+      }
+
+      filter.$or = [{ subcategory: subDoc._id }, { category: subDoc._id }];
+    }
+
     if (brand) filter.brand = brand;
     if (isFeatured === "true") filter.isFeatured = true;
     if (isRestricted === "true") filter.isRestricted = true;
@@ -92,14 +130,16 @@ export async function GET(req: Request) {
     const minRating = parseFloat(searchParams.get("minRating") || "");
     if (!Number.isNaN(minRating) && minRating > 0) filter.ratingAverage = { $gte: minRating };
 
-
     let sortOption: any = { createdAt: -1 };
     if (sort === "price-asc") sortOption = { price: 1 };
     else if (sort === "price-desc") sortOption = { price: -1 };
     else if (sort === "name") sortOption = { name: 1 };
     else if (sort === "rating") sortOption = { ratingAverage: -1 };
 
-    let products = await Product.find(filter).sort(sortOption);
+    let products = await Product.find(filter)
+      .sort(sortOption)
+      .populate({ path: "category", select: "name slug isRestricted complianceRequirements", strictPopulate: false })
+      .populate({ path: "subcategory", select: "name slug parentCategory", strictPopulate: false });
 
     // If search term provided, filter in memory or regex
     if (search && search.trim()) {

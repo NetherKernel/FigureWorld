@@ -8,6 +8,10 @@ export interface IOrderPricing {
   shippingFee: number;
   grandTotal: number;
   currency: string;
+  isCustomShippingFee?: boolean;
+  shippingFeeAdjustmentReason?: string;
+  originalShippingFee?: number;
+  deliveryPartnerType?: string;
 }
 
 export interface IUpiPaymentDetails {
@@ -111,7 +115,7 @@ export interface IOrder extends Document {
   pricing: IOrderPricing;
   shippingAddress: mongoose.Types.ObjectId;
   billingAddress?: mongoose.Types.ObjectId;
-  paymentMethod: "UPI" | "COD";
+  paymentMethod: "UPI" | "COD" | "CASH" | "CARD";
   paymentStatus: PaymentStatus;
   orderStatus: OrderStatus;
   paymentDetails?: IUpiPaymentDetails;
@@ -125,6 +129,12 @@ export interface IOrder extends Document {
   complianceDetails?: Record<string, unknown>;
   couponCode?: string;
   notes?: string;
+  /** Website order, or a sale rung up at the physical store counter */
+  channel?: "ONLINE" | "IN_STORE";
+  /** Staff member who made an in-store sale */
+  servedBy?: { userId: string; name: string; email: string; role: string };
+  deliveryPartnerType?: string;
+  deliveryAdjustmentNotes?: string;
   placedAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -138,6 +148,10 @@ const OrderPricingSchema = new Schema<IOrderPricing>(
     shippingFee: { type: Number, default: 0, min: 0 },
     grandTotal: { type: Number, required: true, min: 0 },
     currency: { type: String, default: "INR" },
+    isCustomShippingFee: { type: Boolean, default: false },
+    shippingFeeAdjustmentReason: { type: String, trim: true },
+    originalShippingFee: { type: Number, min: 0 },
+    deliveryPartnerType: { type: String, trim: true },
   },
   { _id: false }
 );
@@ -264,8 +278,17 @@ const OrderSchema = new Schema<IOrder>(
     },
     paymentMethod: {
       type: String,
-      enum: ["UPI", "COD"],
+      enum: ["UPI", "COD", "CASH", "CARD"],
       default: "UPI",
+    },
+    channel: {
+      type: String,
+      enum: ["ONLINE", "IN_STORE"],
+      default: "ONLINE",
+      index: true,
+    },
+    servedBy: {
+      type: Schema.Types.Mixed,
     },
     paymentStatus: {
       type: String,
@@ -363,6 +386,9 @@ const OrderSchema = new Schema<IOrder>(
     timestamps: true,
   }
 );
+
+// Dev hot reload re-runs this file: drop the cached model so schema edits apply without a server restart
+if (process.env.NODE_ENV !== "production" && mongoose.models.Order) mongoose.deleteModel("Order");
 
 const OrderModel: Model<IOrder> =
   mongoose.models.Order || mongoose.model<IOrder>("Order", OrderSchema);

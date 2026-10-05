@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 import { getModelProxy } from "@/lib/db";
 
-export type UserRole = "CUSTOMER" | "ADMIN" | "STAFF";
+export type UserRole = "CUSTOMER" | "ADMIN" | "STAFF" | "DEVELOPER";
 
 export interface IUser extends Document {
   name: string;
@@ -41,7 +41,7 @@ const UserSchema = new Schema<IUser>(
     },
     role: {
       type: String,
-      enum: ["CUSTOMER", "ADMIN", "STAFF"],
+      enum: ["CUSTOMER", "ADMIN", "STAFF", "DEVELOPER"],
       default: "CUSTOMER",
       index: true,
     },

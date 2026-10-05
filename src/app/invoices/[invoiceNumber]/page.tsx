@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Printer, Download, ArrowLeft, FileText, Copy, Check, Lock } from "lucide-react";
-import { formatPrice } from "@/lib/format";
-import { Logo } from "@/components/ui/Logo";
+import QRCode from "qrcode";
+import { ArrowLeft, Check, Copy, Download, FileText, Lock, Printer } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { amountInWords } from "@/lib/amount-in-words";
+import { backofficeHome } from "@/lib/backoffice";
 
 interface IInvoiceData {
   invoiceNumber: string;
@@ -76,48 +78,83 @@ interface IInvoiceData {
 
 /**
  * When printing, pin every design token to its light value so the invoice
- * always comes out dark-on-white, even if the shopper is browsing in dark mode.
+ * always comes out dark-on-white, even if the viewer is browsing in dark mode.
  */
 const PRINT_LIGHT_TOKENS =
-  "print:[--bg:#ffffff] print:[--surface:#ffffff] print:[--surface-2:#f7f7f8] print:[--surface-3:#ececee] " +
-  "print:[--line:#d4d4d8] print:[--line-strong:#a1a1aa] print:[--fg:#000000] print:[--fg-2:#27272a] " +
+  "print:[--bg:#ffffff] print:[--surface:#ffffff] print:[--surface-2:#f6f6f8] print:[--surface-3:#ececef] " +
+  "print:[--line:#d9d9de] print:[--line-strong:#a1a1aa] print:[--fg:#000000] print:[--fg-2:#27272a] " +
   "print:[--muted:#52525b] print:[--brand:#d7141a] print:[--brand-ink:#b3121a] print:[--brand-soft:#fdeced] " +
   "print:[--success:#067d62] print:[--success-soft:#e7f6f1] print:[--warn:#b45309] print:[--warn-soft:#fff6e5]";
 
+const PAYMENT_LABEL: Record<string, string> = { UPI: "UPI", COD: "Cash on Delivery", CASH: "Cash", CARD: "Card" };
+const WALK_IN_EMAIL = "walk-in@instore.invalid";
+
+/** Invoices always show paise: ₹2,499.00 */
+const INR = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (n: number) => INR.format(Number.isFinite(n) ? n : 0);
+
 function isPaidStatus(status: string) {
-  return /paid|success|captured|completed|verified/i.test(status);
+  return /^(paid|success|captured|completed|verified)$/i.test(status);
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="mb-2 flex items-center gap-2 font-sans text-[10px] font-bold uppercase tracking-[0.18em] text-brand-ink">
+      <span className="slash !h-3 !w-1.5" aria-hidden="true" />
+      {children}
+    </h2>
+  );
 }
 
 export default function InvoiceViewPage() {
   const params = useParams();
   const rawInvoiceNumber = params.invoiceNumber as string;
+  const { user } = useAuth();
 
   const [invoice, setInvoice] = useState<IInvoiceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [qr, setQr] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchInvoice() {
+    let alive = true;
+    (async () => {
       if (!rawInvoiceNumber) return;
       try {
-        const res = await fetch(`/api/invoices/${encodeURIComponent(rawInvoiceNumber)}`);
+        const res = await fetch(`/api/invoices/${encodeURIComponent(rawInvoiceNumber)}`, { cache: "no-store" });
+        if (!alive) return;
         if (res.ok) {
           const json = await res.json();
-          if (json.success && json.data) {
-            setInvoice(json.data);
-          }
+          if (json.success && json.data) setInvoice(json.data);
         } else {
           setErrorStatus(res.status);
         }
       } catch (err) {
         console.error("Failed to load invoice:", err);
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
-    }
-    fetchInvoice();
+    })();
+    return () => {
+      alive = false;
+    };
   }, [rawInvoiceNumber]);
+
+  // QR code linking to this online copy (printed on the invoice)
+  useEffect(() => {
+    if (!invoice) return;
+    let alive = true;
+    QRCode.toDataURL(window.location.href, { margin: 1, width: 220, color: { dark: "#0b0b0dff", light: "#ffffffff" } })
+      .then((url) => alive && setQr(url))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [invoice]);
+
+  const backHref = backofficeHome(user?.role) || (user ? "/profile#orders" : "/");
+  const backLabel = backofficeHome(user?.role) ? "Back to dashboard" : user ? "Back to your orders" : "Back to Figure World";
 
   const copyInvoiceNumber = () => {
     if (invoice?.invoiceNumber && navigator.clipboard) {
@@ -128,7 +165,7 @@ export default function InvoiceViewPage() {
           setTimeout(() => setCopied(false), 2000);
         })
         .catch(() => {
-          /* clipboard unavailable (e.g. insecure context) — ignore */
+          /* clipboard unavailable (e.g. insecure context) */
         });
     }
   };
@@ -138,7 +175,7 @@ export default function InvoiceViewPage() {
       <div className="flex min-h-[60vh] items-center justify-center bg-bg p-4">
         <div className="space-y-3 text-center" role="status">
           <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-brand border-t-transparent" />
-          <p className="text-sm text-muted">Loading invoice...</p>
+          <p className="text-sm text-muted">Loading invoice…</p>
         </div>
       </div>
     );
@@ -165,16 +202,13 @@ export default function InvoiceViewPage() {
           </p>
           <div className="flex flex-col justify-center gap-2 sm:flex-row">
             {needsSignIn && (
-              <Link
-                href={`/auth/login?redirect=${encodeURIComponent(`/invoices/${rawInvoiceNumber}`)}`}
-                className="btn btn-primary min-h-10"
-              >
+              <Link href={`/auth/login?redirect=${encodeURIComponent(`/invoices/${rawInvoiceNumber}`)}`} className="btn btn-primary min-h-10">
                 Sign in
               </Link>
             )}
-            <Link href="/" className={`btn min-h-10 ${needsSignIn ? "btn-secondary" : "btn-primary"}`}>
+            <Link href={backHref} className={`btn min-h-10 ${needsSignIn ? "btn-secondary" : "btn-primary"}`}>
               <ArrowLeft className="h-4 w-4" />
-              Return to store
+              {backLabel}
             </Link>
           </div>
         </div>
@@ -183,40 +217,36 @@ export default function InvoiceViewPage() {
   }
 
   const { customerDetails, storeDetails, gstDetails, items, pricing } = invoice;
+  const addr = customerDetails.shippingAddress;
   const isInterState = gstDetails.igstRate > 0;
-  const totalGstRate = gstDetails.cgstRate + gstDetails.sgstRate + gstDetails.igstRate;
+  const inStore = invoice.orderNumber.startsWith("FW-POS-");
   const paid = isPaidStatus(invoice.paymentStatus);
-  const issuedDate = new Date(invoice.issuedAt).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const refunded = /refund/i.test(invoice.paymentStatus);
+  const taxable = pricing.subtotal - gstDetails.totalTax;
+  const showEmail = customerDetails.email && customerDetails.email !== WALK_IN_EMAIL;
+  const showPhone = customerDetails.phone && customerDetails.phone !== "Not provided";
+  const issuedDate = new Date(invoice.issuedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+
+  const stamp = paid
+    ? { text: "Paid", cls: "border-success text-success bg-success-soft" }
+    : refunded
+      ? { text: "Refunded", cls: "border-line-strong text-fg-2 bg-surface-2" }
+      : { text: "Payment pending", cls: "border-warn text-warn bg-warn-soft" };
 
   return (
-    <div
-      className={`bg-bg px-4 py-6 sm:px-6 sm:py-10 lg:px-8 print:bg-white print:p-0 print:text-black ${PRINT_LIGHT_TOKENS}`}
-    >
+    <div className={`min-h-screen bg-bg px-4 py-6 sm:px-6 sm:py-10 lg:px-8 print:min-h-0 print:bg-white print:p-0 print:text-black ${PRINT_LIGHT_TOKENS}`}>
       {/* Action bar (hidden when printed) */}
       <div className="mx-auto mb-5 flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
-        <Link
-          href="/"
-          className="inline-flex min-h-10 items-center gap-1.5 self-start text-sm font-medium text-fg-2 transition hover:text-brand-ink"
-        >
+        <Link href={backHref} className="inline-flex min-h-10 items-center gap-1.5 self-start text-sm font-semibold text-fg-2 transition hover:text-brand-ink">
           <ArrowLeft className="h-4 w-4" />
-          Back to Figure World
+          {backLabel}
         </Link>
-
         <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
           <button type="button" onClick={() => window.print()} className="btn btn-secondary min-h-10">
             <Printer className="h-4 w-4" />
             Print
           </button>
-          <a
-            href={`/api/invoices/${encodeURIComponent(invoice.invoiceNumber)}/pdf`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-primary min-h-10"
-          >
+          <a href={`/api/invoices/${encodeURIComponent(invoice.invoiceNumber)}/pdf`} target="_blank" rel="noopener noreferrer" className="btn btn-primary min-h-10">
             <Download className="h-4 w-4" />
             Download PDF
           </a>
@@ -224,207 +254,228 @@ export default function InvoiceViewPage() {
       </div>
 
       {/* Invoice paper */}
-      <article className="mx-auto max-w-4xl animate-fade-up overflow-hidden rounded-xl border border-line bg-surface shadow-card print:max-w-none print:animate-none print:rounded-none print:border-0 print:shadow-none">
-        {/* Brand accent rule */}
-        <div className="h-1.5 bg-brand [print-color-adjust:exact]" aria-hidden="true" />
-
-        <div className="space-y-8 p-5 sm:p-10 print:px-0 print:py-6">
-          {/* Header */}
-          <header className="flex flex-col gap-6 border-b border-line pb-6 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0 space-y-3">
-              <div className="flex items-center gap-3">
-                <Logo className="[print-color-adjust:exact]" />
-                <p className="text-lg font-extrabold leading-tight tracking-tight text-fg">{storeDetails.name}</p>
-              </div>
-              <p className="max-w-sm text-xs leading-5 text-fg-2">{storeDetails.address}</p>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-fg-2">
-                <dt className="text-muted">GSTIN</dt>
-                <dd className="font-mono font-semibold text-fg">{storeDetails.gstin}</dd>
-                <dt className="text-muted">PAN</dt>
-                <dd className="font-mono font-semibold text-fg">{storeDetails.pan}</dd>
-                <dt className="text-muted">State</dt>
-                <dd>
-                  {storeDetails.state} ({storeDetails.stateCode || "27"})
-                </dd>
-                <dt className="text-muted">Contact</dt>
-                <dd className="break-all">
-                  {storeDetails.email} &middot; {storeDetails.website}
-                </dd>
-              </dl>
-            </div>
-
-            <div className="shrink-0 space-y-3 sm:text-right">
-              <h1 className="text-2xl font-extrabold uppercase tracking-wide text-brand-ink">Tax Invoice</h1>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs sm:grid-cols-[1fr_auto]">
-                <dt className="text-muted">Invoice #</dt>
-                <dd className="flex items-center gap-1 font-mono font-bold text-fg sm:justify-end">
+      <article className="mx-auto max-w-4xl animate-fade-up overflow-hidden rounded-2xl border border-line bg-surface shadow-pop print:max-w-none print:animate-none print:rounded-none print:border-0 print:shadow-none">
+        {/* Black logo band */}
+        <header className="relative overflow-hidden bg-black text-white [print-color-adjust:exact]">
+          <span className="pointer-events-none absolute bottom-0 left-[44%] top-0 hidden w-10 skew-x-[-20deg] bg-brand sm:block" aria-hidden="true" />
+          <span className="pointer-events-none absolute bottom-0 left-[49%] top-0 hidden w-3 skew-x-[-20deg] bg-brand/55 sm:block" aria-hidden="true" />
+          <div className="relative flex flex-col gap-5 px-5 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-10">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Figure World — Collect × Display × Beyond" className="h-20 w-auto self-start object-contain sm:h-24" />
+            <div className="sm:text-right">
+              <h1 className="text-3xl font-bold uppercase tracking-wide sm:text-4xl">Tax Invoice</h1>
+              <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-xs sm:grid-cols-[1fr_auto]">
+                <dt className="text-white/55">Invoice No.</dt>
+                <dd className="flex items-center gap-1 font-mono font-bold sm:justify-end">
                   {invoice.invoiceNumber}
                   <button
                     type="button"
                     onClick={copyInvoiceNumber}
                     aria-label="Copy invoice number"
                     title="Copy invoice number"
-                    className="-my-2 flex h-8 w-8 items-center justify-center rounded-md text-muted transition hover:bg-surface-3 hover:text-fg print:hidden"
+                    className="-my-2 flex h-7 w-7 items-center justify-center rounded-md text-white/60 transition hover:bg-white/10 hover:text-white print:hidden"
                   >
-                    {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
                   </button>
                 </dd>
-                <dt className="text-muted">Invoice date</dt>
-                <dd className="font-semibold text-fg">{issuedDate}</dd>
-                <dt className="text-muted">Order #</dt>
-                <dd className="font-mono font-bold text-fg">{invoice.orderNumber}</dd>
+                <dt className="text-white/55">Invoice date</dt>
+                <dd className="font-semibold">{issuedDate}</dd>
+                <dt className="text-white/55">Order No.</dt>
+                <dd className="font-mono font-bold">{invoice.orderNumber}</dd>
               </dl>
             </div>
-          </header>
+          </div>
+          <div className="h-1 bg-brand" aria-hidden="true" />
+        </header>
 
-          {/* Billing & payment */}
-          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="rounded-lg border border-line bg-surface-2 p-4 text-xs print:bg-white">
-              <h2 className="text-[11px] font-bold uppercase tracking-wider text-muted">Billed &amp; shipped to</h2>
-              <p className="mt-2 text-sm font-bold text-fg">{customerDetails.name}</p>
-              <p className="mt-1 leading-5 text-fg-2">
-                {customerDetails.shippingAddress.street}
-                {customerDetails.shippingAddress.landmark && `, ${customerDetails.shippingAddress.landmark}`}
-                <br />
-                {customerDetails.shippingAddress.city}, {customerDetails.shippingAddress.state} -{" "}
-                {customerDetails.shippingAddress.pinCode}
-                <br />
-                {customerDetails.shippingAddress.country}
+        <div className="space-y-8 p-5 sm:p-10 print:px-0 print:py-6">
+          {/* Thank-you + status stamp */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-fg">
+              {inStore ? "Purchased in store at Figure World, Bandra West" : `Thank you for shopping with Figure World, ${customerDetails.name.split(" ")[0]}!`}
+            </p>
+            <span className={`rounded-md border-2 px-3 py-1 text-xs font-black uppercase tracking-[0.2em] ${stamp.cls} [print-color-adjust:exact]`}>{stamp.text}</span>
+          </div>
+
+          {/* Sold by / Billed to / Payment */}
+          <section className="grid grid-cols-1 gap-6 text-[13px] leading-6 sm:grid-cols-3">
+            <div>
+              <SectionLabel>Sold by</SectionLabel>
+              <p className="font-bold text-fg">{storeDetails.name}</p>
+              <p className="text-fg-2">{storeDetails.address}</p>
+              <p className="text-fg-2">
+                GSTIN <span className="font-mono font-semibold text-fg">{storeDetails.gstin}</span>
               </p>
-              <p className="mt-2 leading-5 text-fg-2">
-                Phone: <span className="font-semibold text-fg">{customerDetails.phone}</span>
+              <p className="text-fg-2">
+                PAN <span className="font-mono font-semibold text-fg">{storeDetails.pan}</span>
+              </p>
+              <p className="text-xs text-muted">
+                {storeDetails.email}
                 <br />
-                Email: <span className="break-all font-semibold text-fg">{customerDetails.email}</span>
+                {storeDetails.phone}
               </p>
             </div>
-
-            <div className="rounded-lg border border-line bg-surface-2 p-4 text-xs print:bg-white">
-              <h2 className="text-[11px] font-bold uppercase tracking-wider text-muted">Payment</h2>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="rounded-md border border-line-strong bg-surface px-2 py-0.5 text-xs font-bold text-fg">
-                  {invoice.paymentMethod}
-                </span>
-                <span
-                  className={`rounded-md px-2 py-0.5 text-xs font-bold ${
-                    paid ? "bg-success-soft text-success" : "bg-warn-soft text-warn"
-                  } print:border print:border-line-strong print:bg-white`}
-                >
-                  {invoice.paymentStatus}
-                </span>
-              </div>
-              {invoice.paymentRef && (
-                <p className="mt-2 text-fg-2">
-                  Payment reference: <span className="break-all font-mono font-semibold text-fg">{invoice.paymentRef}</span>
+            <div>
+              <SectionLabel>{inStore ? "Billed to" : "Billed & shipped to"}</SectionLabel>
+              <p className="font-bold text-fg">{customerDetails.name}</p>
+              {inStore ? (
+                <p className="text-muted">Walk-in purchase at the store counter</p>
+              ) : (
+                <p className="text-fg-2">
+                  {addr.street}
+                  {addr.landmark && `, ${addr.landmark}`}
+                  <br />
+                  {addr.city}, {addr.state} - {addr.pinCode}
+                  <br />
+                  {addr.country}
                 </p>
               )}
-              <p className="mt-2 text-fg-2">
-                Place of supply: <span className="font-semibold text-fg">{customerDetails.shippingAddress.state}</span>
-              </p>
-              <p className="mt-0.5 text-muted">
-                {isInterState ? "Inter-state supply (IGST)" : "Intra-state supply (CGST + SGST)"}
-              </p>
+              {showPhone && <p className="text-fg-2">Phone: {customerDetails.phone}</p>}
+              {showEmail && <p className="break-all text-fg-2">{customerDetails.email}</p>}
+            </div>
+            <div>
+              <SectionLabel>Payment &amp; supply</SectionLabel>
+              <p className="font-bold text-fg">{PAYMENT_LABEL[invoice.paymentMethod] || invoice.paymentMethod}</p>
+              <p className="text-fg-2">Status: {paid ? "Paid" : invoice.paymentStatus.replace(/_/g, " ").toLowerCase()}</p>
+              {invoice.paymentRef && (
+                <p className="text-fg-2">
+                  Ref: <span className="break-all font-mono font-semibold text-fg">{invoice.paymentRef}</span>
+                </p>
+              )}
+              <p className="text-fg-2">Place of supply: {addr.state}</p>
+              <p className="text-xs text-muted">{isInterState ? "Inter-state supply (IGST)" : "Intra-state supply (CGST + SGST)"}</p>
             </div>
           </section>
 
           {/* Line items */}
-          <section>
-            <div className="-mx-5 overflow-x-auto px-5 sm:mx-0 sm:px-0 print:mx-0 print:overflow-visible print:px-0">
-              <table className="w-full min-w-[620px] border-collapse text-left text-xs print:min-w-0">
-                <thead>
-                  <tr className="border-y border-line-strong bg-surface-2 text-[11px] font-bold uppercase tracking-wider text-fg-2 print:bg-white">
-                    <th scope="col" className="px-3 py-2.5">#</th>
-                    <th scope="col" className="px-3 py-2.5">Item</th>
-                    <th scope="col" className="px-3 py-2.5">SKU</th>
-                    <th scope="col" className="px-3 py-2.5">HSN</th>
-                    <th scope="col" className="px-3 py-2.5 text-center">Qty</th>
-                    <th scope="col" className="px-3 py-2.5 text-right">Unit price</th>
-                    <th scope="col" className="px-3 py-2.5 text-right">Amount</th>
+          <section className="-mx-5 overflow-x-auto px-5 sm:mx-0 sm:px-0 print:mx-0 print:overflow-visible print:px-0">
+            <table className="w-full min-w-[680px] border-collapse text-left text-xs print:min-w-0">
+              <thead>
+                <tr className="bg-ink text-[10px] font-bold uppercase tracking-[0.12em] text-white [print-color-adjust:exact]">
+                  <th scope="col" className="rounded-l-lg px-3 py-3">#</th>
+                  <th scope="col" className="px-3 py-3">Item</th>
+                  <th scope="col" className="px-3 py-3">HSN</th>
+                  <th scope="col" className="px-3 py-3 text-right">Qty</th>
+                  <th scope="col" className="px-3 py-3 text-right">Rate</th>
+                  <th scope="col" className="px-3 py-3 text-right">Taxable</th>
+                  <th scope="col" className="px-3 py-3 text-right">GST {gstDetails.cgstRate + gstDetails.sgstRate + gstDetails.igstRate}%</th>
+                  <th scope="col" className="rounded-r-lg px-3 py-3 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it, idx) => (
+                  <tr key={idx} className={`align-top ${idx % 2 ? "bg-surface-2" : ""} [print-color-adjust:exact]`}>
+                    <td className="px-3 py-3 text-muted">{idx + 1}</td>
+                    <td className="px-3 py-3">
+                      <p className="font-semibold text-fg">{it.productTitle}</p>
+                      <p className="mt-0.5 font-mono text-[10px] text-muted">SKU {it.productSku}</p>
+                    </td>
+                    <td className="px-3 py-3 font-mono text-fg-2">{it.hsn}</td>
+                    <td className="px-3 py-3 text-right font-bold text-fg">{it.quantity}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right text-fg-2">{money(it.unitPrice)}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right text-muted">{money(it.taxableAmount)}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right text-muted">{money(it.taxAmount)}</td>
+                    <td className="whitespace-nowrap px-3 py-3 text-right font-bold text-fg">{money(it.total)}</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {items.map((it, idx) => (
-                    <tr key={idx} className="align-top">
-                      <td className="px-3 py-3 text-muted">{idx + 1}</td>
-                      <td className="px-3 py-3 font-semibold text-fg">{it.productTitle}</td>
-                      <td className="px-3 py-3 font-mono text-fg-2">{it.productSku}</td>
-                      <td className="px-3 py-3 font-mono text-fg-2">{it.hsn}</td>
-                      <td className="px-3 py-3 text-center font-semibold text-fg">{it.quantity}</td>
-                      <td className="whitespace-nowrap px-3 py-3 text-right text-fg-2">{formatPrice(it.unitPrice)}</td>
-                      <td className="whitespace-nowrap px-3 py-3 text-right font-bold text-fg">{formatPrice(it.total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </section>
 
           {/* Tax summary & totals */}
-          <section className="grid grid-cols-1 gap-6 border-t border-line pt-6 sm:grid-cols-2 sm:gap-10 print:grid-cols-2">
-            <div className="rounded-lg border border-line p-4 text-xs">
-              <h2 className="text-[11px] font-bold uppercase tracking-wider text-muted">
-                GST summary ({totalGstRate}%)
-              </h2>
-              <dl className="mt-2 space-y-1.5 text-fg-2">
+          <section className="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-8 print:grid-cols-2">
+            <div className="rounded-xl border border-line bg-surface-2 p-5 text-xs [print-color-adjust:exact]">
+              <SectionLabel>Tax summary</SectionLabel>
+              <dl className="space-y-1.5 text-fg-2">
+                <div className="flex justify-between gap-4">
+                  <dt>Taxable value</dt>
+                  <dd className="font-semibold text-fg">{money(taxable)}</dd>
+                </div>
                 {isInterState ? (
                   <div className="flex justify-between gap-4">
-                    <dt>Integrated GST (IGST {gstDetails.igstRate}%)</dt>
-                    <dd className="font-semibold text-fg">{formatPrice(gstDetails.igstAmount)}</dd>
+                    <dt>IGST @ {gstDetails.igstRate}%</dt>
+                    <dd className="font-semibold text-fg">{money(gstDetails.igstAmount)}</dd>
                   </div>
                 ) : (
                   <>
                     <div className="flex justify-between gap-4">
-                      <dt>Central GST (CGST {gstDetails.cgstRate}%)</dt>
-                      <dd className="font-semibold text-fg">{formatPrice(gstDetails.cgstAmount)}</dd>
+                      <dt>CGST @ {gstDetails.cgstRate}%</dt>
+                      <dd className="font-semibold text-fg">{money(gstDetails.cgstAmount)}</dd>
                     </div>
                     <div className="flex justify-between gap-4">
-                      <dt>State GST (SGST {gstDetails.sgstRate}%)</dt>
-                      <dd className="font-semibold text-fg">{formatPrice(gstDetails.sgstAmount)}</dd>
+                      <dt>SGST @ {gstDetails.sgstRate}%</dt>
+                      <dd className="font-semibold text-fg">{money(gstDetails.sgstAmount)}</dd>
                     </div>
                   </>
                 )}
                 <div className="flex justify-between gap-4 border-t border-line pt-1.5 font-bold text-fg">
-                  <dt>Total tax</dt>
-                  <dd>{formatPrice(gstDetails.totalTax)}</dd>
+                  <dt>Total tax (included in prices)</dt>
+                  <dd>{money(gstDetails.totalTax)}</dd>
                 </div>
               </dl>
-              <p className="mt-2 text-[11px] leading-4 text-muted">
-                GST of {totalGstRate}% applied under HSN {gstDetails.hsnCode} (toys, scale figures &amp; models).
-                Prices are inclusive of tax.
-              </p>
+              <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">Amount in words</p>
+              <p className="mt-1 text-[13px] font-semibold leading-5 text-fg">{amountInWords(pricing.grandTotal)}</p>
+              <p className="mt-2 text-[11px] text-muted">HSN {gstDetails.hsnCode} — toys, scale figures &amp; models</p>
             </div>
 
-            <dl className="space-y-2 text-sm">
-              <div className="flex justify-between gap-4 text-fg-2">
-                <dt>Subtotal</dt>
-                <dd className="font-semibold text-fg">{formatPrice(pricing.subtotal)}</dd>
-              </div>
-              {pricing.discountTotal > 0 && (
+            <div className="flex flex-col justify-between gap-4">
+              <dl className="space-y-2 text-sm">
                 <div className="flex justify-between gap-4 text-fg-2">
-                  <dt>Discount</dt>
-                  <dd className="font-semibold text-success">-{formatPrice(pricing.discountTotal)}</dd>
+                  <dt>Subtotal (incl. GST)</dt>
+                  <dd className="font-semibold text-fg">{money(pricing.subtotal)}</dd>
                 </div>
+                {pricing.discountTotal > 0 && (
+                  <div className="flex justify-between gap-4 text-fg-2">
+                    <dt>Discount</dt>
+                    <dd className="font-semibold text-success">-{money(pricing.discountTotal)}</dd>
+                  </div>
+                )}
+                {(!inStore || pricing.shippingFee > 0) && (
+                  <div className="flex justify-between gap-4 text-fg-2">
+                    <dt>Shipping &amp; handling</dt>
+                    <dd className="font-semibold text-fg">{money(pricing.shippingFee)}</dd>
+                  </div>
+                )}
+              </dl>
+              <div className="relative overflow-hidden rounded-xl bg-brand px-5 py-4 text-white [print-color-adjust:exact]">
+                <span className="pointer-events-none absolute -right-4 top-0 h-full w-10 skew-x-[-20deg] bg-white/15" aria-hidden="true" />
+                <div className="relative flex items-baseline justify-between gap-4">
+                  <span className="text-xs font-bold uppercase tracking-[0.16em]">Grand total</span>
+                  <span className="font-display text-3xl font-bold">{money(pricing.grandTotal)}</span>
+                </div>
+              </div>
+              <p className="-mt-2 text-right text-[11px] text-muted">Inclusive of all taxes · INR</p>
+            </div>
+          </section>
+
+          {/* QR + signature */}
+          <section className="flex flex-col gap-6 border-t border-line pt-6 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex items-center gap-4">
+              {qr ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={qr} alt="QR code linking to this invoice" className="h-20 w-20 rounded-md border border-line bg-white p-1" />
+              ) : (
+                <div className="h-20 w-20 rounded-md border border-line bg-surface-2" />
               )}
-              <div className="flex justify-between gap-4 text-fg-2">
-                <dt>Shipping &amp; handling</dt>
-                <dd className="font-semibold text-fg">{formatPrice(pricing.shippingFee)}</dd>
+              <div className="text-xs">
+                <p className="font-bold text-fg">Scan to view this invoice online</p>
+                <p className="mt-0.5 text-muted">Keep it for warranty and returns.</p>
               </div>
-              <div className="flex items-baseline justify-between gap-4 border-t-2 border-fg pt-3">
-                <dt className="font-bold text-fg">Grand total</dt>
-                <dd className="text-2xl font-extrabold text-brand-ink">{formatPrice(pricing.grandTotal)}</dd>
-              </div>
-              <p className="text-right text-[11px] text-muted">Amount in Indian Rupees (INR), inclusive of all taxes</p>
-            </dl>
+            </div>
+            <div className="text-right text-xs">
+              <p className="font-bold text-fg">For {storeDetails.name}</p>
+              <div className="ml-auto mt-8 w-44 border-t border-line-strong" />
+              <p className="mt-1 text-muted">Authorised Signatory</p>
+            </div>
           </section>
 
           {/* Footer */}
-          <footer className="space-y-1 border-t border-line pt-6 text-[11px] leading-4 text-muted">
-            <p>
-              <strong className="text-fg-2">Declaration:</strong> This is a computer-generated tax invoice issued by{" "}
-              {storeDetails.name} and does not require a physical signature.
-            </p>
-            <p>
-              Figure World &middot; Authentic anime figures, scale statues &amp; collectibles &middot; {storeDetails.website}
-            </p>
+          <footer className="flex flex-col gap-2 border-t border-line pt-5 text-[11px] leading-4 text-muted sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-[13px] font-semibold text-fg">Thank you for collecting with Figure World.</p>
+              <p className="mt-1">This is a computer-generated tax invoice and requires no physical signature. Prices include GST.</p>
+            </div>
+            <p className="shrink-0 font-display text-xs font-bold uppercase tracking-[0.22em] text-brand-ink">Collect × Display × Beyond</p>
           </footer>
         </div>
       </article>

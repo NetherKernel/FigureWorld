@@ -548,7 +548,7 @@ function OrderCard({ order, highlighted = false }: { order: CustomerOrder; highl
           </div>
           <div>
             <p className="font-bold text-fg">Payment method</p>
-            <p className="mt-1 text-fg-2">{order.paymentMethod === "UPI" ? "UPI (direct payment)" : "Cash on Delivery"}</p>
+            <p className="mt-1 text-fg-2">{({ UPI: "UPI (direct payment)", COD: "Cash on Delivery", CASH: "Cash (paid in store)", CARD: "Card (paid in store)" } as Record<string, string>)[order.paymentMethod] ?? order.paymentMethod}</p>
             <p className="mt-1 text-xs text-muted">
               Payment status: {(order.paymentStatus || "").replace(/_/g, " ").toLowerCase() || "—"}
             </p>
@@ -995,7 +995,7 @@ export default function ProfilePage() {
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
           <span className="break-all">{user.email}</span>
-          {user.role !== "CUSTOMER" && <span className="chip chip-neutral">{user.role === "ADMIN" ? "Admin" : "Staff"}</span>}
+          {user.role !== "CUSTOMER" && <span className="chip chip-neutral">{user.role === "ADMIN" ? "Admin" : user.role === "DEVELOPER" ? "Developer" : "Staff"}</span>}
         </div>
       </div>
 

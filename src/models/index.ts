@@ -11,3 +11,4 @@ export * from "./Shipment";
 export * from "./Coupon";
 export * from "./Result";
 export * from "./NotificationLog";
+export * from "./DeliveryRule";

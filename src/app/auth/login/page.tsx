@@ -4,6 +4,7 @@ import React, { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { backofficeHome, isAllowedForRole } from "@/lib/backoffice";
 import { Logo } from "@/components/ui/Logo";
 import { Eye, EyeOff, AlertCircle, ChevronRight, Loader2 } from "lucide-react";
 
@@ -54,7 +55,10 @@ function LoginForm() {
     setIsSubmitting(false);
 
     if (result.success) {
-      router.push(redirect);
+      // Admin, staff and developer accounts go straight to their own dashboard
+      const role = result.user?.role;
+      const home = backofficeHome(role);
+      router.push(home ? (requestedRedirect && isAllowedForRole(role, requestedRedirect) ? requestedRedirect : home) : redirect);
     } else {
       setError(result.error || "Failed to sign in. Please verify your credentials.");
     }

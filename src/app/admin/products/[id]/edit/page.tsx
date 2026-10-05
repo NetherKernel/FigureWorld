@@ -22,6 +22,7 @@ interface ICategory {
   _id: string;
   name: string;
   slug: string;
+  parentCategory?: string | { _id: string; name: string; slug: string } | null;
   isRestricted: boolean;
   complianceRequirements?: {
     minAge: number;
@@ -54,6 +55,7 @@ export default function EditProductPage() {
   const [discountPrice, setDiscountPrice] = useState("");
   const [stock, setStock] = useState("");
   const [category, setCategory] = useState("");
+  const [subcategory, setSubcategory] = useState("");
   const [brand, setBrand] = useState("");
   const [sku, setSku] = useState("");
   const [weight, setWeight] = useState("500");
@@ -78,6 +80,12 @@ export default function EditProductPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const rootCategories = categories.filter((c) => !c.parentCategory);
+  const availableSubcategories = categories.filter((c) => {
+    const pid = typeof c.parentCategory === "object" ? c.parentCategory?._id : c.parentCategory;
+    return pid === category;
+  });
 
   // Load Categories and Existing Product
   useEffect(() => {
@@ -104,6 +112,7 @@ export default function EditProductPage() {
           setDiscountPrice(p.discountPrice ? String(p.discountPrice) : "");
           setStock(String(p.stock ?? "0"));
           setCategory(typeof p.category === "object" ? p.category._id : p.category);
+          setSubcategory(typeof p.subcategory === "object" ? p.subcategory?._id || "" : p.subcategory || "");
           setBrand(p.brand || "");
           setSku(p.sku || "");
           setWeight(String(p.weight || "500"));
@@ -224,6 +233,7 @@ export default function EditProductPage() {
         discountPrice: discountPrice.trim() ? parseFloat(discountPrice) : undefined,
         stock: parseInt(stock, 10),
         category,
+        subcategory: subcategory ? subcategory : undefined,
         brand: brand.trim() || undefined,
         sku: sku.toUpperCase().trim(),
         weight: parseFloat(weight) || 500,
@@ -368,19 +378,44 @@ export default function EditProductPage() {
               />
             </div>
 
-            <div className="sm:col-span-2">
+            <div>
               <label className="block font-semibold text-fg-2">
-                Category *
+                Department Category *
               </label>
               <select
                 required
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
+                onChange={(e) => {
+                  setCategory(e.target.value);
+                  setSubcategory("");
+                }}
+                disabled={loading}
                 className="mt-1 w-full rounded-xl border border-line bg-bg py-2 px-3 text-fg focus:border-brand focus:bg-surface focus:outline-none"
               >
-                {categories.map((c) => (
+                {rootCategories.map((c) => (
                   <option key={c._id} value={c._id}>
                     {c.name} {c.isRestricted ? "⚠️ (Restricted Category — 18+ Rules Apply)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-fg-2">
+                Franchise / Subcategory <span className="font-normal text-muted">(Optional)</span>
+              </label>
+              <select
+                value={subcategory}
+                onChange={(e) => setSubcategory(e.target.value)}
+                disabled={loading || availableSubcategories.length === 0}
+                className="mt-1 w-full rounded-xl border border-line bg-bg py-2 px-3 text-fg focus:border-brand focus:bg-surface focus:outline-none"
+              >
+                <option value="">
+                  {availableSubcategories.length > 0 ? "None (General)" : "No subcategories available"}
+                </option>
+                {availableSubcategories.map((sub) => (
+                  <option key={sub._id} value={sub._id}>
+                    {sub.name}
                   </option>
                 ))}
               </select>

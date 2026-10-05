@@ -60,7 +60,7 @@ export function Footer() {
   // Minimal Amazon-style footer on sign-in / registration pages
   if (pathname?.startsWith("/auth")) {
     return (
-      <footer className="mt-10 border-t border-line bg-surface-2 py-6 text-center text-xs text-muted">
+      <footer className="mt-10 border-t print:hidden border-line bg-surface-2 py-6 text-center text-xs text-muted">
         <div className="mb-2 flex justify-center gap-6">
           <Link href="/#guarantees" className="link">
             Conditions of Use
@@ -78,7 +78,7 @@ export function Footer() {
   }
 
   return (
-    <footer className="mt-auto w-full text-white">
+    <footer className="mt-auto w-full text-white print:hidden">
       <button
         type="button"
         onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}

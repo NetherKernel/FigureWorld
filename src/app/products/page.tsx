@@ -3,7 +3,7 @@
 import React, { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, SearchX, SlidersHorizontal, Star, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, SearchX, SlidersHorizontal, Star, X, Flame, Sparkles } from "lucide-react";
 import ProductListingSkeleton from "@/components/skeletons/ProductListingSkeleton";
 import ProductCardSkeleton from "@/components/skeletons/ProductCardSkeleton";
 import { ProductCard } from "@/components/product/ProductCard";
@@ -28,7 +28,7 @@ const PRICE_RANGES = [
 ];
 
 /** Query keys that the results page understands (everything else is ignored). */
-const FILTER_KEYS = ["search", "category", "isRestricted", "onSale", "inStock", "minRating", "minPrice", "maxPrice", "sort", "page"] as const;
+const FILTER_KEYS = ["search", "category", "subcategory", "isRestricted", "onSale", "inStock", "minRating", "minPrice", "maxPrice", "sort", "page"] as const;
 
 function ProductsContent() {
   const router = useRouter();
@@ -37,6 +37,7 @@ function ProductsContent() {
 
   const search = params.get("search") || "";
   const category = params.get("category") || "";
+  const subcategory = params.get("subcategory") || "";
   const sort = params.get("sort") || "newest";
   const page = Math.max(1, parseInt(params.get("page") || "1", 10) || 1);
 
@@ -105,13 +106,25 @@ function ProductsContent() {
     };
   }, [filtersOpen]);
 
-  const categoryLabel = STORE_CATEGORIES.find((c) => c.slug === category)?.label;
+  const parentCategoryObj = category ? STORE_CATEGORIES.find((c) => c.slug === category) : null;
+  const subcategoryObj = subcategory
+    ? parentCategoryObj?.subcategories?.find((s) => s.slug === subcategory) ||
+      STORE_CATEGORIES.flatMap((c) => c.subcategories || []).find((s) => s.slug === subcategory)
+    : null;
+
+  const categoryLabel = subcategoryObj
+    ? parentCategoryObj
+      ? `${parentCategoryObj.label} › ${subcategoryObj.label}`
+      : subcategoryObj.label
+    : parentCategoryObj?.label;
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const to = Math.min(total, page * PAGE_SIZE);
 
   const activeChips: Array<{ label: string; clear: Record<string, null> }> = [];
-  if (categoryLabel) activeChips.push({ label: categoryLabel, clear: { category: null } });
+  if (subcategoryObj) activeChips.push({ label: subcategoryObj.label, clear: { subcategory: null } });
+  if (parentCategoryObj) activeChips.push({ label: parentCategoryObj.label, clear: { category: null, subcategory: null } });
   if (params.get("onSale") === "true") activeChips.push({ label: "Today's Deals", clear: { onSale: null } });
   if (params.get("inStock") === "true") activeChips.push({ label: "In stock", clear: { inStock: null } });
   if (params.get("minRating")) activeChips.push({ label: `${params.get("minRating")}★ & up`, clear: { minRating: null } });
@@ -188,7 +201,7 @@ function ProductsContent() {
       <div className="mx-auto flex max-w-[1500px] gap-6 px-3 pt-4 sm:px-4">
         {/* Desktop sidebar */}
         <aside className="hidden w-60 shrink-0 lg:block" aria-label="Filters">
-          <div className="sticky top-[116px] max-h-[calc(100vh-130px)] overflow-y-auto pb-6 pr-1">{filters}</div>
+          <div className="no-scrollbar sticky top-[116px] max-h-[calc(100vh-130px)] overflow-y-auto pb-6 pr-1">{filters}</div>
         </aside>
 
         <section className="min-w-0 flex-1" aria-label="Results">
@@ -210,8 +223,37 @@ function ProductsContent() {
             </div>
           )}
 
+          {(parentCategoryObj || subcategoryObj) && (
+            <nav aria-label="Breadcrumb" className="mb-2 flex items-center gap-1.5 text-xs text-muted">
+              <Link href="/products" className="hover:text-brand-ink transition">
+                All Products
+              </Link>
+              {parentCategoryObj && (
+                <>
+                  <ChevronRight className="h-3 w-3" />
+                  <Link
+                    href={`/products?category=${parentCategoryObj.slug}`}
+                    className={`hover:text-brand-ink transition ${!subcategoryObj ? "font-bold text-fg" : ""}`}
+                  >
+                    {parentCategoryObj.label}
+                  </Link>
+                </>
+              )}
+              {subcategoryObj && (
+                <>
+                  <ChevronRight className="h-3 w-3" />
+                  <span className="font-bold text-fg">{subcategoryObj.label}</span>
+                </>
+              )}
+            </nav>
+          )}
+
           <h1 className="mb-1 text-xl font-bold text-fg">
-            {search ? "Results" : categoryLabel || (params.get("onSale") ? "Today's Deals" : "All products")}
+            {search
+              ? "Results"
+              : subcategoryObj
+              ? `${subcategoryObj.label}`
+              : parentCategoryObj?.label || (params.get("onSale") ? "Today's Deals" : "All products")}
           </h1>
           <p className="mb-4 text-sm text-fg-2">
             Check each product page for other buying options. Price and other details may vary based on product size and
@@ -322,6 +364,7 @@ function Filters({
   setParams: (u: Record<string, string | null>) => void;
 }) {
   const category = params.get("category") || "";
+  const subcategory = params.get("subcategory") || "";
   const minRating = params.get("minRating") || "";
   const minPrice = params.get("minPrice") || "";
   const maxPrice = params.get("maxPrice") || "";
@@ -329,10 +372,12 @@ function Filters({
 
   const [min, setMin] = useState(minPrice);
   const [max, setMax] = useState(maxPrice);
-  useEffect(() => {
+  const [syncedRange, setSyncedRange] = useState(`${minPrice}-${maxPrice}`);
+  if (syncedRange !== `${minPrice}-${maxPrice}`) {
+    setSyncedRange(`${minPrice}-${maxPrice}`);
     setMin(minPrice);
     setMax(maxPrice);
-  }, [minPrice, maxPrice]);
+  }
 
   const optionCls = (active: boolean) =>
     `block w-full rounded px-1 py-1 text-left text-sm transition hover:text-brand-ink ${active ? "font-bold text-fg" : "text-fg-2"}`;
@@ -340,19 +385,118 @@ function Filters({
   return (
     <div className="divide-y divide-line text-sm">
       <FilterGroup title="Department">
-        <button type="button" onClick={() => setParams({ category: null })} className={optionCls(!category)}>
-          {category ? "‹ Any Department" : "All Departments"}
+        <button
+          type="button"
+          onClick={() => setParams({ category: null, subcategory: null })}
+          className={optionCls(!category && !subcategory)}
+        >
+          {category || subcategory ? "‹ All Departments" : "All Departments"}
         </button>
-        {STORE_CATEGORIES.map((c) => (
-          <button
-            key={c.slug}
-            type="button"
-            onClick={() => setParams({ category: c.slug })}
-            className={`${optionCls(category === c.slug)} pl-3`}
-          >
-            {c.label}
-          </button>
-        ))}
+        {STORE_CATEGORIES.map((c) => {
+          const isSelected = category === c.slug;
+          const hasSub = (c.subcategories?.length ?? 0) > 0;
+          const isParentOfActiveSub = c.subcategories?.some((s) => s.slug === subcategory);
+          const showSubcategories = isSelected || isParentOfActiveSub;
+
+          return (
+            <div key={c.slug} className="space-y-0.5">
+              <button
+                type="button"
+                onClick={() => setParams({ category: isSelected ? null : c.slug, subcategory: null })}
+                className={`${optionCls(isSelected && !subcategory)} pl-2 flex items-center justify-between group`}
+              >
+                <span className="truncate">{c.label}</span>
+                {hasSub && (
+                  <span className="text-[11px] text-muted group-hover:text-brand-ink">
+                    {c.subcategories?.length}
+                  </span>
+                )}
+              </button>
+
+              {showSubcategories && hasSub && (
+                <div className="ml-2.5 pl-2.5 border-l-2 border-brand/30 space-y-1.5 my-2">
+                  <button
+                    type="button"
+                    onClick={() => setParams({ category: c.slug, subcategory: null })}
+                    className={`block w-full text-left text-xs py-1.5 px-2.5 rounded-lg transition font-medium ${
+                      !subcategory && isSelected
+                        ? "font-bold text-brand-ink bg-brand-soft shadow-xs"
+                        : "text-muted hover:text-fg hover:bg-surface-2"
+                    }`}
+                  >
+                    All {c.label}
+                  </button>
+                  <div className="grid grid-cols-1 gap-1">
+                    {c.subcategories?.map((sub) => {
+                      const isSubActive = subcategory === sub.slug;
+                      return (
+                        <button
+                          key={sub.slug}
+                          type="button"
+                          onClick={() =>
+                            setParams({
+                              category: c.slug,
+                              subcategory: isSubActive ? null : sub.slug,
+                            })
+                          }
+                          className={`w-full text-left text-xs py-1.5 px-2.5 rounded-xl transition flex items-center justify-between border ${
+                            isSubActive
+                              ? "bg-gradient-to-r from-violet-600 via-indigo-600 to-brand text-white font-bold border-transparent shadow-xs"
+                              : "text-fg-2 hover:text-brand-ink bg-surface-2 hover:bg-surface-3 border-line/60 hover:border-brand/30"
+                          }`}
+                        >
+                          <span className="truncate">{sub.label}</span>
+                          {isSubActive && <span className="h-1.5 w-1.5 rounded-full bg-white shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </FilterGroup>
+
+      {/* Dedicated Anime Franchises Filter Group */}
+      <FilterGroup title="Anime Franchises & Universes">
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          {[
+            { label: "Dragon Ball", slug: "dragon-ball", parent: "action-figures" },
+            { label: "Jujutsu Kaisen", slug: "jujutsu-kaisen", parent: "action-figures" },
+            { label: "Marvel", slug: "marvel", parent: "action-figures" },
+            { label: "DC Comics", slug: "dc-comics", parent: "action-figures" },
+            { label: "One Piece", slug: "one-piece", parent: "action-figures" },
+            { label: "Naruto", slug: "naruto", parent: "action-figures" },
+            { label: "Demon Slayer", slug: "demon-slayer", parent: "action-figures" },
+            { label: "Attack on Titan", slug: "attack-on-titan", parent: "action-figures" },
+            { label: "Bleach", slug: "bleach", parent: "action-figures" },
+            { label: "Chainsaw Man", slug: "chainsaw-man", parent: "action-figures" },
+            { label: "Solo Leveling", slug: "solo-leveling", parent: "action-figures" },
+            { label: "Pokemon", slug: "pokemon", parent: "action-figures" },
+          ].map((f) => {
+            const isSubActive = subcategory === f.slug;
+            return (
+              <button
+                key={f.slug}
+                type="button"
+                onClick={() =>
+                  setParams({
+                    category: f.parent,
+                    subcategory: isSubActive ? null : f.slug,
+                  })
+                }
+                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-xs ${
+                  isSubActive
+                    ? "bg-gradient-to-r from-violet-600 via-indigo-600 to-brand text-white shadow-brand/20 scale-105"
+                    : "bg-surface-2 hover:bg-surface-3 text-fg-2 hover:text-fg border border-line hover:border-brand/40"
+                }`}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
       </FilterGroup>
 
       <FilterGroup title="Customer Reviews">

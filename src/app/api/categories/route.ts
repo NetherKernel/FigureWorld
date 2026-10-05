@@ -1,9 +1,10 @@
+import mongoose from "mongoose";
 import { z } from "zod";
 import { connectToDatabase } from "@/lib/db";
 import { Category } from "@/models/Category";
 import { requireRole } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
-import { ConflictError } from "@/lib/errors";
+import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
 
 const complianceSchema = z.object({
@@ -18,6 +19,7 @@ const createCategorySchema = z.object({
   slug: z.string().min(2, "Category slug is required").toLowerCase().trim(),
   description: z.string().max(500).optional(),
   image: z.string().optional(),
+  parentCategory: z.string().nullable().optional(),
   displayOrder: z.number().default(0),
   isActive: z.boolean().default(true),
   isRestricted: z.boolean().default(false),
@@ -30,12 +32,58 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const restrictedOnly = searchParams.get("isRestricted");
+    const parentOnly = searchParams.get("parentOnly") === "true" || searchParams.get("level") === "root";
+    const parentCategory = searchParams.get("parentCategory");
+    const asTree = searchParams.get("tree") === "true";
 
     const filter: Record<string, unknown> = { isActive: true };
     if (restrictedOnly === "true") filter.isRestricted = true;
     if (restrictedOnly === "false") filter.isRestricted = false;
 
-    const categories = await Category.find(filter).sort({ displayOrder: 1, name: 1 });
+    // Filter by specific parent category
+    if (parentCategory) {
+      if (mongoose.Types.ObjectId.isValid(parentCategory)) {
+        filter.parentCategory = parentCategory;
+      } else {
+        const parentDoc = await Category.findOne({ slug: parentCategory.toLowerCase().trim() });
+        if (!parentDoc) {
+          return apiSuccess({ categories: [] });
+        }
+        filter.parentCategory = parentDoc._id;
+      }
+    } else if (parentOnly) {
+      filter.parentCategory = null;
+    }
+
+    // If tree view is requested, fetch all and build tree structure
+    if (asTree) {
+      const allCategories = await Category.find({ isActive: true })
+        .populate("parentCategory", "name slug")
+        .sort({ displayOrder: 1, name: 1 })
+        .lean();
+
+      const roots = allCategories.filter((c: any) => !c.parentCategory);
+      const tree = roots.map((root: any) => {
+        const subcategories = allCategories.filter(
+          (c: any) =>
+            c.parentCategory &&
+            (c.parentCategory._id?.toString() === root._id.toString() ||
+              c.parentCategory?.toString() === root._id.toString())
+        );
+        return {
+          ...root,
+          subcategories,
+          subcategoriesCount: subcategories.length,
+        };
+      });
+
+      return apiSuccess({ categories: tree });
+    }
+
+    const categories = await Category.find(filter)
+      .populate("parentCategory", "name slug")
+      .sort({ displayOrder: 1, name: 1 })
+      .lean();
 
     return apiSuccess({ categories });
   } catch (error) {
@@ -57,9 +105,33 @@ export async function POST(req: Request) {
       throw new ConflictError("A category with this slug already exists.");
     }
 
-    const newCategory = await Category.create(data);
+    // Validate parent category if provided
+    let parentCategoryId = null;
+    if (data.parentCategory && data.parentCategory.trim()) {
+      const cleanParent = data.parentCategory.trim();
+      let parentDoc = null;
+      if (mongoose.Types.ObjectId.isValid(cleanParent)) {
+        parentDoc = await Category.findById(cleanParent);
+      } else {
+        parentDoc = await Category.findOne({ slug: cleanParent.toLowerCase() });
+      }
 
-    return apiSuccess({ category: newCategory }, "Category created successfully", 201);
+      if (!parentDoc) {
+        throw new NotFoundError(`Parent category "${cleanParent}" not found.`);
+      }
+      parentCategoryId = parentDoc._id;
+    }
+
+    const newCategory = await Category.create({
+      ...data,
+      parentCategory: parentCategoryId,
+    });
+
+    const populated = await Category.findById(newCategory._id)
+      .populate("parentCategory", "name slug")
+      .lean();
+
+    return apiSuccess({ category: populated }, "Category created successfully", 201);
   } catch (error) {
     return handleApiError(error);
   }

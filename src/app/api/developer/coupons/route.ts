@@ -22,7 +22,7 @@ const createCouponSchema = z.object({
 
 export async function GET(req: Request) {
   try {
-    await requireRole(req, "ADMIN", "STAFF");
+    await requireRole(req, "DEVELOPER");
     await connectToDatabase();
 
     const { searchParams } = new URL(req.url);
@@ -56,7 +56,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const user = await requireRole(req, "ADMIN");
+    const user = await requireRole(req, "DEVELOPER");
     await connectToDatabase();
 
     const data = await validateRequestBody(req, createCouponSchema);

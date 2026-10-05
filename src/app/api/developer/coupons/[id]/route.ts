@@ -21,7 +21,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireRole(req, "ADMIN");
+    await requireRole(req, "DEVELOPER");
     await connectToDatabase();
 
     const { id } = await params;
@@ -53,7 +53,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireRole(req, "ADMIN");
+    await requireRole(req, "DEVELOPER");
     await connectToDatabase();
 
     const { id } = await params;

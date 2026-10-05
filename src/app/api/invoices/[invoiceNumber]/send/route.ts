@@ -36,7 +36,7 @@ export async function POST(
       invoiceNumber: invoice.invoiceNumber,
       orderNumber: invoice.orderNumber,
       grandTotal: invoice.pricing.grandTotal,
-      pdfUrl: invoice.pdfUrl,
+      pdfUrl: `/api/invoices/${invoice.invoiceNumber}/pdf`,
       pdfPath: invoice.pdfPath,
     });
 

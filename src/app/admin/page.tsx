@@ -39,12 +39,6 @@ export default function AdminDashboardPage() {
             >
               <span>Launch Dashboard Suite →</span>
             </Link>
-            <Link
-              href="/profile"
-              className="rounded-xl border border-red-400/30 bg-white/10 px-4 py-2 text-xs font-semibold text-red-200 hover:bg-white/20 transition"
-            >
-              My Profile
-            </Link>
           </div>
         </div>
       </div>

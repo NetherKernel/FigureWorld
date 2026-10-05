@@ -27,7 +27,7 @@ interface CouponsResponse {
   };
 }
 
-export default function DashboardCouponsPage() {
+export default function DeveloperCouponsPage() {
   const [data, setData] = useState<CouponsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -48,7 +48,7 @@ export default function DashboardCouponsPage() {
   const fetchCoupons = async (search = query) => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/admin/coupons?q=${encodeURIComponent(search)}`);
+      const res = await fetch(`/api/developer/coupons?q=${encodeURIComponent(search)}`);
       if (res.ok) {
         const json = await res.json();
         if (json.success) {
@@ -84,7 +84,7 @@ export default function DashboardCouponsPage() {
     };
 
     try {
-      const res = await fetch("/api/admin/coupons", {
+      const res = await fetch("/api/developer/coupons", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -108,7 +108,7 @@ export default function DashboardCouponsPage() {
 
   const handleToggleActive = async (id: string, currentActive: boolean) => {
     try {
-      const res = await fetch(`/api/admin/coupons/${id}`, {
+      const res = await fetch(`/api/developer/coupons/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isActive: !currentActive }),
@@ -125,7 +125,7 @@ export default function DashboardCouponsPage() {
     if (!confirm(`Are you sure you want to permanently delete coupon "${couponCode}"?`)) return;
 
     try {
-      const res = await fetch(`/api/admin/coupons/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/developer/coupons/${id}`, { method: "DELETE" });
       if (res.ok) {
         fetchCoupons(query);
       }

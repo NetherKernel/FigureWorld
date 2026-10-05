@@ -49,7 +49,7 @@ export async function GET(
       paymentMethod: invoice.paymentMethod,
       paymentStatus: invoice.paymentStatus,
       paymentRef: invoice.paymentRef,
-      pdfUrl: invoice.pdfUrl,
+      pdfUrl: `/api/invoices/${invoice.invoiceNumber}/pdf`,
       sentToCustomer: invoice.sentToCustomer,
       sentAt: invoice.sentAt,
     });

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Chakra_Petch, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
@@ -7,6 +7,7 @@ import CartFlyout from "@/components/layout/CartFlyout";
 import { ThemeProvider, themeInitScript } from "@/context/ThemeContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
+import { StorefrontOnly } from "@/components/layout/StorefrontOnly";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,6 +17,14 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+// Angular display face for headings — echoes the cut lettering in the Figure World logo
+const chakraPetch = Chakra_Petch({
+  variable: "--font-chakra",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -43,7 +52,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`} suppressHydrationWarning>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${chakraPetch.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
@@ -57,12 +66,16 @@ export default function RootLayout({
               >
                 Skip to main content
               </a>
-              <Header />
+              <StorefrontOnly>
+                <Header />
+              </StorefrontOnly>
               <main id="main-content" className="flex-1">
                 {children}
               </main>
-              <Footer />
-              <CartFlyout />
+              <StorefrontOnly>
+                <Footer />
+                <CartFlyout />
+              </StorefrontOnly>
             </CartProvider>
           </AuthProvider>
         </ThemeProvider>

@@ -7,6 +7,7 @@ import { Address } from "@/models/Address";
 import { Order } from "@/models/Order";
 import { OrderItem } from "@/models/OrderItem";
 import { evaluateCoupon } from "@/lib/coupon";
+import { calculateDeliveryFee } from "@/lib/delivery-rates";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { ValidationError, ConflictError } from "@/lib/errors";
@@ -178,8 +179,20 @@ export async function POST(req: Request) {
       await coupon.save();
     }
 
-    // 3. Authoritative Delivery Calculation (Flat ₹100 as specified in Sprint 5 & 6)
-    const shippingFee = 100;
+    // 3. Authoritative Delivery Calculation
+    const deliveryCalc = await calculateDeliveryFee({
+      subtotal,
+      address: {
+        postalCode: data.customer.pinCode,
+        city: data.customer.city,
+        state: data.customer.state,
+      },
+      items: data.items.map((it) => ({
+        productId: it.productId,
+        quantity: it.quantity,
+      })),
+    });
+    const shippingFee = deliveryCalc.fee;
     const grandTotal = Math.max(0, subtotal - discountAmount + shippingFee);
 
     // 3b. COD Maximum Limit Enforcement (Sprint 8)
@@ -235,6 +248,8 @@ export async function POST(req: Request) {
         shippingFee,
         grandTotal,
         currency: "INR",
+        isCustomShippingFee: false,
+        deliveryPartnerType: deliveryCalc.partnerSuggestion || "STANDARD_COURIER",
       },
       shippingAddress: shippingAddress._id,
       paymentMethod: data.paymentMethod,

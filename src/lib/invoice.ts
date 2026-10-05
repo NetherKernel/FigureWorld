@@ -1,6 +1,5 @@
 import fs from "fs/promises";
 import path from "path";
-import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { connectToDatabase } from "./db";
 import { Invoice, IInvoice } from "@/models/Invoice";
 import { Order } from "@/models/Order";
@@ -9,6 +8,9 @@ import { Address } from "@/models/Address";
 import { logger } from "./logger";
 import { sendInvoiceEmail } from "./email";
 import { NotFoundError, ConflictError } from "./errors";
+import { renderInvoicePdf } from "./invoice-pdf";
+
+export { renderInvoicePdf };
 
 export const STORE_DETAILS = {
   name: "FiguresWorld Anime Store",
@@ -88,322 +90,6 @@ export function calculateGstBreakdown(subtotal: number, customerState: string) {
   }
 }
 
-/**
- * Renders a crisp vector PDF invoice document using pdf-lib.
- */
-export async function renderInvoicePdf(invoice: any): Promise<Uint8Array> {
-  const pdfDoc = await PDFDocument.create();
-  // Standard A4 dimensions: 595.28 x 841.89 pt
-  const page = pdfDoc.addPage([595.28, 841.89]);
-  const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const fontMono = await pdfDoc.embedFont(StandardFonts.CourierBold);
-
-  const navy = rgb(0.12, 0.16, 0.38);
-  const darkSlate = rgb(0.1, 0.12, 0.18);
-  const mutedGray = rgb(0.4, 0.45, 0.52);
-  const lineGray = rgb(0.85, 0.88, 0.92);
-  const lightBg = rgb(0.96, 0.97, 0.99);
-
-  let y = 790;
-
-  // Header: Brand & Title
-  page.drawText(STORE_DETAILS.name, {
-    x: 40,
-    y,
-    size: 18,
-    font: fontBold,
-    color: navy,
-  });
-
-  page.drawText("TAX INVOICE", {
-    x: 440,
-    y,
-    size: 18,
-    font: fontBold,
-    color: navy,
-  });
-
-  y -= 16;
-  page.drawText(STORE_DETAILS.address, {
-    x: 40,
-    y,
-    size: 8.5,
-    font: fontRegular,
-    color: mutedGray,
-  });
-
-  page.drawText(`Invoice #: ${invoice.invoiceNumber}`, {
-    x: 440,
-    y,
-    size: 9.5,
-    font: fontMono,
-    color: darkSlate,
-  });
-
-  y -= 14;
-  page.drawText(`GSTIN: ${STORE_DETAILS.gstin}  |  PAN: ${STORE_DETAILS.pan}`, {
-    x: 40,
-    y,
-    size: 8.5,
-    font: fontRegular,
-    color: mutedGray,
-  });
-
-  const dateStr = new Date(invoice.issuedAt || Date.now()).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-  page.drawText(`Date: ${dateStr}`, {
-    x: 440,
-    y,
-    size: 8.5,
-    font: fontRegular,
-    color: darkSlate,
-  });
-
-  y -= 14;
-  page.drawText(`Email: ${STORE_DETAILS.email}  |  Web: ${STORE_DETAILS.website}`, {
-    x: 40,
-    y,
-    size: 8.5,
-    font: fontRegular,
-    color: mutedGray,
-  });
-
-  page.drawText(`Order #: ${invoice.orderNumber}`, {
-    x: 440,
-    y,
-    size: 8.5,
-    font: fontBold,
-    color: darkSlate,
-  });
-
-  y -= 18;
-  page.drawLine({
-    start: { x: 40, y },
-    end: { x: 555, y },
-    thickness: 1,
-    color: lineGray,
-  });
-
-  // Customer & Billing Information Box
-  y -= 20;
-  page.drawRectangle({
-    x: 40,
-    y: y - 65,
-    width: 515,
-    height: 75,
-    color: lightBg,
-    borderColor: lineGray,
-    borderWidth: 1,
-  });
-
-  page.drawText("BILLED & SHIPPED TO:", {
-    x: 52,
-    y: y - 4,
-    size: 8.5,
-    font: fontBold,
-    color: navy,
-  });
-
-  const cust = invoice.customerDetails;
-  page.drawText(cust.name, {
-    x: 52,
-    y: y - 18,
-    size: 10,
-    font: fontBold,
-    color: darkSlate,
-  });
-
-  const addr = cust.shippingAddress;
-  const fullAddress = `${addr.street}${addr.landmark ? `, ${addr.landmark}` : ""}, ${addr.city}, ${addr.state} - ${addr.pinCode}`;
-  page.drawText(fullAddress, {
-    x: 52,
-    y: y - 31,
-    size: 8.5,
-    font: fontRegular,
-    color: darkSlate,
-  });
-
-  page.drawText(`Phone: ${cust.phone}  |  Email: ${cust.email}`, {
-    x: 52,
-    y: y - 44,
-    size: 8.5,
-    font: fontRegular,
-    color: darkSlate,
-  });
-
-  page.drawText(`Payment Method: ${invoice.paymentMethod}  |  Status: ${invoice.paymentStatus}`, {
-    x: 52,
-    y: y - 57,
-    size: 8.5,
-    font: fontBold,
-    color: navy,
-  });
-
-  y -= 85;
-
-  // Itemized Products Table Header
-  page.drawRectangle({
-    x: 40,
-    y: y - 18,
-    width: 515,
-    height: 22,
-    color: navy,
-  });
-
-  page.drawText("#", { x: 48, y: y - 12, size: 8.5, font: fontBold, color: rgb(1, 1, 1) });
-  page.drawText("PRODUCT / DESCRIPTION", { x: 68, y: y - 12, size: 8.5, font: fontBold, color: rgb(1, 1, 1) });
-  page.drawText("SKU", { x: 250, y: y - 12, size: 8.5, font: fontBold, color: rgb(1, 1, 1) });
-  page.drawText("HSN", { x: 335, y: y - 12, size: 8.5, font: fontBold, color: rgb(1, 1, 1) });
-  page.drawText("QTY", { x: 385, y: y - 12, size: 8.5, font: fontBold, color: rgb(1, 1, 1) });
-  page.drawText("PRICE", { x: 420, y: y - 12, size: 8.5, font: fontBold, color: rgb(1, 1, 1) });
-  page.drawText("TOTAL (INR)", { x: 480, y: y - 12, size: 8.5, font: fontBold, color: rgb(1, 1, 1) });
-
-  y -= 20;
-
-  // Items Rows
-  let rowIndex = 1;
-  for (const item of invoice.items) {
-    y -= 18;
-
-    page.drawText(String(rowIndex++), { x: 48, y, size: 8.5, font: fontRegular, color: darkSlate });
-
-    const titleTruncated = item.productTitle.length > 32
-      ? item.productTitle.substring(0, 30) + "..."
-      : item.productTitle;
-    page.drawText(titleTruncated, { x: 68, y, size: 8.5, font: fontBold, color: darkSlate });
-
-    page.drawText(item.productSku || "-", { x: 250, y, size: 8, font: fontRegular, color: mutedGray });
-    page.drawText(item.hsn || "95030090", { x: 335, y, size: 8, font: fontRegular, color: mutedGray });
-    page.drawText(String(item.quantity), { x: 392, y, size: 8.5, font: fontBold, color: darkSlate });
-    page.drawText(`Rs. ${item.unitPrice.toLocaleString("en-IN")}`, { x: 410, y, size: 8.5, font: fontRegular, color: darkSlate });
-    page.drawText(`Rs. ${item.total.toLocaleString("en-IN")}`, { x: 475, y, size: 8.5, font: fontBold, color: darkSlate });
-
-    // Subtle row line
-    page.drawLine({
-      start: { x: 40, y: y - 4 },
-      end: { x: 555, y: y - 4 },
-      thickness: 0.5,
-      color: lineGray,
-    });
-  }
-
-  y -= 25;
-
-  // GST Breakdown & Financial Totals Box
-  const gst = invoice.gstDetails;
-  const pricing = invoice.pricing;
-
-  // Left side: Tax summary table
-  page.drawRectangle({
-    x: 40,
-    y: y - 75,
-    width: 250,
-    height: 80,
-    color: lightBg,
-    borderColor: lineGray,
-    borderWidth: 0.5,
-  });
-
-  page.drawText("TAX SPECIFICATION (18% GST)", {
-    x: 48,
-    y: y - 10,
-    size: 8,
-    font: fontBold,
-    color: navy,
-  });
-
-  if (gst.cgstRate > 0) {
-    page.drawText(`CGST (9%): Rs. ${gst.cgstAmount.toLocaleString("en-IN")}`, {
-      x: 48,
-      y: y - 24,
-      size: 8,
-      font: fontRegular,
-      color: darkSlate,
-    });
-    page.drawText(`SGST (9%): Rs. ${gst.sgstAmount.toLocaleString("en-IN")}`, {
-      x: 48,
-      y: y - 36,
-      size: 8,
-      font: fontRegular,
-      color: darkSlate,
-    });
-  } else {
-    page.drawText(`Integrated GST (18%): Rs. ${gst.igstAmount.toLocaleString("en-IN")}`, {
-      x: 48,
-      y: y - 26,
-      size: 8,
-      font: fontRegular,
-      color: darkSlate,
-    });
-  }
-
-  page.drawText(`Total Tax Included: Rs. ${gst.totalTax.toLocaleString("en-IN")}`, {
-    x: 48,
-    y: y - 50,
-    size: 8,
-    font: fontBold,
-    color: darkSlate,
-  });
-
-  page.drawText(`HSN Code: ${gst.hsnCode} (Anime scale models)`, {
-    x: 48,
-    y: y - 62,
-    size: 7.5,
-    font: fontRegular,
-    color: mutedGray,
-  });
-
-  // Right side: Financial Totals
-  const rightBoxX = 330;
-  page.drawText("Subtotal:", { x: rightBoxX, y: y - 10, size: 9, font: fontRegular, color: mutedGray });
-  page.drawText(`Rs. ${pricing.subtotal.toLocaleString("en-IN")}`, { x: 475, y: y - 10, size: 9, font: fontBold, color: darkSlate });
-
-  page.drawText("Shipping / Delivery:", { x: rightBoxX, y: y - 24, size: 9, font: fontRegular, color: mutedGray });
-  page.drawText(`Rs. ${pricing.shippingFee.toLocaleString("en-IN")}`, { x: 475, y: y - 24, size: 9, font: fontBold, color: darkSlate });
-
-  page.drawLine({
-    start: { x: rightBoxX, y: y - 34 },
-    end: { x: 555, y: y - 34 },
-    thickness: 1,
-    color: lineGray,
-  });
-
-  page.drawText("GRAND TOTAL:", { x: rightBoxX, y: y - 48, size: 11, font: fontBold, color: navy });
-  page.drawText(`Rs. ${pricing.grandTotal.toLocaleString("en-IN")}`, { x: 460, y: y - 48, size: 12, font: fontBold, color: navy });
-
-  // Footer & Declarations
-  y -= 130;
-  page.drawLine({
-    start: { x: 40, y },
-    end: { x: 555, y },
-    thickness: 1,
-    color: lineGray,
-  });
-
-  y -= 14;
-  page.drawText("Declaration: This is a computer-generated tax invoice and requires no physical signature.", {
-    x: 40,
-    y,
-    size: 7.5,
-    font: fontRegular,
-    color: mutedGray,
-  });
-
-  y -= 11;
-  page.drawText("FiguresWorld Anime Store • All authentic scale figures & licensed collectibles.", {
-    x: 40,
-    y,
-    size: 7.5,
-    font: fontRegular,
-    color: mutedGray,
-  });
-
-  return pdfDoc.save();
-}
 
 /**
  * Creates and stores an authoritative invoice for a confirmed order.
@@ -515,8 +201,9 @@ export async function createInvoiceForOrder(
     paymentMethod: order.paymentMethod,
     paymentStatus: order.paymentStatus,
     paymentRef: order.paymentDetails?.transactionRef || undefined,
-    pdfUrl: `/uploads/invoices/${invoiceNumber}.pdf`,
-    pdfPath: path.join(process.cwd(), "public", "uploads", "invoices", `${invoiceNumber}.pdf`),
+    // Served only through the signed-in /api/invoices/:n/pdf route, never from /public
+    pdfUrl: `/api/invoices/${invoiceNumber}/pdf`,
+    pdfPath: path.join(process.cwd(), "storage", "invoices", `${invoiceNumber}.pdf`),
     sentToCustomer: false,
     issuedAt: new Date(),
   };
@@ -525,7 +212,7 @@ export async function createInvoiceForOrder(
   const pdfBytes = await renderInvoicePdf(invoiceData);
 
   // Ensure storage directory exists
-  const invoiceDir = path.join(process.cwd(), "public", "uploads", "invoices");
+  const invoiceDir = path.join(process.cwd(), "storage", "invoices");
   await fs.mkdir(invoiceDir, { recursive: true });
 
   // Write PDF file to disk

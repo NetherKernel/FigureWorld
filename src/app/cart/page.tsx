@@ -105,7 +105,7 @@ export default function CartPage() {
           <div className="card p-5">
             {summary.hasStockIssues ? (
               <p className="flex items-start gap-2 text-[13px] text-warn">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> Please review the stock notices before checking out.
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> Some quantities were updated to match available stock.
               </p>
             ) : (
               <p className="flex items-start gap-2 text-[13px] text-success">
@@ -140,11 +140,7 @@ export default function CartPage() {
               </p>
             )}
 
-            <Link
-              href="/checkout"
-              aria-disabled={summary.hasStockIssues}
-              className={`btn btn-primary mt-4 w-full ${summary.hasStockIssues ? "pointer-events-none opacity-50" : ""}`}
-            >
+            <Link href="/checkout" className="btn btn-primary mt-4 w-full">
               Proceed to Buy
             </Link>
             <p className="mt-2 text-center text-xs text-muted">Prices and stock are confirmed when you place your order.</p>

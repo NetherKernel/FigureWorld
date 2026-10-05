@@ -189,7 +189,7 @@ async function runTests() {
     // 6. Test Multiple Products with 18+ Restricted Detection
     console.log("\n--- Step 6: Multi-Item Cart & Compliance Verification ---");
     const katanaRes = await request("/api/products?search=Nichirin Katana");
-    const katana = katanaRes.json?.data?.products?.[0];
+    const katana = katanaRes.json?.data?.products?.find((p) => p.isRestricted) || katanaRes.json?.data?.products?.[0];
 
     if (katana) {
       const multiRes = await request("/api/cart/calculate", {

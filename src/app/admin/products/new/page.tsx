@@ -21,6 +21,7 @@ interface ICategory {
   _id: string;
   name: string;
   slug: string;
+  parentCategory?: string | { _id: string; name: string; slug: string } | null;
   isRestricted: boolean;
   complianceRequirements?: {
     minAge: number;
@@ -51,6 +52,7 @@ export default function NewProductPage() {
   const [discountPrice, setDiscountPrice] = useState("");
   const [stock, setStock] = useState("10");
   const [category, setCategory] = useState("");
+  const [subcategory, setSubcategory] = useState("");
   const [brand, setBrand] = useState("");
   const [sku, setSku] = useState("");
   const [weight, setWeight] = useState("500");
@@ -83,6 +85,12 @@ export default function NewProductPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const rootCategories = categories.filter((c) => !c.parentCategory);
+  const availableSubcategories = categories.filter((c) => {
+    const pid = typeof c.parentCategory === "object" ? c.parentCategory?._id : c.parentCategory;
+    return pid === category;
+  });
+
   // Auto-generate slug from name
   const handleNameChange = (val: string) => {
     setName(val);
@@ -103,7 +111,11 @@ export default function NewProductPage() {
         const data = await res.json();
         if (data.success && data.data?.categories) {
           setCategories(data.data.categories);
-          if (data.data.categories.length > 0) {
+          const roots = data.data.categories.filter((c: any) => !c.parentCategory);
+          if (roots.length > 0) {
+            setCategory(roots[0]._id);
+            checkCategoryRestrictions(roots[0]._id, data.data.categories);
+          } else if (data.data.categories.length > 0) {
             setCategory(data.data.categories[0]._id);
             checkCategoryRestrictions(data.data.categories[0]._id, data.data.categories);
           }
@@ -138,6 +150,7 @@ export default function NewProductPage() {
 
   const handleCategoryChange = (catId: string) => {
     setCategory(catId);
+    setSubcategory("");
     checkCategoryRestrictions(catId);
   };
 
@@ -235,6 +248,7 @@ export default function NewProductPage() {
         discountPrice: discountPrice.trim() ? parseFloat(discountPrice) : undefined,
         stock: parseInt(stock, 10),
         category,
+        subcategory: subcategory ? subcategory : undefined,
         brand: brand.trim() || undefined,
         sku: sku.toUpperCase().trim(),
         weight: parseFloat(weight) || 500,
@@ -381,9 +395,9 @@ export default function NewProductPage() {
               />
             </div>
 
-            <div className="sm:col-span-2">
+            <div>
               <label className="block font-semibold text-fg-2">
-                Category *
+                Department Category *
               </label>
               <select
                 required
@@ -392,9 +406,30 @@ export default function NewProductPage() {
                 disabled={loadingCategories}
                 className="mt-1 w-full rounded-xl border border-line bg-bg py-2 px-3 text-fg focus:border-brand focus:bg-surface focus:outline-none"
               >
-                {categories.map((c) => (
+                {rootCategories.map((c) => (
                   <option key={c._id} value={c._id}>
                     {c.name} {c.isRestricted ? "⚠️ (Restricted Category — 18+ Rules Apply)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-fg-2">
+                Franchise / Subcategory <span className="font-normal text-muted">(Optional)</span>
+              </label>
+              <select
+                value={subcategory}
+                onChange={(e) => setSubcategory(e.target.value)}
+                disabled={loadingCategories || availableSubcategories.length === 0}
+                className="mt-1 w-full rounded-xl border border-line bg-bg py-2 px-3 text-fg focus:border-brand focus:bg-surface focus:outline-none"
+              >
+                <option value="">
+                  {availableSubcategories.length > 0 ? "None (General)" : "No subcategories available"}
+                </option>
+                {availableSubcategories.map((sub) => (
+                  <option key={sub._id} value={sub._id}>
+                    {sub.name}
                   </option>
                 ))}
               </select>
