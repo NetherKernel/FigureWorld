@@ -29,7 +29,7 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
     const opts: mongoose.ConnectOptions = {
       bufferCommands: false,
       maxPoolSize: 10,
-      serverSelectionTimeoutMS: 2000,
+      serverSelectionTimeoutMS: 5000,
     };
 
     logger.info("Connecting to MongoDB...", { uri: env.MONGODB_URI.replace(/\/\/.*@/, "//@***:") });
