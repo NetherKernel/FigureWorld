@@ -397,7 +397,7 @@ export const DEFAULT_LANDING_CONFIG: LandingConfig = {
           id: "c1",
           icon: "truck",
           title: "Shipping & delivery",
-          text: "Flat ₹100 delivery on every order. Most orders arrive in 3–5 business days; 18+ replicas may take 1–2 extra days for verification.",
+          text: "Two-tier weight delivery: ₹180 for light orders (katanas, keychains, small figures) and ₹299 for large orders (statues, dioramas). Fast tracked delivery across India.",
         },
         {
           id: "c2",

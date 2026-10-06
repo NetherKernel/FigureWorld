@@ -6,16 +6,25 @@ async function reset() {
     {},
     {
       $set: {
+        lightWeightFee: 180,
+        largeWeightFee: 299,
+        heavyWeightThresholdKg: 2.0,
+        defaultBaseFee: 180,
+        nationalFee: 180,
         isFreeShippingActive: false,
         enableLocalDelivery: false,
         enableRegionalDelivery: false,
+        heavyItemSurcharge: 0,
         pincodeRates: [],
-        defaultBaseFee: 100,
+      },
+      $unset: {
+        stateRates: "",
       },
     }
   );
-  console.log("Delivery rules reset to default baseline (base fee: ₹100, free shipping: inactive).");
+  console.log("Delivery rules updated to two-tier weight pricing (Light ₹180, Large ₹299, State rates purged).");
   await mongoose.disconnect();
 }
 
 reset().catch(console.error);
+

@@ -202,7 +202,7 @@ async function runSprint9Tests() {
     console.log("\n--- Step 5: Order Status Lifecycle Progression ---");
     // Place a new order to run through all status transitions
     const catalogRes = await request("/api/products");
-    const demoProduct = catalogRes.json?.data?.products?.find((p) => p.sku === "AF-DEMO-2499");
+    const demoProduct = catalogRes.json?.data?.products?.find((p) => !p.isRestricted && p.stock > 5);
     assert(!!demoProduct, "Found product for lifecycle test order");
 
     const checkoutRes = await request("/api/checkout", {
@@ -294,7 +294,7 @@ async function runSprint9Tests() {
 
     // --- Step 7: Order Cancellation & Inventory Stock Restoration ---
     console.log("\n--- Step 7: Cancellation & Automatic Inventory Restocking ---");
-    const stockBeforeOrder = (await request("/api/products")).json?.data?.products?.find((p) => p.sku === "AF-DEMO-2499")?.stock;
+    const stockBeforeOrder = (await request("/api/products")).json?.data?.products?.find((p) => p.sku === demoProduct.sku)?.stock;
 
     const cancelOrderRes = await request("/api/checkout", {
       method: "POST",
@@ -316,7 +316,7 @@ async function runSprint9Tests() {
     const cancelOrderNum = cancelOrderRes.json?.data?.orderNumber;
     assert(!!cancelOrderNum, `Placed order for cancellation test: ${cancelOrderNum}`);
 
-    const stockAfterPlacement = (await request("/api/products")).json?.data?.products?.find((p) => p.sku === "AF-DEMO-2499")?.stock;
+    const stockAfterPlacement = (await request("/api/products")).json?.data?.products?.find((p) => p.sku === demoProduct.sku)?.stock;
     assert(stockAfterPlacement === stockBeforeOrder - 2, `Stock decremented by 2 (from ${stockBeforeOrder} to ${stockAfterPlacement})`);
 
     const cancelActionRes = await request(`/api/admin/orders/${cancelOrderNum}/status`, {
@@ -331,7 +331,7 @@ async function runSprint9Tests() {
     assert(cancelActionRes.status === 200, "Order cancelled via status endpoint (200 OK)");
     assert(cancelActionRes.json?.data?.orderStatus === "CANCELLED", "Order status transitioned to CANCELLED");
 
-    const stockAfterCancellation = (await request("/api/products")).json?.data?.products?.find((p) => p.sku === "AF-DEMO-2499")?.stock;
+    const stockAfterCancellation = (await request("/api/products")).json?.data?.products?.find((p) => p.sku === demoProduct.sku)?.stock;
     assert(stockAfterCancellation === stockBeforeOrder, `Inventory stock automatically restored back to ${stockBeforeOrder}`);
 
     // --- Step 8: Return & Refund Flow ---

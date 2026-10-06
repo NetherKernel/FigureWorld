@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -51,40 +51,62 @@ export default function DashboardLayout({
   const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Close the drawer on navigation, lock page scroll while it's open, close with Escape
+  const [lastPath, setLastPath] = useState(pathname);
+  if (pathname !== lastPath) {
+    setLastPath(pathname);
+    setMobileMenuOpen(false);
+  }
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMobileMenuOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [mobileMenuOpen]);
+
+  const currentNav = NAV_ITEMS.find((item) =>
+    item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href)
+  );
+
   return (
     <div className="min-h-screen bg-bg flex flex-col md:flex-row">
-      {/* Mobile header — not sticky: the global storefront header is already sticky above it */}
-      <div className="flex md:hidden items-center justify-between px-4 py-3 bg-ink text-white border-b border-white/5">
-        <div className="flex items-center gap-2.5">
-          <Logo href="/dashboard" />
-          <span className="font-display font-bold text-sm tracking-tight text-white">
-            Figure World <span className="text-[#ff5a60]">Admin</span>
-          </span>
-        </div>
+      {/* Mobile top bar — sticky (the storefront header isn't shown on dashboard pages) */}
+      <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-white/5 bg-ink px-3 py-2.5 text-white md:hidden">
         <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-2 rounded-lg text-white/80 hover:bg-white/10"
-          aria-label="Toggle navigation menu"
+          type="button"
+          onClick={() => setMobileMenuOpen(true)}
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-white/85 hover:bg-white/10"
+          aria-label="Open navigation menu"
           aria-expanded={mobileMenuOpen}
         >
-          {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          <Menu className="h-5 w-5" />
         </button>
+        <Logo href="/dashboard" />
+        <span className="min-w-0 flex-1 truncate font-display text-sm font-bold tracking-tight">
+          {currentNav?.name || "Admin"}
+        </span>
       </div>
 
       {/* Mobile drawer backdrop */}
-      {mobileMenuOpen && (
-        <button
-          type="button"
-          aria-label="Close navigation menu"
-          onClick={() => setMobileMenuOpen(false)}
-          className="fixed inset-0 z-40 bg-black/40 md:hidden animate-fade-in"
-        />
-      )}
+      <button
+        type="button"
+        aria-label="Close navigation menu"
+        tabIndex={mobileMenuOpen ? 0 : -1}
+        onClick={() => setMobileMenuOpen(false)}
+        className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 md:hidden ${
+          mobileMenuOpen ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      />
 
-      {/* Sidebar navigation — mobile: overlay drawer; desktop: sticky full height */}
+      {/* Sidebar navigation — mobile: slide-in drawer; desktop: sticky full height */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 h-screen w-64 shrink-0 flex-col justify-between overflow-y-auto border-r border-white/5 bg-ink text-white p-4 md:sticky md:top-0 md:z-10 md:h-screen md:flex ${
-          mobileMenuOpen ? "flex animate-fade-in" : "hidden md:flex"
+        className={`fixed inset-y-0 left-0 z-50 flex h-[100dvh] w-[min(80vw,272px)] shrink-0 flex-col justify-between overflow-y-auto border-r border-white/5 bg-ink p-4 text-white transition-transform duration-300 [transition-timing-function:cubic-bezier(0.2,0.8,0.2,1)] md:sticky md:top-0 md:z-10 md:h-screen md:w-60 md:translate-x-0 lg:w-64 ${
+          mobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
         }`}
       >
         <div className="space-y-6">
@@ -104,15 +126,14 @@ export default function DashboardLayout({
                 </div>
               </div>
             </div>
-            {mobileMenuOpen && (
-              <button
-                onClick={() => setMobileMenuOpen(false)}
-                className="md:hidden p-1.5 rounded-lg text-white/60 hover:bg-white/10"
-                aria-label="Close navigation menu"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              className="rounded-lg p-2 text-white/60 hover:bg-white/10 md:hidden"
+              aria-label="Close navigation menu"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
 
           {/* Navigation Links */}
@@ -130,7 +151,7 @@ export default function DashboardLayout({
                   href={item.href}
                   onClick={() => setMobileMenuOpen(false)}
                   aria-current={isActive ? "page" : undefined}
-                  className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-semibold transition-colors duration-150 ${
+                  className={`relative flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold md:py-2.5 md:text-xs transition-colors duration-150 ${
                     isActive
                       ? "bg-white/10 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] before:absolute before:inset-y-2 before:left-0 before:w-[4px] before:skew-x-[-20deg] before:rounded-sm before:bg-brand"
                       : "text-white/65 hover:bg-white/5 hover:text-white"
@@ -169,8 +190,8 @@ export default function DashboardLayout({
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Breadcrumb bar — not sticky, so it never slides under the global header */}
-        <header className="hidden md:flex items-center justify-between px-8 py-3.5 bg-surface border-b border-line">
+        {/* Breadcrumb bar */}
+        <header className="sticky top-0 z-20 hidden items-center justify-between border-b border-line bg-surface/90 px-6 py-3.5 backdrop-blur md:flex lg:px-8">
           <div className="flex items-center gap-2 text-xs text-muted">
             <span className="font-semibold text-fg-2">Dashboard</span>
             <span>/</span>
@@ -182,14 +203,14 @@ export default function DashboardLayout({
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50/80 px-3 py-1 text-[11px] font-medium text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-300">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Production Telemetry Active</span>
+              <span>Live</span>
             </div>
 
           </div>
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">{children}</main>
+        <main className="mx-auto w-full max-w-[1600px] flex-1 p-3 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>
   );

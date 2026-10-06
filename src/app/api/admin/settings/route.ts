@@ -19,7 +19,7 @@ const defaultSettings = {
   address: "Shop 42, Akihabara Plaza, Linking Road, Bandra West, Mumbai, MH - 400050",
   merchantUpiId: "figuresworld@icici",
   freeShippingThreshold: 1999,
-  flatShippingRate: 100,
+  flatShippingRate: 180,
   codMaxLimit: 15000,
   whatsappNumber: "+91 98765 43210",
   autoWhatsAppNotifications: true,

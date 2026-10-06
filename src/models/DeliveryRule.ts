@@ -10,13 +10,6 @@ export interface IPincodeRate {
   notes?: string;
 }
 
-export interface IStateRate {
-  state: string;
-  fee: number;
-  estimatedDays: string;
-  isActive: boolean;
-  notes?: string;
-}
 
 export interface IDeliveryPartnerPreset {
   id: string;
@@ -27,6 +20,9 @@ export interface IDeliveryPartnerPreset {
 }
 
 export interface IDeliveryRule extends Document {
+  lightWeightFee: number; // ₹180 for katanas, keychains, small action figures (< 2.0kg)
+  largeWeightFee: number; // ₹299 for large resin statues, 1/4 scales, heavy orders (≥ 2.0kg)
+  heavyWeightThresholdKg: number; // e.g. 2.0 kg
   defaultBaseFee: number;
   freeShippingThreshold: number;
   isFreeShippingActive: boolean;
@@ -42,7 +38,6 @@ export interface IDeliveryRule extends Document {
   nationalEstDays: string;
   heavyItemSurcharge: number;
   pincodeRates: IPincodeRate[];
-  stateRates: IStateRate[];
   partnerPresets: IDeliveryPartnerPreset[];
   updatedBy?: string;
   updatedAt: Date;
@@ -55,17 +50,6 @@ const PincodeRateSchema = new Schema<IPincodeRate>(
     areaName: { type: String, required: true, trim: true },
     fee: { type: Number, required: true, min: 0 },
     estimatedDays: { type: String, default: "1-2 Days" },
-    isActive: { type: Boolean, default: true },
-    notes: { type: String, trim: true },
-  },
-  { _id: false }
-);
-
-const StateRateSchema = new Schema<IStateRate>(
-  {
-    state: { type: String, required: true, trim: true },
-    fee: { type: Number, required: true, min: 0 },
-    estimatedDays: { type: String, default: "2-4 Days" },
     isActive: { type: Boolean, default: true },
     notes: { type: String, trim: true },
   },
@@ -89,7 +73,10 @@ const DeliveryPartnerPresetSchema = new Schema<IDeliveryPartnerPreset>(
 
 const DeliveryRuleSchema = new Schema<IDeliveryRule>(
   {
-    defaultBaseFee: { type: Number, default: 100, min: 0 },
+    lightWeightFee: { type: Number, default: 180, min: 0 },
+    largeWeightFee: { type: Number, default: 299, min: 0 },
+    heavyWeightThresholdKg: { type: Number, default: 2.0, min: 0 },
+    defaultBaseFee: { type: Number, default: 180, min: 0 },
     freeShippingThreshold: { type: Number, default: 1999, min: 0 },
     isFreeShippingActive: { type: Boolean, default: false },
     enableLocalDelivery: { type: Boolean, default: false },
@@ -100,11 +87,10 @@ const DeliveryRuleSchema = new Schema<IDeliveryRule>(
     regionalState: { type: String, default: "Maharashtra", trim: true },
     regionalStateFee: { type: Number, default: 80, min: 0 },
     regionalStateEstDays: { type: String, default: "1-2 Days" },
-    nationalFee: { type: Number, default: 100, min: 0 },
+    nationalFee: { type: Number, default: 180, min: 0 },
     nationalEstDays: { type: String, default: "3-5 Days" },
     heavyItemSurcharge: { type: Number, default: 0, min: 0 },
     pincodeRates: { type: [PincodeRateSchema], default: [] },
-    stateRates: { type: [StateRateSchema], default: [] },
     partnerPresets: {
       type: [DeliveryPartnerPresetSchema],
       default: [

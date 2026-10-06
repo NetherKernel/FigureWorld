@@ -89,104 +89,31 @@ const SUBCATEGORY_TREE = [
       { name: "Desk Mats & Mousepads", slug: "desk-mats", description: "XXL stitched-edge gaming anime desk mats" },
     ],
   },
-];
-
-// Sample featured products to seed for subcategories if missing
-const SAMPLE_SUBCATEGORY_PRODUCTS = [
   {
-    name: "Son Goku Ultra Instinct Master Figure",
-    title: "Son Goku Ultra Instinct Master Figure",
-    slug: "son-goku-ultra-instinct-figure",
-    description: "Dynamic Dragon Ball Super master figure depicting Son Goku reaching Mastered Ultra Instinct state with silver hair aura effects.",
-    price: 3499,
-    discountPrice: 2999,
-    stock: 25,
-    categorySlug: "action-figures",
-    subcategorySlug: "dragon-ball",
-    series: "Dragon Ball Super",
-    brand: "Bandai Spirits",
-    sku: "DB-GOKU-UI-01",
-    weight: 850,
-    dimensions: { length: 20, width: 18, height: 30, unit: "cm" },
-    images: [{ url: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800", altText: "Goku Ultra Instinct", isPrimary: true }],
-    tags: ["dragon ball", "goku", "action figure", "anime"],
-    isFeatured: true,
+    parent: {
+      name: "Manga",
+      slug: "manga",
+      description: "English-edition manga volumes, box sets and artbooks",
+      displayOrder: 6,
+    },
+    subcategories: [
+      { name: "Shonen Manga", slug: "shonen-manga", description: "English-edition shonen manga volumes and box sets" },
+      { name: "Seinen Manga", slug: "seinen-manga", description: "Mature English-edition seinen manga and deluxe hardcovers" },
+      { name: "Artbooks & Guidebooks", slug: "artbooks", description: "Official art collections and character guidebooks" },
+    ],
   },
   {
-    name: "Gojo Satoru Hollow Purple Action Figure",
-    title: "Gojo Satoru Hollow Purple Action Figure",
-    slug: "gojo-satoru-hollow-purple-figure",
-    description: "Highly articulated Jujutsu Kaisen figure featuring Gojo Satoru casting the devastating Hollow Purple with translucent cursed energy sphere.",
-    price: 3999,
-    discountPrice: 3499,
-    stock: 20,
-    categorySlug: "action-figures",
-    subcategorySlug: "jujutsu-kaisen",
-    series: "Jujutsu Kaisen",
-    brand: "Good Smile Company",
-    sku: "JJK-GOJO-HP-02",
-    weight: 750,
-    dimensions: { length: 18, width: 16, height: 26, unit: "cm" },
-    images: [{ url: "https://images.unsplash.com/photo-1563089145-599997674d42?w=800", altText: "Gojo Satoru", isPrimary: true }],
-    tags: ["jujutsu kaisen", "gojo", "jjk", "action figure"],
-    isFeatured: true,
-  },
-  {
-    name: "Iron Man Mark 85 Nano Gauntlet Figure",
-    title: "Iron Man Mark 85 Nano Gauntlet Figure",
-    slug: "iron-man-mark-85-figure",
-    description: "Marvel Avengers Endgame die-cast articulated action figure of Tony Stark in the Mark LXXXV armor equipped with the LED Nano Gauntlet.",
-    price: 4999,
-    discountPrice: 4299,
-    stock: 18,
-    categorySlug: "action-figures",
-    subcategorySlug: "marvel",
-    series: "Marvel Cinematic Universe",
-    brand: "Marvel Legends",
-    sku: "MVL-IRONMAN-85",
-    weight: 900,
-    dimensions: { length: 22, width: 15, height: 32, unit: "cm" },
-    images: [{ url: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=800", altText: "Iron Man Mark 85", isPrimary: true }],
-    tags: ["marvel", "iron man", "avengers", "action figure"],
-    isFeatured: true,
-  },
-  {
-    name: "Batman The Dark Knight Bat-Armor Figure",
-    title: "Batman The Dark Knight Bat-Armor Figure",
-    slug: "batman-dark-knight-figure",
-    description: "DC Multiverse 7-inch premium articulated Batman figure featuring cloth wired cape, Batarangs, grapple gun and magnetic display base.",
-    price: 3699,
-    discountPrice: 3199,
-    stock: 22,
-    categorySlug: "action-figures",
-    subcategorySlug: "dc-comics",
-    series: "DC Universe",
-    brand: "McFarlane Toys",
-    sku: "DC-BATMAN-TDK",
-    weight: 800,
-    dimensions: { length: 20, width: 14, height: 28, unit: "cm" },
-    images: [{ url: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800", altText: "Batman", isPrimary: true }],
-    tags: ["dc", "batman", "justice league", "action figure"],
-    isFeatured: true,
-  },
-  {
-    name: "Monkey D. Luffy Gear 5 Sun God Nika Statue",
-    title: "Monkey D. Luffy Gear 5 Sun God Nika Statue",
-    slug: "luffy-gear-5-sun-god-statue",
-    description: "Spectacular One Piece Wano climax statue capturing Luffy in laughing Sun God Gear 5 form with cloud sash and rubber lightning bolt.",
-    price: 4499,
-    discountPrice: 3999,
-    stock: 30,
-    categorySlug: "action-figures",
-    subcategorySlug: "one-piece",
-    series: "One Piece",
-    brand: "Megahouse P.O.P",
-    sku: "OP-LUFFY-G5-01",
-    weight: 950,
-    dimensions: { length: 24, width: 22, height: 33, unit: "cm" },
-    images: [{ url: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800", altText: "Luffy Gear 5", isPrimary: true }],
-    tags: ["one piece", "luffy", "gear 5", "action figure"],
-    isFeatured: true,
+    parent: {
+      name: "Accessories",
+      slug: "accessories",
+      description: "Keychains, figure display stands and collector accessories",
+      displayOrder: 7,
+    },
+    subcategories: [
+      { name: "Acrylic Keychains", slug: "acrylic-keychains", description: "Official licensed anime keychains and bag charms" },
+      { name: "Metal Weapon Props", slug: "metal-weapons", description: "Miniature metal weapon replicas" },
+      { name: "Enamel Pins", slug: "enamel-pins", description: "Official licensed anime enamel pins" },
+    ],
   },
 ];
 
@@ -210,35 +137,6 @@ async function seedSubcategories() {
     },
     { timestamps: true }
   );
-
-  const ProductSchema = new mongoose.Schema(
-    {
-      name: { type: String, required: true },
-      title: String,
-      slug: { type: String, required: true, unique: true },
-      description: String,
-      price: { type: Number, required: true },
-      discountPrice: Number,
-      stock: { type: Number, default: 0 },
-      category: { type: mongoose.Schema.Types.ObjectId, ref: "Category", required: true },
-      subcategory: { type: mongoose.Schema.Types.ObjectId, ref: "Category", default: null },
-      brand: String,
-      series: String,
-      sku: { type: String, required: true },
-      weight: Number,
-      dimensions: mongoose.Schema.Types.Mixed,
-      images: Array,
-      tags: [String],
-      isFeatured: Boolean,
-      status: { type: String, default: "active" },
-    },
-    { timestamps: true }
-  );
-
-  const Category = mongoose.models.Category || mongoose.model("Category", CategorySchema);
-  const Product = mongoose.models.Product || mongoose.model("Product", ProductSchema);
-
-  const mongoCatMap = {};
 
   for (const group of SUBCATEGORY_TREE) {
     // Upsert parent category
@@ -267,16 +165,6 @@ async function seedSubcategories() {
       console.log(`[MongoDB] Verified parent category: ${parentDoc.name}`);
     }
 
-    mongoCatMap[group.parent.slug] = parentDoc._id;
-
-    // Also link "Anime Figures" as parent if exists
-    if (group.parent.slug === "action-figures") {
-      const animeFiguresDoc = await Category.findOne({ slug: "anime-figures" });
-      if (animeFiguresDoc) {
-        mongoCatMap["anime-figures"] = animeFiguresDoc._id;
-      }
-    }
-
     // Upsert subcategories
     for (let i = 0; i < group.subcategories.length; i++) {
       const sub = group.subcategories[i];
@@ -298,58 +186,10 @@ async function seedSubcategories() {
         await subDoc.save();
         console.log(`  └─ [MongoDB] Updated subcategory: ${group.parent.name} > ${subDoc.name}`);
       }
-      mongoCatMap[sub.slug] = subDoc._id;
     }
   }
 
-  // Seed sample subcategory products in MongoDB
-  for (const prod of SAMPLE_SUBCATEGORY_PRODUCTS) {
-    const parentId = mongoCatMap[prod.categorySlug] || mongoCatMap["anime-figures"];
-    const subId = mongoCatMap[prod.subcategorySlug];
-
-    const existing = await Product.findOne({ slug: prod.slug });
-    if (!existing) {
-      await Product.create({
-        name: prod.name,
-        title: prod.title,
-        slug: prod.slug,
-        description: prod.description,
-        price: prod.price,
-        discountPrice: prod.discountPrice,
-        stock: prod.stock,
-        category: parentId,
-        subcategory: subId,
-        brand: prod.brand,
-        series: prod.series,
-        sku: prod.sku,
-        weight: prod.weight,
-        dimensions: prod.dimensions,
-        images: prod.images,
-        tags: prod.tags,
-        isFeatured: prod.isFeatured,
-        status: "active",
-      });
-      console.log(`[MongoDB] Created sample product: "${prod.name}" under ${prod.categorySlug} > ${prod.subcategorySlug}`);
-    } else {
-      existing.category = parentId;
-      existing.subcategory = subId;
-      existing.series = prod.series;
-      await existing.save();
-      console.log(`[MongoDB] Synced product: "${existing.name}" with subcategory ${prod.subcategorySlug}`);
-    }
-  }
-
-  // Also link existing figures to One Piece or relevant subcategories
-  await Product.updateMany(
-    { name: { $regex: /zoro|katana/i } },
-    { $set: { subcategory: mongoCatMap["nichirin-blades"] || mongoCatMap["one-piece"] } }
-  );
-  await Product.updateMany(
-    { name: { $regex: /luffy/i } },
-    { $set: { subcategory: mongoCatMap["one-piece"] } }
-  );
-
-  console.log("\n[MongoDB] Subcategories & products linked successfully.");
+  console.log("\n[MongoDB] Subcategories synced successfully. Products are seeded by scripts/seed-anime-products.js");
   await mongoose.disconnect();
 
   // 2. SEED IN SUPABASE POSTGRESQL
@@ -411,41 +251,7 @@ async function seedSubcategories() {
       }
     }
 
-    // Upsert sample products in PostgreSQL
-    for (const prod of SAMPLE_SUBCATEGORY_PRODUCTS) {
-      const parentId = pgCatMap[prod.categorySlug] || pgCatMap["action-figures"];
-      await pgClient.query(
-        `INSERT INTO public.products (
-           name, slug, description, price, discount_price, stock,
-           category_id, brand, sku, weight, dimensions, images, tags, status, is_featured
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-         ON CONFLICT (slug) DO UPDATE SET
-           category_id = EXCLUDED.category_id,
-           price = EXCLUDED.price,
-           stock = EXCLUDED.stock;`,
-        [
-          prod.name,
-          prod.slug,
-          prod.description,
-          prod.price,
-          prod.discountPrice,
-          prod.stock,
-          parentId,
-          prod.brand,
-          prod.sku,
-          prod.weight,
-          JSON.stringify(prod.dimensions),
-          JSON.stringify(prod.images),
-          prod.tags,
-          "active",
-          prod.isFeatured,
-        ]
-      );
-      console.log(`[Postgres] Seeded product: ${prod.name}`);
-    }
-
-    console.log("\n[Postgres] Subcategories and products synced successfully.");
+    console.log("\n[Postgres] Subcategories synced successfully.");
   } catch (err) {
     console.error("[Postgres] Error seeding subcategories:", err);
   } finally {

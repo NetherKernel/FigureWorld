@@ -187,7 +187,7 @@ async function runSprint10Tests() {
     console.log("\n--- Step 4: Server-Side Invoice Numbering Integrity ---");
     // Place a new order
     const catalogRes = await request("/api/products");
-    const demoProduct = catalogRes.json?.data?.products?.find((p) => p.sku === "AF-DEMO-2499");
+    const demoProduct = catalogRes.json?.data?.products?.find((p) => !p.isRestricted && p.stock > 5);
     assert(!!demoProduct, "Found product for invoice order test");
 
     const checkoutRes = await request("/api/checkout", {

@@ -513,7 +513,28 @@ export default function CheckoutPage() {
   const couponActive = appliedCoupon !== null && appliedCoupon.cartKey === cartKey;
   const couponStale = appliedCoupon !== null && !couponActive;
   const couponDiscount = couponActive ? appliedCoupon.discount : 0;
-  const orderTotal = Math.max(0, summary.subtotal - couponDiscount) + 100;
+
+  // Delivery fee: use dynamic server-calculated delivery fee from cart summary,
+  // falling back to ₹180 for light orders (katanas, keychains, small figures) and ₹299 for large orders (statues, dioramas)
+  const isLargeOrder = items.some(
+    (it) =>
+      it.isRestricted ||
+      (it.name &&
+        (it.name.toLowerCase().includes("statue") ||
+          it.name.toLowerCase().includes("resin") ||
+          it.name.toLowerCase().includes("diorama") ||
+          it.name.toLowerCase().includes("3-sword complete set")))
+  );
+  const fallbackDeliveryFee = isLargeOrder ? 299 : 180;
+  const deliveryFee =
+    summary.isFreeShipping
+      ? 0
+      : summary.shipping > 0
+      ? summary.shipping
+      : items.length > 0
+      ? fallbackDeliveryFee
+      : 0;
+  const orderTotal = Math.max(0, summary.subtotal - couponDiscount) + deliveryFee;
 
   const applyCoupon = async () => {
     const code = couponInput.trim().toUpperCase();
@@ -1634,7 +1655,9 @@ export default function CheckoutPage() {
                         <p className="font-semibold text-fg">
                           Standard Delivery · <span className="text-success">{deliveryWindow}</span>
                         </p>
-                        <p className="text-fg-2">₹100 · 3–5 business days across India</p>
+                        <p className="text-fg-2">
+                          {formatPrice(deliveryFee)} · {deliveryFee >= 299 ? "Large Weight / Heavy Order (3–5 business days)" : "Light Weight Order (2–4 business days)"}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -1716,7 +1739,7 @@ export default function CheckoutPage() {
               <h2 className="text-lg font-bold text-fg">Order Summary</h2>
               <dl className="mt-3 space-y-1.5 text-sm text-fg-2">
                 <SummaryRow label={`Items (${itemCount}):`} value={formatPrice(summary.subtotal)} />
-                <SummaryRow label="Delivery:" value={formatPrice(100)} />
+                <SummaryRow label="Delivery:" value={deliveryFee > 0 ? formatPrice(deliveryFee) : "FREE"} />
                 {couponActive && (
                   <SummaryRow
                     label={`Promotion applied (${appliedCoupon.code}):`}

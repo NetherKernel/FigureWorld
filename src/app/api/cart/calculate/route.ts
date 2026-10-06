@@ -47,6 +47,8 @@ export interface IVerifiedCartItem {
   isRestricted: boolean;
   ageRequirement?: number;
   shippingRestrictions?: string[];
+  weight?: number;
+  tags?: string[];
 }
 
 export async function POST(req: Request) {
@@ -137,6 +139,8 @@ export async function POST(req: Request) {
         isRestricted: Boolean(product.isRestricted),
         ageRequirement: product.ageRequirement || 0,
         shippingRestrictions: product.shippingRestrictions || [],
+        weight: product.weight || 500,
+        tags: product.tags || [],
       });
     }
 
@@ -146,8 +150,11 @@ export async function POST(req: Request) {
       address: data.shippingAddress || null,
       items: verifiedItems.map((it) => ({
         productId: it.productId,
+        name: it.name,
         isRestricted: it.isRestricted,
         quantity: it.validQuantity,
+        weight: it.weight || 500,
+        tags: it.tags || [],
       })),
     });
     const shippingFee = deliveryCalc.fee;

@@ -187,9 +187,13 @@ export async function POST(req: Request) {
         city: data.customer.city,
         state: data.customer.state,
       },
-      items: data.items.map((it) => ({
-        productId: it.productId,
+      items: orderItemsData.map((it) => ({
+        productId: it.productDoc._id.toString(),
+        name: it.productTitle,
         quantity: it.quantity,
+        weight: it.productDoc.weight || 500,
+        tags: it.productDoc.tags || [],
+        isRestricted: it.productDoc.isRestricted || false,
       })),
     });
     const shippingFee = deliveryCalc.fee;

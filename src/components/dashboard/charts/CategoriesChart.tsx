@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { ChartCard, formatInrCompact } from "./ChartCard";
 
 interface CategorySalesData {
   name: string;
@@ -11,96 +12,75 @@ interface CategorySalesData {
 
 interface CategoriesChartProps {
   data: CategorySalesData[];
+  loading?: boolean;
 }
 
-// Brand red leads; remaining series alternate neutral greys and muted red tints.
-// CSS vars adapt to light/dark theme automatically.
-const CATEGORY_COLORS = [
-  "var(--brand)", // Brand red
-  "#71717a", // Zinc 500
-  "#f08a8d", // Muted red tint
-  "var(--fg-2)", // Adaptive neutral
-  "#fbc4c6", // Light red tint
-  "#a1a1aa", // Zinc 400
-  "var(--brand-ink)", // Deep red
-  "var(--line-strong)", // Soft neutral
+// Brand red leads; remaining series step through red tints and neutrals (theme-aware vars).
+const COLORS = [
+  { color: "var(--brand)", opacity: 1 },
+  { color: "var(--brand)", opacity: 0.6 },
+  { color: "var(--brand)", opacity: 0.32 },
+  { color: "var(--muted)", opacity: 0.8 },
+  { color: "var(--muted)", opacity: 0.5 },
+  { color: "var(--line-strong)", opacity: 1 },
 ];
+const MAX_ROWS = 6;
 
-export default function CategoriesChart({ data }: CategoriesChartProps) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="flex h-64 items-center justify-center text-xs text-muted">
-        No category distribution data available.
-      </div>
-    );
+export default function CategoriesChart({ data, loading }: CategoriesChartProps) {
+  const active = data.filter((c) => c.revenue > 0 || c.count > 0);
+  const sorted = [...(active.length ? active : data)].sort((a, b) => b.revenue - a.revenue || b.count - a.count);
+
+  // Fold the long tail into "Other" so the bar and legend stay readable
+  const shown = sorted.slice(0, MAX_ROWS - 1);
+  const rest = sorted.slice(MAX_ROWS - 1);
+  if (rest.length === 1) shown.push(rest[0]);
+  else if (rest.length > 1) {
+    shown.push({
+      name: `Other (${rest.length})`,
+      count: rest.reduce((s, c) => s + c.count, 0),
+      revenue: rest.reduce((s, c) => s + c.revenue, 0),
+      percentage: rest.reduce((s, c) => s + c.percentage, 0),
+    });
   }
 
-  const activeCategories = data.filter((c) => c.count > 0 || c.revenue > 0);
-  const displayCategories = (activeCategories.length > 0 ? activeCategories : data).slice(0, 6);
+  const totalRevenue = shown.reduce((s, c) => s + c.revenue, 0);
+  const share = (c: CategorySalesData) => (totalRevenue > 0 ? (c.revenue / totalRevenue) * 100 : 0);
 
   return (
-    <div className="rounded-2xl bg-surface p-5 shadow-xs border border-line flex flex-col justify-between">
-      <div className="flex items-center justify-between pb-3">
-        <div>
-          <h3 className="text-sm font-bold text-fg">Category Distribution</h3>
-          <p className="text-[11px] text-muted">Sales and inventory mix across departments</p>
-        </div>
-        <span className="text-[10px] font-semibold text-fg-2 bg-surface-3 px-2 py-0.5 rounded-md">
-          {displayCategories.length} Categories
-        </span>
-      </div>
-
-      {/* Proportional Segmented Meter */}
-      <div className="my-2 h-4 w-full overflow-hidden rounded-full bg-surface-3 flex">
-        {displayCategories.map((cat, idx) => {
-          const widthPct = Math.max(4, cat.percentage || 10);
-          const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
-
-          return (
+    <ChartCard
+      title="Sales by category"
+      subtitle="Revenue share per department"
+      loading={loading}
+      empty={!loading && (data.length === 0 || totalRevenue === 0)}
+      emptyText="No category sales in this period yet."
+      aside={<span className="chip chip-neutral">{formatInrCompact(totalRevenue)}</span>}
+    >
+      {/* Segmented share bar — segments always add up to 100% */}
+      <div className="flex h-3.5 w-full gap-0.5 overflow-hidden rounded-full bg-surface-3" role="img" aria-label="Revenue share by category">
+        {shown.map((cat, i) =>
+          share(cat) > 0 ? (
             <div
-              key={idx}
-              className="h-full transition-all duration-300 first:rounded-l-full last:rounded-r-full"
-              style={{
-                width: `${widthPct}%`,
-                backgroundColor: color,
-              }}
-              title={`${cat.name}: ${cat.percentage}% (₹${cat.revenue.toLocaleString("en-IN")})`}
+              key={cat.name}
+              className="h-full transition-[width] duration-500 first:rounded-l-full last:rounded-r-full"
+              style={{ width: `${share(cat)}%`, backgroundColor: COLORS[i % COLORS.length].color, opacity: COLORS[i % COLORS.length].opacity }}
+              title={`${cat.name}: ${Math.round(share(cat))}%`}
             />
-          );
-        })}
+          ) : null
+        )}
       </div>
 
-      {/* Detailed Category Legend Grid */}
-      <div className="grid grid-cols-2 gap-2.5 pt-2">
-        {displayCategories.map((cat, idx) => {
-          const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
-
-          return (
-            <div
-              key={idx}
-              className="flex items-center justify-between rounded-xl border border-line p-2.5 bg-surface-2"
-            >
-              <div className="flex items-center gap-2 truncate max-w-[130px]">
-                <span
-                  className="h-2.5 w-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: color }}
-                />
-                <span className="text-xs font-semibold text-fg truncate">
-                  {cat.name}
-                </span>
-              </div>
-              <div className="text-right">
-                <p className="text-xs font-bold text-fg">
-                  {cat.percentage}%
-                </p>
-                <p className="text-[10px] text-muted">
-                  {cat.count} product{cat.count !== 1 ? "s" : ""}
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+      <ul className="mt-4 grid grid-cols-1 gap-x-4 gap-y-1 @sm:grid-cols-2">
+        {shown.map((cat, i) => (
+          <li key={cat.name} className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1.5 text-xs hover:bg-surface-2">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: COLORS[i % COLORS.length].color, opacity: COLORS[i % COLORS.length].opacity }} />
+            <span className="min-w-0 flex-1 truncate font-medium text-fg" title={cat.name}>
+              {cat.name}
+            </span>
+            <span className="shrink-0 text-muted">{formatInrCompact(cat.revenue)}</span>
+            <span className="w-9 shrink-0 text-right font-bold text-fg">{Math.round(share(cat))}%</span>
+          </li>
+        ))}
+      </ul>
+    </ChartCard>
   );
 }

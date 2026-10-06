@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ShoppingBag,
@@ -10,14 +10,12 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  Package,
-  ArrowUpRight,
-  TrendingUp,
   RefreshCw,
   Plus,
   ArrowRight,
   CreditCard,
   FileText,
+  ChevronRight,
 } from "lucide-react";
 import RevenueChart from "@/components/dashboard/charts/RevenueChart";
 import OrdersChart from "@/components/dashboard/charts/OrdersChart";
@@ -43,14 +41,98 @@ interface DashboardStatsResponse {
     lowStockCount: number;
   };
   charts: {
-    revenue: any[];
-    orders: any[];
-    products: any[];
-    categories: any[];
-    paymentMethods: any[];
+    revenue: React.ComponentProps<typeof RevenueChart>["data"];
+    orders: React.ComponentProps<typeof OrdersChart>["data"];
+    products: React.ComponentProps<typeof ProductsChart>["data"];
+    categories: React.ComponentProps<typeof CategoriesChart>["data"];
+    paymentMethods: React.ComponentProps<typeof PaymentMethodsChart>["data"];
   };
-  lowStockItems: any[];
-  recentOrders: any[];
+  lowStockItems: Array<{ title: string; sku: string; stock: number }>;
+  recentOrders: Array<{
+    orderNumber: string;
+    customerName: string;
+    orderStatus: string;
+    paymentMethod: string;
+    grandTotal: number;
+  }>;
+}
+
+const TIMEFRAMES = [7, 14, 30];
+
+const STATUS_STYLES: Record<string, string> = {
+  DELIVERED: "bg-success-soft text-success",
+  DISPATCHED: "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300",
+  OUT_FOR_DELIVERY: "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300",
+  CANCELLED: "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300",
+  REFUNDED: "bg-stone-200 text-stone-700 dark:bg-stone-800 dark:text-stone-300",
+  PENDING_PAYMENT: "bg-warn-soft text-warn",
+  PAYMENT_REVIEW: "bg-warn-soft text-warn",
+};
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span
+      className={`inline-block whitespace-nowrap rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${
+        STATUS_STYLES[String(status || "").toUpperCase()] || "bg-surface-3 text-fg-2"
+      }`}
+    >
+      {String(status || "").replace(/_/g, " ")}
+    </span>
+  );
+}
+
+type Tone = "brand" | "success" | "warn" | "info" | "danger";
+
+const TONES: Record<Tone, string> = {
+  brand: "bg-brand-soft text-brand-ink",
+  success: "bg-success-soft text-success",
+  warn: "bg-warn-soft text-warn",
+  info: "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300",
+  danger: "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300",
+};
+
+function KpiCard({
+  label,
+  value,
+  detail,
+  icon: Icon,
+  tone,
+  href,
+  loading,
+}: {
+  label: string;
+  value: React.ReactNode;
+  detail: React.ReactNode;
+  icon: React.ElementType;
+  tone: Tone;
+  href?: string;
+  loading: boolean;
+}) {
+  const body = (
+    <>
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-[11px] font-semibold leading-tight text-muted sm:text-xs">{label}</span>
+        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:h-9 sm:w-9 sm:rounded-xl ${TONES[tone]}`}>
+          <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+        </span>
+      </div>
+      {loading ? (
+        <div className="mt-2 h-7 w-16 animate-pulse rounded bg-surface-3" />
+      ) : (
+        <p className="mt-2 truncate text-xl font-black tracking-tight text-fg sm:text-2xl">{value}</p>
+      )}
+      <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-muted">{detail}</p>
+    </>
+  );
+
+  const cls = "group flex min-w-0 flex-col rounded-2xl border border-line bg-surface p-3.5 shadow-card transition sm:p-5";
+  return href ? (
+    <Link href={href} className={`${cls} hover:border-brand/40 hover:shadow-pop`}>
+      {body}
+    </Link>
+  ) : (
+    <div className={cls}>{body}</div>
+  );
 }
 
 export default function DashboardOverviewPage() {
@@ -58,391 +140,261 @@ export default function DashboardOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [timeframe, setTimeframe] = useState<number>(14);
 
-  const fetchStats = async (days = timeframe) => {
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/admin/dashboard/stats?days=${days}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success) {
-          setData(json.data);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load dashboard statistics:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Bumped by "Refresh" to re-run the fetch for the same range
+  const [reloadKey, setReloadKey] = useState(0);
+  // Only the latest request may update the screen (fast range switching can reorder responses)
+  const requestId = useRef(0);
 
   useEffect(() => {
-    fetchStats(timeframe);
-  }, [timeframe]);
+    const id = ++requestId.current;
+    fetch(`/api/admin/dashboard/stats?days=${timeframe}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.success && id === requestId.current) setData(json.data);
+      })
+      .catch((err) => console.error("Failed to load dashboard statistics:", err))
+      .finally(() => {
+        if (id === requestId.current) setLoading(false);
+      });
+  }, [timeframe, reloadKey]);
+
+  const changeTimeframe = (days: number) => {
+    if (days === timeframe) return;
+    setLoading(true);
+    setTimeframe(days);
+  };
+
+  const refresh = () => {
+    setLoading(true);
+    setReloadKey((k) => k + 1);
+  };
 
   const metrics = data?.metrics;
+  // Skeletons only on first load; later refreshes keep the current numbers on screen
+  const firstLoad = loading && !data;
+  const inr = (n: number | undefined) => `₹${(n ?? 0).toLocaleString("en-IN")}`;
 
   return (
-    <div className="space-y-8">
-      {/* Top Banner & Quick Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-fg">
-            Executive Telemetry
-          </h1>
-          <p className="text-xs text-muted mt-1">
-            Real-time sales velocity, logistics pipelines, inventory alarms, and financial metrics.
-          </p>
+    <div className="space-y-5 sm:space-y-6">
+      {/* Title & controls */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0 flex-[1_1_220px]">
+          <h1 className="text-xl font-black tracking-tight text-fg sm:text-2xl">Overview</h1>
+          <p className="mt-1 text-xs text-muted sm:text-sm">Sales, orders, payments and stock at a glance.</p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Timeframe selector */}
-          <div className="flex items-center rounded-xl bg-surface-3 p-1 text-xs font-semibold">
-            {[7, 14, 30].map((days) => (
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <div role="group" aria-label="Time range" className="flex flex-1 items-center rounded-xl bg-surface-3 p-1 text-xs font-semibold sm:flex-none">
+            {TIMEFRAMES.map((days) => (
               <button
                 key={days}
-                onClick={() => setTimeframe(days)}
-                className={`rounded-lg px-3 py-1.5 transition ${
-                  timeframe === days
-                    ? "bg-surface text-fg shadow-xs"
-                    : "text-muted hover:text-fg"
+                type="button"
+                onClick={() => changeTimeframe(days)}
+                aria-pressed={timeframe === days}
+                className={`flex-1 rounded-lg px-3 py-2 transition sm:flex-none sm:py-1.5 ${
+                  timeframe === days ? "bg-surface text-fg shadow-card" : "text-muted hover:text-fg"
                 }`}
               >
-                {days}D
+                {days} days
               </button>
             ))}
           </div>
 
           <button
-            onClick={() => fetchStats(timeframe)}
+            type="button"
+            onClick={refresh}
             disabled={loading}
-            className="flex items-center gap-1.5 rounded-xl border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-fg-2 hover:bg-surface-2 transition"
+            aria-label="Refresh"
+            className="flex h-10 items-center gap-1.5 rounded-xl border border-line bg-surface px-3 text-xs font-semibold text-fg-2 transition hover:bg-surface-2 disabled:opacity-60 sm:h-9"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            <span>Refresh</span>
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
       </div>
 
-      {/* 8 Core Operational KPIs Grid */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* 1. Today's Orders */}
-        <div className="rounded-2xl border border-line bg-surface p-5 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted">Today&apos;s Orders</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand-ink">
-              <ShoppingBag className="h-5 w-5" />
-            </div>
-          </div>
-          <p className="mt-3 text-2xl font-black text-fg">
-            {metrics ? metrics.todayOrders : "—"}
-          </p>
-          <p className="mt-1 text-[11px] text-muted">Placed since 00:00:00 today</p>
-        </div>
-
-        {/* 2. Today's Revenue */}
-        <div className="rounded-2xl border border-line bg-surface p-5 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted">Today&apos;s Revenue</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
-              <IndianRupee className="h-5 w-5" />
-            </div>
-          </div>
-          <p className="mt-3 text-2xl font-black text-fg">
-            ₹{metrics ? metrics.todayRevenue.toLocaleString("en-IN") : "—"}
-          </p>
-          <p className="mt-1 text-[11px] text-emerald-600 font-medium">Authoritative gross bookings</p>
-        </div>
-
-        {/* 3. Pending Payments */}
-        <Link
+      {/* KPIs — 2 per row on phones, 4 on wide screens */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+        <KpiCard loading={firstLoad} label="Today's orders" value={metrics?.todayOrders ?? "—"} detail="Placed since midnight" icon={ShoppingBag} tone="brand" />
+        <KpiCard loading={firstLoad} label="Today's revenue" value={inr(metrics?.todayRevenue)} detail="Gross bookings today" icon={IndianRupee} tone="success" />
+        <KpiCard
+          loading={firstLoad}
           href="/dashboard/payments"
-          className="rounded-2xl border border-line bg-surface p-5 shadow-xs hover:border-amber-300 transition group"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted">Pending Payments</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
-              <Clock className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <p className="text-2xl font-black text-fg">
-              {metrics ? metrics.pendingPayments.count : "—"}
-            </p>
-            <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
-              ₹{metrics ? metrics.pendingPayments.amount.toLocaleString("en-IN") : "0"}
-            </span>
-          </div>
-          <p className="mt-1 text-[11px] text-muted group-hover:text-amber-600 transition">
-            Awaiting UTR audit →
-          </p>
-        </Link>
-
-        {/* 4. COD Orders */}
-        <Link
+          label="Pending payments"
+          value={metrics?.pendingPayments.count ?? "—"}
+          detail={<>{inr(metrics?.pendingPayments.amount)} awaiting UPI check</>}
+          icon={Clock}
+          tone="warn"
+        />
+        <KpiCard
+          loading={firstLoad}
           href="/dashboard/payments"
-          className="rounded-2xl border border-line bg-surface p-5 shadow-xs hover:border-blue-300 transition group"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted">COD Orders</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
-              <CreditCard className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <p className="text-2xl font-black text-fg">
-              {metrics ? metrics.codOrders.count : "—"}
-            </p>
-            <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-              ₹{metrics ? metrics.codOrders.amount.toLocaleString("en-IN") : "0"}
+          label="COD orders"
+          value={metrics?.codOrders.count ?? "—"}
+          detail={<>{inr(metrics?.codOrders.amount)} to collect</>}
+          icon={CreditCard}
+          tone="info"
+        />
+        <KpiCard loading={firstLoad} href="/dashboard/shipments" label="To dispatch" value={metrics?.pendingDispatch ?? "—"} detail="Confirmed, processing or packed" icon={Truck} tone="brand" />
+        <KpiCard loading={firstLoad} label="Delivered" value={metrics?.deliveredOrders ?? "—"} detail="Completed orders" icon={CheckCircle2} tone="success" />
+        <KpiCard loading={firstLoad} label="Cancelled" value={metrics?.cancelledOrders ?? "—"} detail="Stock returned automatically" icon={XCircle} tone="danger" />
+        <KpiCard loading={firstLoad} href="/dashboard/products" label="Low stock" value={metrics?.lowStockCount ?? "—"} detail="Items with 5 or fewer units" icon={AlertTriangle} tone="warn" />
+      </div>
+
+      {/* Trend charts — side by side only when each gets enough room */}
+      <div className={`grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-2 ${loading && data ? "opacity-70 transition-opacity" : ""}`}>
+        <RevenueChart data={data?.charts?.revenue || []} loading={firstLoad} />
+        <OrdersChart data={data?.charts?.orders || []} loading={firstLoad} />
+      </div>
+
+      {/* Breakdown charts: 1 → 2 → 3 columns */}
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2 2xl:grid-cols-3">
+        <PaymentMethodsChart data={data?.charts?.paymentMethods || []} loading={firstLoad} />
+        <CategoriesChart data={data?.charts?.categories || []} loading={firstLoad} />
+        <div className="lg:col-span-2 2xl:col-span-1">
+          <ProductsChart data={data?.charts?.products || []} loading={firstLoad} />
+        </div>
+      </div>
+
+      {/* Quick actions */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          { href: "/admin/products/new", label: "Add product", icon: Plus },
+          { href: "/dashboard/payments", label: "Review payments", icon: CreditCard },
+          { href: "/dashboard/shipments", label: "Dispatch queue", icon: Truck },
+          { href: "/dashboard/invoices", label: "Tax invoices", icon: FileText },
+        ].map(({ href, label, icon: Icon }) => (
+          <Link
+            key={href + label}
+            href={href}
+            className="group flex min-h-12 items-center gap-2.5 rounded-xl border border-line bg-surface p-3 text-xs font-semibold text-fg-2 shadow-card transition hover:border-brand/40 hover:bg-brand-soft hover:text-brand-ink sm:text-sm"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand-ink">
+              <Icon className="h-4 w-4" />
             </span>
-          </div>
-          <p className="mt-1 text-[11px] text-muted group-hover:text-blue-600 transition">
-            Doorstep collection pipeline →
-          </p>
-        </Link>
-
-        {/* 5. Pending Dispatch */}
-        <Link
-          href="/dashboard/shipments"
-          className="rounded-2xl border border-line bg-surface p-5 shadow-xs hover:border-brand/50 transition group"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted">Pending Dispatch</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand-ink">
-              <Truck className="h-5 w-5" />
-            </div>
-          </div>
-          <p className="mt-3 text-2xl font-black text-fg">
-            {metrics ? metrics.pendingDispatch : "—"}
-          </p>
-          <p className="mt-1 text-[11px] text-muted group-hover:text-brand-hover transition">
-            Confirmed, processing or packed →
-          </p>
-        </Link>
-
-        {/* 6. Delivered Orders */}
-        <div className="rounded-2xl border border-line bg-surface p-5 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted">Delivered Orders</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400">
-              <CheckCircle2 className="h-5 w-5" />
-            </div>
-          </div>
-          <p className="mt-3 text-2xl font-black text-fg">
-            {metrics ? metrics.deliveredOrders : "—"}
-          </p>
-          <p className="mt-1 text-[11px] text-emerald-600">Fulfilled customer orders</p>
-        </div>
-
-        {/* 7. Cancelled Orders */}
-        <div className="rounded-2xl border border-line bg-surface p-5 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted">Cancelled Orders</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400">
-              <XCircle className="h-5 w-5" />
-            </div>
-          </div>
-          <p className="mt-3 text-2xl font-black text-fg">
-            {metrics ? metrics.cancelledOrders : "—"}
-          </p>
-          <p className="mt-1 text-[11px] text-rose-500">Inventory automatically restocked</p>
-        </div>
-
-        {/* 8. Low Stock Alerts */}
-        <Link
-          href="/dashboard/products"
-          className="rounded-2xl border border-line bg-surface p-5 shadow-xs hover:border-amber-300 transition group"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-muted">Low Stock Alarm</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
-              <AlertTriangle className="h-5 w-5" />
-            </div>
-          </div>
-          <p className="mt-3 text-2xl font-black text-fg">
-            {metrics ? metrics.lowStockCount : "—"}
-          </p>
-          <p className="mt-1 text-[11px] text-amber-600 group-hover:underline">
-            Items ≤ 5 units in warehouse →
-          </p>
-        </Link>
+            <span className="min-w-0 flex-1 truncate">{label}</span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-ink" />
+          </Link>
+        ))}
       </div>
 
-      {/* Visual Analytics: Revenue & Orders Charts */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <RevenueChart data={data?.charts?.revenue || []} />
-        <OrdersChart data={data?.charts?.orders || []} />
-      </div>
-
-      {/* Product & Category Performance Grid */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-1">
-          <PaymentMethodsChart data={data?.charts?.paymentMethods || []} />
-        </div>
-        <div className="lg:col-span-1">
-          <CategoriesChart data={data?.charts?.categories || []} />
-        </div>
-        <div className="lg:col-span-1">
-          <ProductsChart data={data?.charts?.products || []} />
-        </div>
-      </div>
-
-      {/* Quick Admin Actions Ribbon */}
-      <div className="rounded-3xl border border-line bg-surface p-6 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-fg">Quick Control Shortcuts</h3>
-            <p className="text-xs text-muted">Direct access to daily operational workflows</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <Link
-            href="/admin/products/new"
-            className="flex items-center gap-2 rounded-xl border border-line bg-surface-2 p-3 font-semibold text-fg-2 hover:bg-brand-soft hover:border-brand/30 hover:text-brand-ink transition"
-          >
-            <Plus className="h-4 w-4 text-brand-ink" />
-            <span>Add Figure</span>
-          </Link>
-          <Link
-            href="/dashboard/payments"
-            className="flex items-center gap-2 rounded-xl border border-line bg-surface-2 p-3 font-semibold text-fg-2 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 dark:hover:bg-emerald-950/40 transition"
-          >
-            <CreditCard className="h-4 w-4 text-emerald-600" />
-            <span>Audit Payments</span>
-          </Link>
-          <Link
-            href="/dashboard/shipments"
-            className="flex items-center gap-2 rounded-xl border border-line bg-surface-2 p-3 font-semibold text-fg-2 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 dark:hover:bg-blue-950/40 transition"
-          >
-            <Truck className="h-4 w-4 text-blue-600" />
-            <span>Dispatch Queue</span>
-          </Link>
-          <Link
-            href="/dashboard/invoices"
-            className="flex items-center gap-2 rounded-xl border border-line bg-surface-2 p-3 font-semibold text-fg-2 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-700 dark:hover:bg-amber-950/40 transition"
-          >
-            <FileText className="h-4 w-4 text-amber-600" />
-            <span>Tax Invoices</span>
-          </Link>
-        </div>
-      </div>
-
-      {/* Split: Recent Orders vs Low Stock Alerts */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Recent Orders Feed */}
-        <div className="lg:col-span-2 rounded-3xl border border-line bg-surface p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-line pb-4">
-            <div>
-              <h3 className="text-sm font-bold text-fg">Recent Orders Stream</h3>
-              <p className="text-xs text-muted">Live order bookings from storefront</p>
+      {/* Recent orders + low stock */}
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-3">
+        <section className="min-w-0 rounded-2xl border border-line bg-surface shadow-card xl:col-span-2">
+          <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3.5 sm:px-5">
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-fg">Recent orders</h3>
+              <p className="text-xs text-muted">Latest orders from the store</p>
             </div>
-            <Link
-              href="/dashboard/orders"
-              className="text-xs font-semibold text-brand-ink hover:text-brand-hover flex items-center gap-1"
-            >
-              <span>View All</span>
-              <ArrowRight className="h-3.5 w-3.5" />
+            <Link href="/dashboard/orders" className="flex shrink-0 items-center gap-1 text-xs font-semibold text-brand-ink hover:text-brand-hover">
+              View all <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[600px] text-left text-xs">
-              <thead className="border-b border-line text-[11px] font-bold uppercase tracking-wider text-muted">
-                <tr>
-                  <th className="pb-3">Order</th>
-                  <th className="pb-3">Customer</th>
-                  <th className="pb-3">Status</th>
-                  <th className="pb-3">Payment</th>
-                  <th className="pb-3 text-right">Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {data?.recentOrders && data.recentOrders.length > 0 ? (
-                  data.recentOrders.map((ord: any) => (
-                    <tr key={ord.orderNumber} className="hover:bg-surface-2">
-                      <td className="py-3 font-bold text-brand-ink">
-                        <Link href={`/admin/orders/${ord.orderNumber}`} className="hover:underline">
-                          #{ord.orderNumber}
-                        </Link>
-                      </td>
-                      <td className="py-3 font-medium text-fg">
-                        {ord.customerName}
-                      </td>
-                      <td className="py-3">
-                        <span className="rounded-md bg-surface-3 px-2 py-0.5 text-[10px] font-bold text-fg-2 uppercase">
-                          {ord.orderStatus}
-                        </span>
-                      </td>
-                      <td className="py-3">
-                        <span className="font-semibold text-fg-2">
-                          {ord.paymentMethod}
-                        </span>
-                      </td>
-                      <td className="py-3 text-right font-black text-fg">
-                        ₹{ord.grandTotal.toLocaleString("en-IN")}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="py-6 text-center text-muted">
-                      No recent orders recorded.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Low Stock Drawer */}
-        <div className="lg:col-span-1 rounded-3xl border border-line bg-surface p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-line pb-4">
-            <div>
-              <h3 className="text-sm font-bold text-fg">Low Stock Watch</h3>
-              <p className="text-xs text-muted">Replenishment priority items</p>
+          {firstLoad ? (
+            <div className="space-y-2 p-4 sm:p-5">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-12 animate-pulse rounded-lg bg-surface-3" />
+              ))}
             </div>
-            <Link
-              href="/dashboard/products"
-              className="text-xs font-semibold text-brand-ink hover:text-brand-hover"
-            >
+          ) : data?.recentOrders && data.recentOrders.length > 0 ? (
+            <>
+              {/* Phones & tablets: compact list */}
+              <ul className="divide-y divide-line lg:hidden">
+                {data.recentOrders.map((ord) => (
+                  <li key={ord.orderNumber}>
+                    <Link href={`/admin/orders/${ord.orderNumber}`} className="flex items-center gap-3 px-4 py-3 active:bg-surface-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-bold text-brand-ink">#{ord.orderNumber}</p>
+                        <p className="truncate text-xs text-fg">{ord.customerName}</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <StatusBadge status={ord.orderStatus} />
+                          <span className="text-[11px] text-muted">{ord.paymentMethod}</span>
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-sm font-black text-fg">₹{ord.grandTotal.toLocaleString("en-IN")}</span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Laptop & desktop: table */}
+              <div className="hidden overflow-x-auto lg:block">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-line text-[11px] font-bold uppercase tracking-wider text-muted">
+                    <tr>
+                      <th className="px-5 py-3">Order</th>
+                      <th className="px-3 py-3">Customer</th>
+                      <th className="px-3 py-3">Status</th>
+                      <th className="px-3 py-3">Payment</th>
+                      <th className="px-5 py-3 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {data.recentOrders.map((ord) => (
+                      <tr key={ord.orderNumber} className="hover:bg-surface-2">
+                        <td className="whitespace-nowrap px-5 py-3 font-bold text-brand-ink">
+                          <Link href={`/admin/orders/${ord.orderNumber}`} className="hover:underline">
+                            #{ord.orderNumber}
+                          </Link>
+                        </td>
+                        <td className="max-w-[180px] truncate px-3 py-3 font-medium text-fg">{ord.customerName}</td>
+                        <td className="px-3 py-3">
+                          <StatusBadge status={ord.orderStatus} />
+                        </td>
+                        <td className="px-3 py-3 font-semibold text-fg-2">{ord.paymentMethod}</td>
+                        <td className="whitespace-nowrap px-5 py-3 text-right font-black text-fg">₹{ord.grandTotal.toLocaleString("en-IN")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <p className="px-5 py-10 text-center text-xs text-muted">No recent orders yet.</p>
+          )}
+        </section>
+
+        <section className="min-w-0 rounded-2xl border border-line bg-surface shadow-card">
+          <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3.5 sm:px-5">
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-fg">Low stock</h3>
+              <p className="text-xs text-muted">Restock these first</p>
+            </div>
+            <Link href="/dashboard/products" className="shrink-0 text-xs font-semibold text-brand-ink hover:text-brand-hover">
               Manage
             </Link>
           </div>
 
-          <div className="space-y-3">
-            {data?.lowStockItems && data.lowStockItems.length > 0 ? (
-              data.lowStockItems.map((item: any) => (
-                <div
-                  key={item.sku}
-                  className="flex items-center justify-between rounded-xl border border-line p-3 bg-surface-2 text-xs"
-                >
-                  <div className="truncate max-w-[170px]">
-                    <p className="font-semibold text-fg truncate">
+          <div className="space-y-2 p-4 sm:p-5">
+            {firstLoad ? (
+              Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-12 animate-pulse rounded-lg bg-surface-3" />)
+            ) : data?.lowStockItems && data.lowStockItems.length > 0 ? (
+              data.lowStockItems.map((item) => (
+                <div key={item.sku} className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 p-3 text-xs">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-fg" title={item.title}>
                       {item.title}
                     </p>
-                    <p className="text-[10px] text-muted">{item.sku}</p>
+                    <p className="truncate text-[11px] text-muted">{item.sku}</p>
                   </div>
-                  <div className="text-right shrink-0">
-                    <span
-                      className={`inline-block rounded-md px-2 py-0.5 text-[10px] font-bold ${
-                        item.stock === 0
-                          ? "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
-                          : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
-                      }`}
-                    >
-                      {item.stock === 0 ? "Out of Stock" : `${item.stock} left`}
-                    </span>
-                  </div>
+                  <span
+                    className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                      item.stock === 0
+                        ? "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
+                        : "bg-warn-soft text-warn"
+                    }`}
+                  >
+                    {item.stock === 0 ? "Out of stock" : `${item.stock} left`}
+                  </span>
                 </div>
               ))
             ) : (
-              <p className="py-6 text-center text-xs text-muted">
-                All catalog inventory healthy!
-              </p>
+              <p className="py-6 text-center text-xs text-muted">All products are well stocked.</p>
             )}
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );

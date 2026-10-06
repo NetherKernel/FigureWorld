@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
+import { ChartCard, ChartTooltip, labelIndexes, niceScale, useElementWidth, usePointerIndex } from "./ChartCard";
 
 interface OrderDataPoint {
   date: string;
@@ -14,159 +15,124 @@ interface OrderDataPoint {
 
 interface OrdersChartProps {
   data: OrderDataPoint[];
+  loading?: boolean;
 }
 
-export default function OrdersChart({ data }: OrdersChartProps) {
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+const PAD = { left: 32, right: 8, top: 14, bottom: 26 };
 
-  if (!data || data.length === 0) {
-    return (
-      <div className="flex h-64 items-center justify-center text-xs text-muted">
-        No orders data available for selected period.
-      </div>
-    );
-  }
+/** Stacked daily bars: delivered (solid red) · in transit (red tint) · other open orders (grey) · cancelled (light grey). */
+const SERIES = [
+  { key: "delivered", label: "Delivered", color: "var(--brand)", opacity: 1 },
+  { key: "dispatched", label: "In transit", color: "var(--brand)", opacity: 0.45 },
+  { key: "open", label: "Processing / new", color: "var(--muted)", opacity: 0.55 },
+  { key: "cancelled", label: "Cancelled", color: "var(--line-strong)", opacity: 1 },
+] as const;
 
-  const width = 600;
-  const height = 220;
-  const paddingX = 40;
-  const paddingTop = 20;
-  const paddingBottom = 35;
+type SeriesKey = (typeof SERIES)[number]["key"];
 
-  const chartWidth = width - paddingX * 2;
-  const chartHeight = height - paddingTop - paddingBottom;
+function segments(d: OrderDataPoint): Record<SeriesKey, number> {
+  const open = Math.max(0, d.totalOrders - d.delivered - d.dispatched - d.cancelled);
+  return { delivered: d.delivered, dispatched: d.dispatched, open, cancelled: d.cancelled };
+}
 
-  const maxOrders = Math.max(...data.map((d) => d.totalOrders), 5);
-  const barWidth = Math.max(8, Math.min(24, (chartWidth / data.length) * 0.55));
+export default function OrdersChart({ data, loading }: OrdersChartProps) {
+  const [wrapRef, width] = useElementWidth<HTMLDivElement>();
+
+  const totalOrders = data.reduce((s, d) => s + d.totalOrders, 0);
+  const height = width < 420 ? 180 : 230;
+  const plotW = Math.max(0, width - PAD.left - PAD.right);
+  const plotH = height - PAD.top - PAD.bottom;
+  const { max, step } = niceScale(Math.max(...data.map((d) => d.totalOrders), 0), 4);
+
+  const slot = data.length > 0 ? plotW / data.length : 0;
+  const barW = Math.max(3, Math.min(28, slot * 0.62));
+  const labels = labelIndexes(data.length, plotW, 56);
+  const { active, handlers } = usePointerIndex(data.length, PAD.left, plotW, "slots");
+  const activeDay = active !== null ? data[active] : null;
 
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl bg-surface p-5 shadow-xs border border-line">
-      <div className="flex items-center justify-between pb-3">
-        <div>
-          <h3 className="text-sm font-bold text-fg">Order Volume</h3>
-          <p className="text-[11px] text-muted">Daily throughput across lifecycle stages</p>
+    <ChartCard
+      title="Orders"
+      subtitle="Daily orders by status"
+      loading={loading}
+      empty={!loading && (data.length === 0 || totalOrders === 0)}
+      emptyText="No orders placed in this period yet."
+      aside={
+        <div className="text-right">
+          <p className="text-base font-black text-fg">{totalOrders.toLocaleString("en-IN")}</p>
+          <p className="text-[11px] text-muted">total orders</p>
         </div>
-        <div className="flex items-center gap-3 text-[10px]">
-          <span className="flex items-center gap-1 text-muted">
-            <span className="h-2 w-2 rounded-full bg-brand inline-block" /> Total
-          </span>
-          <span className="flex items-center gap-1 text-muted">
-            <span className="h-2 w-2 rounded-full bg-fg-2 opacity-50 inline-block" /> Delivered
-          </span>
-        </div>
-      </div>
-
-      <div className="relative w-full">
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full overflow-visible">
-          {/* Horizontal Gridlines */}
-          {[0, 0.5, 1].map((pct) => {
-            const y = paddingTop + chartHeight * (1 - pct);
-            const val = Math.round(maxOrders * pct);
-            return (
-              <g key={pct}>
-                <line
-                  x1={paddingX}
-                  y1={y}
-                  x2={width - paddingX}
-                  y2={y}
-                  style={{ stroke: "var(--line)" }}
-                  strokeDasharray="3 3"
-                />
-                <text
-                  x={paddingX - 8}
-                  y={y + 3}
-                  textAnchor="end"
-                  fontSize="9"
-                  style={{ fill: "var(--muted)" }}
-                  className="select-none"
-                >
-                  {val}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* Bars */}
-          {data.map((d, i) => {
-            const x = paddingX + (i + 0.5) * (chartWidth / data.length) - barWidth / 2;
-            const h = (d.totalOrders / maxOrders) * chartHeight;
-            const y = paddingTop + chartHeight - h;
-
-            const isHovered = hoveredIndex === i;
-
-            return (
-              <g key={i}>
-                <rect
-                  x={x}
-                  y={y}
-                  width={barWidth}
-                  height={Math.max(h, 2)}
-                  rx="3"
-                  style={{ fill: isHovered ? "var(--brand-hover)" : "var(--brand)" }}
-                  className="cursor-pointer transition-all duration-150"
-                  onMouseEnter={() => setHoveredIndex(i)}
-                  onMouseLeave={() => setHoveredIndex(null)}
-                />
-
-                {/* Delivered sub-indicator if any */}
-                {d.delivered > 0 && (
-                  <rect
-                    x={x}
-                    y={paddingTop + chartHeight - (d.delivered / maxOrders) * chartHeight}
-                    width={barWidth}
-                    height={(d.delivered / maxOrders) * chartHeight}
-                    rx="3"
-                    style={{ fill: "var(--fg-2)" }}
-                    fillOpacity="0.45"
-                    className="pointer-events-none"
-                  />
-                )}
-
-                {/* X Axis Labels */}
-                {(i === 0 ||
-                  i === Math.floor(data.length / 2) ||
-                  i === data.length - 1) && (
-                  <text
-                    x={x + barWidth / 2}
-                    y={height - 10}
-                    textAnchor="middle"
-                    fontSize="10"
-                    style={{ fill: "var(--muted)" }}
-                    className="select-none font-medium"
-                  >
-                    {d.label}
+      }
+    >
+      <div ref={wrapRef} className="relative w-full touch-pan-y select-none" style={{ height }}>
+        {width > 0 && (
+          <svg width={width} height={height} className="block overflow-visible" role="img" aria-label={`Orders chart, ${totalOrders} orders`}>
+            {Array.from({ length: Math.round(max / step) + 1 }).map((_, i) => {
+              const value = i * step;
+              const y = PAD.top + plotH - (value / max) * plotH;
+              return (
+                <g key={i}>
+                  <line x1={PAD.left} x2={width - PAD.right} y1={y} y2={y} style={{ stroke: "var(--line)" }} strokeDasharray={i === 0 ? undefined : "3 4"} />
+                  <text x={PAD.left - 8} y={y + 4} textAnchor="end" fontSize="11" style={{ fill: "var(--muted)" }}>
+                    {Number.isInteger(value) ? value : value.toFixed(1)}
                   </text>
-                )}
-              </g>
-            );
-          })}
-        </svg>
+                </g>
+              );
+            })}
 
-        {/* Hover Tooltip */}
-        {hoveredIndex !== null && data[hoveredIndex] && (
-          <div
-            className="pointer-events-none absolute -top-3 transform -translate-x-1/2 rounded-xl bg-zinc-900 px-3 py-2 text-white shadow-xl ring-1 ring-white/10 text-xs transition-all z-10 space-y-0.5"
-            style={{
-              left: `${
-                ((paddingX +
-                  (hoveredIndex + 0.5) * (chartWidth / data.length)) /
-                  width) *
-                100
-              }%`,
-            }}
-          >
-            <p className="font-bold">{data[hoveredIndex].label}</p>
-            <p className="text-[11px] text-red-300 font-semibold">
-              Total: {data[hoveredIndex].totalOrders}
+            {data.map((d, i) => {
+              const cx = PAD.left + (i + 0.5) * slot;
+              const x = cx - barW / 2;
+              const seg = segments(d);
+              let base = PAD.top + plotH;
+              const dim = active !== null && active !== i;
+              return (
+                <g key={d.date} opacity={dim ? 0.45 : 1} className="transition-opacity duration-150">
+                  {active === i && <rect x={PAD.left + i * slot} y={PAD.top} width={slot} height={plotH} style={{ fill: "var(--surface-3)" }} opacity={0.6} />}
+                  {SERIES.map((s) => {
+                    const h = (seg[s.key] / max) * plotH;
+                    if (h <= 0) return null;
+                    base -= h;
+                    return <rect key={s.key} x={x} y={base} width={barW} height={h} style={{ fill: s.color }} fillOpacity={s.opacity} />;
+                  })}
+                  {labels.has(i) && (
+                    <text x={cx} y={height - 6} textAnchor="middle" fontSize="11" style={{ fill: "var(--muted)" }}>
+                      {d.label}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+
+            <rect x={PAD.left} y={0} width={plotW} height={height} fill="transparent" {...handlers} />
+          </svg>
+        )}
+
+        {activeDay && active !== null && (
+          <ChartTooltip x={PAD.left + (active + 0.5) * slot} containerWidth={width}>
+            <p className="font-bold">
+              {activeDay.label} · {activeDay.totalOrders} order{activeDay.totalOrders === 1 ? "" : "s"}
             </p>
-            <div className="text-[10px] text-zinc-300 flex gap-2">
-              <span>Delivered: {data[hoveredIndex].delivered}</span>
-              <span>Dispatched: {data[hoveredIndex].dispatched}</span>
-              <span>Processing: {data[hoveredIndex].processing}</span>
-            </div>
-          </div>
+            <ul className="mt-1 space-y-0.5 text-[11px] text-zinc-300">
+              {SERIES.map((s) => (
+                <li key={s.key} className="flex justify-between gap-3">
+                  <span>{s.label}</span>
+                  <span className="font-semibold text-white">{segments(activeDay)[s.key]}</span>
+                </li>
+              ))}
+            </ul>
+          </ChartTooltip>
         )}
       </div>
-    </div>
+
+      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-fg-2">
+        {SERIES.map((s) => (
+          <li key={s.key} className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: s.color, opacity: s.opacity }} />
+            {s.label}
+          </li>
+        ))}
+      </ul>
+    </ChartCard>
   );
 }

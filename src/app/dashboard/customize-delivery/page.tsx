@@ -21,18 +21,9 @@ import {
   ShieldCheck,
   User,
   Phone,
-  Building,
+  Scale,
   Sparkles,
 } from "lucide-react";
-import { ALL_INDIAN_STATES } from "@/lib/constants/indian-states";
-
-interface StateRate {
-  state: string;
-  fee: number;
-  estimatedDays: string;
-  isActive: boolean;
-  notes?: string;
-}
 
 interface PincodeRate {
   pincode: string;
@@ -52,6 +43,9 @@ interface PartnerPreset {
 }
 
 interface DeliverySettings {
+  lightWeightFee: number;
+  largeWeightFee: number;
+  heavyWeightThresholdKg: number;
   defaultBaseFee: number;
   freeShippingThreshold: number;
   isFreeShippingActive: boolean;
@@ -67,30 +61,17 @@ interface DeliverySettings {
   nationalEstDays: string;
   heavyItemSurcharge: number;
   pincodeRates: PincodeRate[];
-  stateRates?: StateRate[];
   partnerPresets: PartnerPreset[];
 }
 
 export default function CustomizeDeliveryPage() {
-  const [activeTab, setActiveTab] = useState<"tiers" | "states" | "pincodes" | "order" | "simulator">("tiers");
+  const [activeTab, setActiveTab] = useState<"tiers" | "pincodes" | "order" | "simulator">("tiers");
   const [settings, setSettings] = useState<DeliverySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // State-wise Delivery Rates state
-  const [stateSearch, setStateSearch] = useState("");
-  const [showAddStateModal, setShowAddStateModal] = useState(false);
-  const [editingState, setEditingState] = useState<StateRate | null>(null);
-  const [newState, setNewState] = useState({
-    state: "Delhi",
-    fee: 70,
-    estimatedDays: "2-3 Days",
-    isActive: true,
-    notes: "Courier Air Express",
-  });
-  const [seedingStates, setSeedingStates] = useState(false);
-  const [inlineStateFees, setInlineStateFees] = useState<Record<string, number>>({});
 
   // Pincode Management state
   const [pincodeSearch, setPincodeSearch] = useState("");
@@ -286,134 +267,6 @@ export default function CustomizeDeliveryPage() {
     }
   };
 
-  // State-wise Custom Rates Handlers
-  const handleAddOrUpdateState = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newState.state.trim()) return;
-
-    try {
-      const res = await fetch("/api/admin/delivery-rates/states", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newState),
-      });
-
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setFeedback({
-          type: "success",
-          text: `Delivery fee for state "${newState.state}" configured at ₹${newState.fee}!`,
-        });
-        setShowAddStateModal(false);
-        setEditingState(null);
-        setNewState({
-          state: "Delhi",
-          fee: 70,
-          estimatedDays: "2-3 Days",
-          isActive: true,
-          notes: "Courier Air Express",
-        });
-        await fetchSettings();
-      } else {
-        alert(json.message || "Failed to save state delivery fee.");
-      }
-    } catch (err: any) {
-      alert("Error saving state delivery fee: " + err.message);
-    }
-  };
-
-  const handleDeleteState = async (stateName: string) => {
-    if (!confirm(`Are you sure you want to delete custom delivery rate for "${stateName}"?`)) return;
-
-    try {
-      const res = await fetch(`/api/admin/delivery-rates/states?state=${encodeURIComponent(stateName)}`, {
-        method: "DELETE",
-      });
-
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setFeedback({
-          type: "success",
-          text: `Deleted custom delivery fee for "${stateName}".`,
-        });
-        await fetchSettings();
-      } else {
-        alert(json.message || "Failed to delete state rate.");
-      }
-    } catch (err: any) {
-      alert("Error deleting state rate: " + err.message);
-    }
-  };
-
-  const handleToggleStateActive = async (targetState: StateRate) => {
-    try {
-      const updatedItem = { ...targetState, isActive: !targetState.isActive };
-      const res = await fetch("/api/admin/delivery-rates/states", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedItem),
-      });
-      if (res.ok) {
-        await fetchSettings();
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleSaveInlineStateFee = async (targetState: StateRate, newFee: number) => {
-    try {
-      const res = await fetch("/api/admin/delivery-rates/states", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...targetState, fee: Number(newFee) }),
-      });
-      if (res.ok) {
-        setFeedback({
-          type: "success",
-          text: `Updated delivery rate for ${targetState.state} to ₹${newFee}!`,
-        });
-        setInlineStateFees((prev) => {
-          const next = { ...prev };
-          delete next[targetState.state];
-          return next;
-        });
-        await fetchSettings();
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const handleSeedAllStates = async () => {
-    if (
-      !confirm(
-        "Pre-populate all 34+ Indian States & Union Territories with baseline shipping rates? Any state rates you have already configured will be preserved."
-      )
-    )
-      return;
-
-    try {
-      setSeedingStates(true);
-      const res = await fetch("/api/admin/delivery-rates/states", {
-        method: "PUT",
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setFeedback({
-          type: "success",
-          text: json.message || "Successfully pre-populated all Indian state delivery rates!",
-        });
-        await fetchSettings();
-      } else {
-        alert(json.message || "Failed to pre-populate state rates.");
-      }
-    } catch (err: any) {
-      alert("Error: " + err.message);
-    } finally {
-      setSeedingStates(false);
-    }
-  };
 
   // Search Order for Custom Delivery Adjustment
   const handleSearchOrder = async (e: React.FormEvent) => {
@@ -528,12 +381,6 @@ export default function CustomizeDeliveryPage() {
       p.areaName.toLowerCase().includes(pincodeSearch.toLowerCase())
   );
 
-  const filteredStates = (settings?.stateRates || []).filter(
-    (s) =>
-      s.state.toLowerCase().includes(stateSearch.toLowerCase()) ||
-      (s.notes && s.notes.toLowerCase().includes(stateSearch.toLowerCase()))
-  );
-
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Top Banner / Hero */}
@@ -545,10 +392,10 @@ export default function CustomizeDeliveryPage() {
             </div>
             <div>
               <h1 className="text-2xl font-black text-fg tracking-tight">
-                Customize Delivery & Local Rates
+                Customize Delivery & Weight Pricing
               </h1>
               <p className="text-xs text-muted mt-0.5">
-                Tailor unique delivery pricing for local couriers (Porter, Dunzo, Local Riders) and customize individual orders.
+                Simple two-tier weight delivery rates (Light Weight ₹180 vs Large Weight ₹299) and local order customization.
               </p>
             </div>
           </div>
@@ -595,41 +442,45 @@ export default function CustomizeDeliveryPage() {
         <div className="p-4 rounded-2xl border border-line bg-surface flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
-              Base Delivery Rate
+              Light Weight Orders
             </span>
             <span className="p-1.5 rounded-lg bg-surface-2 text-brand">
-              <DollarSign className="h-4 w-4" />
+              <Package className="h-4 w-4" />
             </span>
           </div>
           <div className="mt-3">
-            <span className="text-2xl font-black text-fg">₹{settings?.defaultBaseFee ?? 100}</span>
-            <p className="text-[10px] text-muted mt-0.5">National standard flat rate</p>
+            <span className="text-2xl font-black text-brand">₹{settings?.lightWeightFee ?? 180}</span>
+            <p className="text-[10px] text-muted mt-0.5">Katanas, keychains, small figures</p>
           </div>
         </div>
 
         <div className="p-4 rounded-2xl border border-line bg-surface flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
-              Local City Delivery
+              Large Weight Orders
             </span>
-            <span className={`p-1.5 rounded-lg ${settings?.enableLocalDelivery ? "bg-emerald-500/10 text-emerald-500" : "bg-surface-2 text-muted"}`}>
-              <Bike className="h-4 w-4" />
+            <span className="p-1.5 rounded-lg bg-surface-2 text-indigo-500">
+              <Truck className="h-4 w-4" />
             </span>
           </div>
           <div className="mt-3">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-black text-fg">
-                {settings?.enableLocalDelivery ? `₹${settings.localCityFee}` : "Inactive"}
-              </span>
-              {settings?.enableLocalDelivery && (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
-                  {settings.localCity}
-                </span>
-              )}
-            </div>
-            <p className="text-[10px] text-muted mt-0.5">
-              {settings?.enableLocalDelivery ? settings.localCityEstDays : "Standard base applies"}
-            </p>
+            <span className="text-2xl font-black text-indigo-500">₹{settings?.largeWeightFee ?? 299}</span>
+            <p className="text-[10px] text-muted mt-0.5">Resin statues, 1/4 scales, heavy</p>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl border border-line bg-surface flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
+              Heavy Cutoff
+            </span>
+            <span className="p-1.5 rounded-lg bg-surface-2 text-amber-500">
+              <Scale className="h-4 w-4" />
+            </span>
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl font-black text-fg">{settings?.heavyWeightThresholdKg ?? 2.0} kg</span>
+            <p className="text-[10px] text-muted mt-0.5">Orders ≥ 2kg get large rate</p>
           </div>
         </div>
 
@@ -653,27 +504,10 @@ export default function CustomizeDeliveryPage() {
         <div className="p-4 rounded-2xl border border-line bg-surface flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
-              State-wise Rates
-            </span>
-            <span className="p-1.5 rounded-lg bg-surface-2 text-indigo-500">
-              <Building className="h-4 w-4" />
-            </span>
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-black text-fg">
-              {settings?.stateRates?.length ?? 0}
-            </span>
-            <p className="text-[10px] text-muted mt-0.5">Configured state rules</p>
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl border border-line bg-surface flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
               Free Delivery At
             </span>
-            <span className="p-1.5 rounded-lg bg-surface-2 text-amber-500">
-              <Package className="h-4 w-4" />
+            <span className="p-1.5 rounded-lg bg-surface-2 text-emerald-500">
+              <DollarSign className="h-4 w-4" />
             </span>
           </div>
           <div className="mt-3">
@@ -698,7 +532,7 @@ export default function CustomizeDeliveryPage() {
           }`}
         >
           <Truck className="h-4 w-4" />
-          <span>Local & Tiered Rates</span>
+          <span>Weight-Based Delivery Rates</span>
         </button>
 
         <button
@@ -714,23 +548,6 @@ export default function CustomizeDeliveryPage() {
           {settings?.pincodeRates && settings.pincodeRates.length > 0 && (
             <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${activeTab === "pincodes" ? "bg-white/20 text-white" : "bg-surface-3 text-fg"}`}>
               {settings.pincodeRates.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab("states")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors ${
-            activeTab === "states"
-              ? "bg-brand text-white shadow-sm"
-              : "text-fg-2 hover:bg-surface-2 hover:text-fg"
-          }`}
-        >
-          <Building className="h-4 w-4" />
-          <span>State-wise Delivery Rates</span>
-          {settings?.stateRates && settings.stateRates.length > 0 && (
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${activeTab === "states" ? "bg-white/20 text-white" : "bg-surface-3 text-fg"}`}>
-              {settings.stateRates.length}
             </span>
           )}
         </button>
@@ -767,46 +584,107 @@ export default function CustomizeDeliveryPage() {
       {activeTab === "tiers" && settings && (
         <form onSubmit={handleSaveSettings} className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* National / Base Rules */}
+            {/* Weight-Based Rules */}
             <div className="p-6 rounded-2xl border border-line bg-surface space-y-5">
               <div className="flex items-center gap-2.5 border-b border-line pb-3">
-                <Truck className="h-5 w-5 text-brand" />
+                <Scale className="h-5 w-5 text-brand" />
                 <div>
-                  <h2 className="text-sm font-bold text-fg">National Base Delivery Rate</h2>
-                  <p className="text-[11px] text-muted">Standard rate applied to all out-of-city orders</p>
+                  <h2 className="text-sm font-bold text-fg">Weight-Based Delivery Rates</h2>
+                  <p className="text-[11px] text-muted">Two-tier delivery pricing: Light weight (₹180) vs Large weight (₹299)</p>
                 </div>
               </div>
 
               <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-fg mb-1">
-                    Standard Base Delivery Fee (₹)
-                  </label>
+                {/* Light Weight Rate */}
+                <div className="p-4 rounded-xl border border-line bg-surface-2 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-fg flex items-center gap-1.5">
+                        <Package className="h-4 w-4 text-brand" />
+                        Light Weight Order Fee (₹)
+                      </span>
+                      <p className="text-[10px] text-muted">
+                        Applied to katanas, keychains, small action figures &amp; items under 2kg
+                      </p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-brand/10 text-brand">
+                      Standard
+                    </span>
+                  </div>
                   <input
                     type="number"
                     min="0"
-                    value={settings.defaultBaseFee}
+                    value={settings.lightWeightFee ?? settings.defaultBaseFee ?? 180}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setSettings({ ...settings, lightWeightFee: val, defaultBaseFee: val });
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-fg text-sm font-bold focus:border-brand focus:outline-none"
+                    placeholder="180"
+                  />
+                </div>
+
+                {/* Large Weight Rate */}
+                <div className="p-4 rounded-xl border border-indigo-500/20 bg-indigo-500/5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-fg flex items-center gap-1.5">
+                        <Truck className="h-4 w-4 text-indigo-500" />
+                        Large Weight / Heavy Order Fee (₹)
+                      </span>
+                      <p className="text-[10px] text-muted">
+                        Applied to large resin statues, 1/4 scales, 3-sword sets &amp; orders 2kg+
+                      </p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-indigo-500/10 text-indigo-500">
+                      Heavy / Fragile
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    value={settings.largeWeightFee ?? 299}
                     onChange={(e) =>
-                      setSettings({ ...settings, defaultBaseFee: Number(e.target.value) })
+                      setSettings({ ...settings, largeWeightFee: Number(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-fg text-sm font-bold focus:border-brand focus:outline-none"
+                    placeholder="299"
+                  />
+                </div>
+
+                {/* Heavy Threshold */}
+                <div>
+                  <label className="block text-xs font-bold text-fg mb-1">
+                    Heavy Order Cutoff Threshold (kg)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.5"
+                    value={settings.heavyWeightThresholdKg ?? 2.0}
+                    onChange={(e) =>
+                      setSettings({ ...settings, heavyWeightThresholdKg: Number(e.target.value) })
                     }
                     className="w-full px-3 py-2 rounded-xl border border-line bg-surface-2 text-fg text-sm focus:border-brand focus:outline-none"
-                    placeholder="100"
+                    placeholder="2.0"
                   />
-                  <p className="text-[10px] text-muted mt-1">Default flat shipping fee charged if no specific rule matches.</p>
+                  <p className="text-[10px] text-muted mt-1">
+                    Any order or item with weight at or above this threshold triggers the Large Weight delivery fee (₹{settings.largeWeightFee ?? 299}).
+                  </p>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-fg mb-1">
-                    Estimated Delivery Timeline (National)
+                    Estimated Delivery Timeline
                   </label>
                   <input
                     type="text"
-                    value={settings.nationalEstDays}
+                    value={settings.nationalEstDays || "2-4 Business Days"}
                     onChange={(e) =>
                       setSettings({ ...settings, nationalEstDays: e.target.value })
                     }
                     className="w-full px-3 py-2 rounded-xl border border-line bg-surface-2 text-fg text-sm focus:border-brand focus:outline-none"
-                    placeholder="3-5 Business Days"
+                    placeholder="2-4 Business Days"
                   />
                 </div>
 
@@ -838,25 +716,6 @@ export default function CustomizeDeliveryPage() {
                   />
                   <p className="text-[10px] text-muted mt-1">
                     Orders with subtotal above this amount get ₹0 delivery fee automatically.
-                  </p>
-                </div>
-
-                <div className="pt-2 border-t border-line">
-                  <label className="block text-xs font-bold text-fg mb-1">
-                    Heavy Item / Fragile Anime Statue Surcharge (₹)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={settings.heavyItemSurcharge}
-                    onChange={(e) =>
-                      setSettings({ ...settings, heavyItemSurcharge: Number(e.target.value) })
-                    }
-                    className="w-full px-3 py-2 rounded-xl border border-line bg-surface-2 text-fg text-sm focus:border-brand focus:outline-none"
-                    placeholder="0"
-                  />
-                  <p className="text-[10px] text-muted mt-1">
-                    Extra fee added for orders containing katana replicas or items above 1.5kg.
                   </p>
                 </div>
               </div>
@@ -1220,328 +1079,6 @@ export default function CustomizeDeliveryPage() {
         </div>
       )}
 
-      {/* TAB: STATE-WISE DELIVERY RATES */}
-      {activeTab === "states" && (
-        <div className="space-y-6 animate-fade-in">
-          {/* Header & Explanation */}
-          <div className="p-5 rounded-2xl border border-line bg-surface flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <Building className="h-5 w-5 text-indigo-500" />
-                <h3 className="text-base font-black text-fg">State-wise Custom Delivery Pricing</h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-500">
-                  {settings?.stateRates?.length ?? 0} States Configured
-                </span>
-              </div>
-              <p className="text-xs text-muted mt-1 max-w-2xl">
-                Configure unique delivery fees for each Indian State & Union Territory. When a customer enters their State at checkout, FiguresWorld automatically applies your state rate. You can also edit prices directly in the table below.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleSeedAllStates}
-                disabled={seedingStates}
-                className="btn btn-secondary btn-sm flex items-center gap-1.5 text-xs font-bold"
-                title="Populate all Indian states with regional preset baseline fees without overwriting existing entries"
-              >
-                {seedingStates ? (
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                )}
-                <span>Pre-populate All Indian States</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingState(null);
-                  setNewState({
-                    state: "Delhi",
-                    fee: 70,
-                    estimatedDays: "2-3 Days",
-                    isActive: true,
-                    notes: "Air Express Courier",
-                  });
-                  setShowAddStateModal(true);
-                }}
-                className="btn btn-primary btn-sm flex items-center gap-1.5 text-xs font-bold"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Add / Edit State Rate</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Search / Filter Row */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted" />
-              <input
-                type="text"
-                value={stateSearch}
-                onChange={(e) => setStateSearch(e.target.value)}
-                placeholder="Search state (e.g. Maharashtra, Assam, Karnataka)..."
-                className="w-full pl-9 pr-3 py-2 rounded-xl border border-line bg-surface text-fg text-xs focus:border-brand focus:outline-none"
-              />
-            </div>
-            <div className="text-xs text-muted font-medium">
-              Showing {filteredStates.length} of {settings?.stateRates?.length ?? 0} states
-            </div>
-          </div>
-
-          {/* Add / Edit State Modal */}
-          {showAddStateModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-              <div className="bg-surface border border-line rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
-                <div className="flex items-center justify-between border-b border-line pb-3">
-                  <div className="flex items-center gap-2">
-                    <Building className="h-5 w-5 text-indigo-500" />
-                    <h3 className="text-sm font-bold text-fg">
-                      {editingState ? `Edit ${editingState.state} Rate` : "Configure State Delivery Fee"}
-                    </h3>
-                  </div>
-                  <button
-                    onClick={() => setShowAddStateModal(false)}
-                    className="text-muted hover:text-fg text-sm font-bold"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <form onSubmit={handleAddOrUpdateState} className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-bold text-fg mb-1">State / Union Territory</label>
-                    <select
-                      value={newState.state}
-                      onChange={(e) => {
-                        const selected = e.target.value;
-                        const preset = ALL_INDIAN_STATES.find((s) => s.state === selected);
-                        setNewState({
-                          ...newState,
-                          state: selected,
-                          fee: preset ? preset.fee : newState.fee,
-                          estimatedDays: preset ? preset.estimatedDays : newState.estimatedDays,
-                          notes: preset ? preset.notes : newState.notes,
-                        });
-                      }}
-                      className="w-full px-3 py-2 rounded-xl border border-line bg-surface-2 text-fg text-xs"
-                    >
-                      {ALL_INDIAN_STATES.map((s) => (
-                        <option key={s.state} value={s.state}>
-                          {s.state} ({s.zone} Zone - Suggested ₹{s.fee})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-bold text-fg mb-1">Delivery Fee (₹)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        required
-                        value={newState.fee}
-                        onChange={(e) => setNewState({ ...newState, fee: Number(e.target.value) })}
-                        placeholder="70"
-                        className="w-full px-3 py-2 rounded-xl border border-line bg-surface-2 text-fg text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-fg mb-1">Est. Timeline</label>
-                      <input
-                        type="text"
-                        value={newState.estimatedDays}
-                        onChange={(e) => setNewState({ ...newState, estimatedDays: e.target.value })}
-                        placeholder="2-4 Business Days"
-                        className="w-full px-3 py-2 rounded-xl border border-line bg-surface-2 text-fg text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-fg mb-1">Courier / Carrier Notes</label>
-                    <input
-                      type="text"
-                      value={newState.notes}
-                      onChange={(e) => setNewState({ ...newState, notes: e.target.value })}
-                      placeholder="e.g. Surface / Air Express"
-                      className="w-full px-3 py-2 rounded-xl border border-line bg-surface-2 text-fg text-xs"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-2">
-                    <input
-                      type="checkbox"
-                      id="stateActiveCheck"
-                      checked={newState.isActive}
-                      onChange={(e) => setNewState({ ...newState, isActive: e.target.checked })}
-                      className="rounded border-line"
-                    />
-                    <label htmlFor="stateActiveCheck" className="text-xs font-semibold text-fg">
-                      Active immediately
-                    </label>
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-3 border-t border-line">
-                    <button
-                      type="button"
-                      onClick={() => setShowAddStateModal(false)}
-                      className="btn btn-secondary btn-sm"
-                    >
-                      Cancel
-                    </button>
-                    <button type="submit" disabled={saving} className="btn btn-primary btn-sm">
-                      {saving ? "Saving..." : "Save State Rate"}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {/* States Table */}
-          <div className="rounded-2xl border border-line bg-surface overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-surface-2 border-b border-line text-[11px] font-bold text-muted uppercase">
-                  <tr>
-                    <th className="px-4 py-3">State / Union Territory</th>
-                    <th className="px-4 py-3">Delivery Fee (₹)</th>
-                    <th className="px-4 py-3">Estimated Speed</th>
-                    <th className="px-4 py-3">Carrier / Notes</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {filteredStates.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-10 text-center">
-                        <div className="flex flex-col items-center justify-center gap-2 text-muted">
-                          <Building className="h-8 w-8 text-indigo-400 opacity-60" />
-                          <p className="font-semibold text-fg">No custom state delivery rates configured yet.</p>
-                          <p className="text-[11px] max-w-sm">
-                            Click &quot;Pre-populate All Indian States&quot; above to instantly add all 34+ Indian States & UTs with standard rates, or click &quot;Add / Edit State Rate&quot; to add specific states.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={handleSeedAllStates}
-                            className="mt-2 btn btn-primary btn-sm flex items-center gap-1.5"
-                          >
-                            <Sparkles className="h-3.5 w-3.5" />
-                            <span>Pre-populate All Indian States Now</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredStates.map((item) => {
-                      const pendingFee = inlineStateFees[item.state];
-                      const isFeeModified = pendingFee !== undefined && pendingFee !== item.fee;
-
-                      return (
-                        <tr key={item.state} className="hover:bg-surface-2/50 transition">
-                          <td className="px-4 py-3 font-bold text-fg">
-                            <div className="flex items-center gap-2">
-                              <Building className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
-                              <span>{item.state}</span>
-                            </div>
-                          </td>
-
-                          {/* Inline Editable Delivery Fee */}
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-muted font-bold">₹</span>
-                              <input
-                                type="number"
-                                min="0"
-                                value={pendingFee !== undefined ? pendingFee : item.fee}
-                                onChange={(e) =>
-                                  setInlineStateFees({
-                                    ...inlineStateFees,
-                                    [item.state]: Number(e.target.value),
-                                  })
-                                }
-                                className="w-20 px-2 py-1 rounded-lg border border-line bg-surface-2 text-fg font-bold text-xs focus:border-brand focus:outline-none"
-                              />
-                              {isFeeModified && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleSaveInlineStateFee(item, pendingFee)}
-                                  className="p-1 rounded bg-emerald-500 text-white hover:bg-emerald-600 transition"
-                                  title="Save this fee"
-                                >
-                                  <Save className="h-3.5 w-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-3 text-muted">{item.estimatedDays || "3-5 Business Days"}</td>
-                          <td className="px-4 py-3 text-muted text-[11px]">{item.notes || "-"}</td>
-
-                          {/* Toggle Active Pill */}
-                          <td className="px-4 py-3">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleStateActive(item)}
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold transition ${
-                                item.isActive
-                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 hover:opacity-80"
-                                  : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:opacity-80"
-                              }`}
-                              title="Click to toggle active/inactive"
-                            >
-                              {item.isActive ? "Active" : "Inactive"}
-                            </button>
-                          </td>
-
-                          {/* Actions */}
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingState(item);
-                                  setNewState({
-                                    state: item.state,
-                                    fee: item.fee,
-                                    estimatedDays: item.estimatedDays || "3-5 Business Days",
-                                    isActive: item.isActive,
-                                    notes: item.notes || "",
-                                  });
-                                  setShowAddStateModal(true);
-                                }}
-                                className="p-1.5 rounded-lg text-fg-2 hover:bg-surface-2 transition text-xs font-semibold"
-                                title="Edit state rate"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteState(item.state)}
-                                className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition"
-                                title="Remove state rate"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* TAB 3: PER-ORDER DELIVERY ADJUSTER */}
       {activeTab === "order" && (
         <div className="space-y-6">
@@ -1698,8 +1235,9 @@ export default function CustomizeDeliveryPage() {
                         { label: "Porter Bike (₹45)", fee: 45 },
                         { label: "Dunzo Drop (₹55)", fee: 55 },
                         { label: "City Express (₹70)", fee: 70 },
-                        { label: "Standard (₹100)", fee: 100 },
-                        { label: "Outstation (₹150)", fee: 150 },
+                        { label: "Light Weight (₹180)", fee: 180 },
+                        { label: "Large Weight (₹299)", fee: 299 },
+                        { label: "Outstation (₹350)", fee: 350 },
                       ].map((preset) => (
                         <button
                           key={preset.fee}
@@ -1860,17 +1398,45 @@ export default function CustomizeDeliveryPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 pt-2">
-            <input
-              type="checkbox"
-              id="simHeavy"
-              checked={simHeavy}
-              onChange={(e) => setSimHeavy(e.target.checked)}
-              className="rounded border-line"
-            />
-            <label htmlFor="simHeavy" className="text-xs font-semibold text-fg">
-              Contains Heavy Katana or Fragile Statue (&gt;1.5kg)
-            </label>
+          <div className="p-3 rounded-xl border border-line bg-surface-2 space-y-2">
+            <label className="block text-xs font-bold text-fg">Package Weight Classification</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label
+                className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition ${
+                  !simHeavy ? "border-brand bg-brand/5 text-fg font-bold" : "border-line text-muted"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="simWeightType"
+                  checked={!simHeavy}
+                  onChange={() => setSimHeavy(false)}
+                  className="text-brand"
+                />
+                <div>
+                  <div className="text-xs font-bold">Light Weight Order (₹{settings?.lightWeightFee ?? 180})</div>
+                  <div className="text-[10px] text-muted">Katanas, keychains, small figures (&lt; 2kg)</div>
+                </div>
+              </label>
+
+              <label
+                className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition ${
+                  simHeavy ? "border-indigo-500 bg-indigo-500/5 text-fg font-bold" : "border-line text-muted"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="simWeightType"
+                  checked={simHeavy}
+                  onChange={() => setSimHeavy(true)}
+                  className="text-indigo-500"
+                />
+                <div>
+                  <div className="text-xs font-bold">Large Weight Order (₹{settings?.largeWeightFee ?? 299})</div>
+                  <div className="text-[10px] text-muted">Large resin statues, 1/4 scales (≥ 2kg)</div>
+                </div>
+              </label>
+            </div>
           </div>
 
           <button

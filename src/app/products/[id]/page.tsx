@@ -153,6 +153,20 @@ export default function ProductDetailPage() {
   const maxQty = Math.min(product.stock, 10);
   const etaDays = isRestrictedItem ? 5 : 3;
 
+  const isLargeProduct =
+    Boolean(product.weight && product.weight >= 2000) ||
+    Boolean(
+      product.tags?.some((t: string) =>
+        ["statue", "resin", "diorama", "large-statue"].includes(t.toLowerCase())
+      )
+    ) ||
+    (product.name || "").toLowerCase().includes("statue") ||
+    (product.name || "").toLowerCase().includes("diorama") ||
+    (product.name || "").toLowerCase().includes("3-sword complete set");
+
+  const productDeliveryFee = isLargeProduct ? 299 : 180;
+  const deliveryTierLabel = isLargeProduct ? "Large Weight / Statue" : "Light Weight Order";
+
   const imagesList =
     product.images && product.images.length > 0
       ? product.images
@@ -389,10 +403,10 @@ export default function ProductDetailPage() {
               </p>
             )}
             <p className="mt-2 text-sm text-fg">
-              {formatPrice(100)} delivery <span className="font-bold">{deliveryDate(etaDays)}</span>.
+              {formatPrice(productDeliveryFee)} delivery <span className="font-bold">{deliveryDate(etaDays)}</span>.
             </p>
-            <p className="text-sm text-fg-2">
-              Or fastest delivery <span className="font-bold text-fg">{deliveryDate(etaDays - 1)}</span>.
+            <p className="text-xs text-muted">
+              {deliveryTierLabel} · Fast delivery across India
             </p>
             <p className="mt-2 flex items-start gap-1 text-[13px] text-brand-ink">
               <MapPin className="mt-0.5 h-4 w-4 shrink-0" />

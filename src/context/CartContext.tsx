@@ -26,6 +26,9 @@ export interface ICartSummary {
   itemCount: number;
   hasStockIssues: boolean;
   hasRestrictedItems: boolean;
+  deliveryRule?: string;
+  estimatedDeliveryDays?: string;
+  isFreeShipping?: boolean;
 }
 
 interface CartContextType {

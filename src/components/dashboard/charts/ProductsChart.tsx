@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { ChartCard, formatInrCompact } from "./ChartCard";
 
 interface ProductSalesData {
   title: string;
@@ -13,81 +14,62 @@ interface ProductSalesData {
 
 interface ProductsChartProps {
   data: ProductSalesData[];
+  loading?: boolean;
 }
 
-export default function ProductsChart({ data }: ProductsChartProps) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="flex h-64 items-center justify-center text-xs text-muted">
-        No product sales recorded yet.
-      </div>
-    );
-  }
-
-  const maxRevenue = Math.max(...data.map((p) => p.revenue), 1000);
+export default function ProductsChart({ data, loading }: ProductsChartProps) {
+  const top = data.filter((p) => p.revenue > 0 || p.unitsSold > 0).slice(0, 5);
+  const maxRevenue = Math.max(...top.map((p) => p.revenue), 1);
 
   return (
-    <div className="rounded-2xl bg-surface p-5 shadow-xs border border-line flex flex-col justify-between">
-      <div className="flex items-center justify-between pb-3">
-        <div>
-          <h3 className="text-sm font-bold text-fg">Top Performing Figures</h3>
-          <p className="text-[11px] text-muted">Ranked by revenue contribution</p>
-        </div>
-        <span className="text-[10px] font-semibold text-brand-ink bg-brand-soft px-2 py-0.5 rounded-md">
-          {data.length} Ranked
-        </span>
-      </div>
-
-      <div className="space-y-3.5 pt-1">
-        {data.slice(0, 5).map((item, idx) => {
-          const pct = Math.max(5, Math.round((item.revenue / maxRevenue) * 100));
-
+    <ChartCard
+      title="Top products"
+      subtitle="Ranked by revenue"
+      loading={loading}
+      empty={!loading && top.length === 0}
+      emptyText="No products sold in this period yet."
+      aside={<span className="chip chip-soft">Top {top.length}</span>}
+    >
+      <ol className="space-y-3.5">
+        {top.map((item, idx) => {
+          const pct = Math.max(4, Math.round((item.revenue / maxRevenue) * 100));
+          const low = item.stock <= 5;
           return (
-            <div key={idx} className="space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 truncate max-w-[260px]">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-md bg-surface-3 text-[10px] font-bold text-fg-2 shrink-0">
-                    {idx + 1}
-                  </span>
-                  <span className="font-semibold text-fg truncate">
-                    {item.title}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-[11px] text-muted">
-                    {item.unitsSold} sold
-                  </span>
-                  <span className="font-bold text-fg">
-                    ₹{item.revenue.toLocaleString("en-IN")}
-                  </span>
-                </div>
-              </div>
-
-              {/* Progress bar */}
-              <div className="h-2 w-full overflow-hidden rounded-full bg-surface-3">
-                <div
-                  className="h-full rounded-full bg-brand transition-all duration-300"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-
-              {/* Sub-meta */}
-              <div className="flex items-center justify-between text-[10px] text-muted">
-                <span>SKU: {item.sku}</span>
+            <li key={item.sku} className="min-w-0">
+              <div className="flex items-start gap-2.5">
                 <span
-                  className={
-                    item.stock <= 5
-                      ? "text-amber-500 font-semibold"
-                      : "text-emerald-500"
-                  }
+                  className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-black ${
+                    idx === 0 ? "bg-brand text-white" : "bg-surface-3 text-fg-2"
+                  }`}
                 >
-                  {item.stock} in stock
+                  {idx + 1}
                 </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="truncate text-xs font-semibold text-fg" title={item.title}>
+                      {item.title}
+                    </p>
+                    <span className="shrink-0 text-xs font-bold text-fg" title={`₹${item.revenue.toLocaleString("en-IN")}`}>
+                      {formatInrCompact(item.revenue)}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
+                    <div className="h-full rounded-full bg-brand transition-[width] duration-500" style={{ width: `${pct}%`, opacity: 1 - idx * 0.12 }} />
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 text-[11px] text-muted">
+                    <span>
+                      {item.unitsSold} sold<span className="hidden @xs:inline"> · {item.sku}</span>
+                    </span>
+                    <span className={low ? "font-semibold text-warn" : "text-success"}>
+                      {item.stock === 0 ? "Out of stock" : `${item.stock} in stock`}
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
+            </li>
           );
         })}
-      </div>
-    </div>
+      </ol>
+    </ChartCard>
   );
 }

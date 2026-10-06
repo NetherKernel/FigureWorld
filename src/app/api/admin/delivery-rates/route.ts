@@ -6,6 +6,9 @@ import { getDeliverySettings, saveDeliverySettings } from "@/lib/delivery-rates"
 import { logAdminAudit } from "@/lib/audit";
 
 const updateDeliverySettingsSchema = z.object({
+  lightWeightFee: z.number().min(0).optional(),
+  largeWeightFee: z.number().min(0).optional(),
+  heavyWeightThresholdKg: z.number().min(0).optional(),
   defaultBaseFee: z.number().min(0).optional(),
   freeShippingThreshold: z.number().min(0).optional(),
   isFreeShippingActive: z.boolean().optional(),
@@ -27,17 +30,6 @@ const updateDeliverySettingsSchema = z.object({
         areaName: z.string().min(1),
         fee: z.number().min(0),
         estimatedDays: z.string().default("1-2 Days"),
-        isActive: z.boolean().default(true),
-        notes: z.string().optional(),
-      })
-    )
-    .optional(),
-  stateRates: z
-    .array(
-      z.object({
-        state: z.string().min(2),
-        fee: z.number().min(0),
-        estimatedDays: z.string().default("2-4 Days"),
         isActive: z.boolean().default(true),
         notes: z.string().optional(),
       })
@@ -65,20 +57,17 @@ export async function GET(req: Request) {
       ? settings.pincodeRates.filter((p: any) => p.isActive).length
       : 0;
 
-    const activeStateRates = Array.isArray(settings.stateRates)
-      ? settings.stateRates.filter((s: any) => s.isActive).length
-      : 0;
-
     return apiSuccess({
       settings,
       stats: {
         totalPincodeOverrides: settings.pincodeRates?.length || 0,
         activePincodeOverrides: activePincodes,
-        totalStateRates: settings.stateRates?.length || 0,
-        activeStateRates,
+        lightWeightFee: settings.lightWeightFee ?? 180,
+        largeWeightFee: settings.largeWeightFee ?? 299,
+        heavyWeightThresholdKg: settings.heavyWeightThresholdKg ?? 2.0,
         localDeliveryEnabled: Boolean(settings.enableLocalDelivery),
         regionalDeliveryEnabled: Boolean(settings.enableRegionalDelivery),
-        currentBaseRate: settings.defaultBaseFee,
+        currentBaseRate: settings.lightWeightFee ?? settings.defaultBaseFee ?? 180,
       },
     });
   } catch (err) {

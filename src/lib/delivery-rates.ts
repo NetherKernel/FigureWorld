@@ -1,9 +1,5 @@
 import { connectToDatabase } from "./db";
-import { DeliveryRule, IDeliveryRule, IPincodeRate, IStateRate } from "@/models/DeliveryRule";
-
-import { ALL_INDIAN_STATES } from "./constants/indian-states";
-export { ALL_INDIAN_STATES };
-
+import { DeliveryRule, IDeliveryRule, IPincodeRate } from "@/models/DeliveryRule";
 
 // Global cache for delivery settings
 declare global {
@@ -13,14 +9,20 @@ declare global {
   var __figuresWorldDeliverySettingsTimestamp: number | undefined;
 }
 
+export interface CalculateDeliveryItem {
+  productId?: string;
+  name?: string;
+  isRestricted?: boolean;
+  quantity?: number;
+  weightKg?: number;
+  weightGrams?: number;
+  weight?: number;
+  tags?: string[];
+}
+
 export interface CalculateDeliveryOptions {
   subtotal: number;
-  items?: Array<{
-    productId?: string;
-    isRestricted?: boolean;
-    quantity?: number;
-    weightKg?: number;
-  }>;
+  items?: CalculateDeliveryItem[];
   address?: {
     postalCode?: string;
     pinCode?: string;
@@ -32,7 +34,15 @@ export interface CalculateDeliveryOptions {
 
 export interface DeliveryCalculationResult {
   fee: number;
-  ruleApplied: "EMPTY_CART" | "FREE_SHIPPING_THRESHOLD" | "PINCODE_OVERRIDE" | "LOCAL_CITY" | "REGIONAL_STATE" | "DEFAULT_BASE";
+  ruleApplied:
+    | "EMPTY_CART"
+    | "FREE_SHIPPING_THRESHOLD"
+    | "PINCODE_OVERRIDE"
+    | "LOCAL_CITY"
+    | "REGIONAL_STATE"
+    | "LIGHT_WEIGHT"
+    | "LARGE_WEIGHT"
+    | "DEFAULT_BASE";
   ruleName: string;
   estimatedDays: string;
   isFreeShipping: boolean;
@@ -42,10 +52,13 @@ export interface DeliveryCalculationResult {
 }
 
 export const DEFAULT_DELIVERY_SETTINGS = {
-  defaultBaseFee: 100,
+  lightWeightFee: 180, // For katanas, keychains, small action figures (< 2kg)
+  largeWeightFee: 299, // For large resin statues, 1/4 scales, heavy orders (≥ 2kg)
+  heavyWeightThresholdKg: 2.0, // 2000g threshold
+  defaultBaseFee: 180,
   freeShippingThreshold: 1999,
   isFreeShippingActive: false,
-  enableLocalDelivery: false, // Default false preserves backward compatibility for existing regression tests
+  enableLocalDelivery: false,
   localCity: "Mumbai",
   localCityFee: 50,
   localCityEstDays: "Same Day / 4 Hours",
@@ -53,11 +66,10 @@ export const DEFAULT_DELIVERY_SETTINGS = {
   regionalState: "Maharashtra",
   regionalStateFee: 80,
   regionalStateEstDays: "1-2 Days",
-  nationalFee: 100,
-  nationalEstDays: "3-5 Days",
+  nationalFee: 180,
+  nationalEstDays: "2-4 Days",
   heavyItemSurcharge: 0,
   pincodeRates: [] as IPincodeRate[],
-  stateRates: [] as IStateRate[],
   partnerPresets: [
     {
       id: "porter-bike",
@@ -84,7 +96,7 @@ export const DEFAULT_DELIVERY_SETTINGS = {
       id: "bluedart-air",
       name: "Standard Air Express",
       type: "STANDARD_COURIER" as const,
-      baseRate: 100,
+      baseRate: 180,
       description: "All-India courier partner (BlueDart / Delhivery / DTDC)",
     },
   ],
@@ -280,42 +292,71 @@ export async function calculateDeliveryFee(
     };
   }
 
-  // 6. State-specific Custom Delivery Rates (Admin customized rates for different states)
-  if (state && Array.isArray(settings.stateRates) && settings.stateRates.length > 0) {
-    const currentState = state.trim().toLowerCase();
-    const matchedState = settings.stateRates.find((s: IStateRate) => {
-      if (!s.isActive) return false;
-      const target = s.state.trim().toLowerCase();
-      return currentState === target || currentState.includes(target) || target.includes(currentState);
-    });
+  // 5. Weight-Based Delivery Pricing (Light Weight ₹180 vs Large Weight ₹299)
+  const lightFee = Number(settings.lightWeightFee ?? settings.defaultBaseFee ?? 180);
+  const largeFee = Number(settings.largeWeightFee ?? 299);
+  const thresholdKg = Number(settings.heavyWeightThresholdKg ?? 2.0);
+  const thresholdGrams = thresholdKg * 1000; // e.g. 2000g
 
-    if (matchedState) {
-      const totalFee = matchedState.fee + heavySurcharge;
-      return {
-        fee: totalFee,
-        ruleApplied: "REGIONAL_STATE",
-        ruleName: `State Delivery (${matchedState.state})`,
-        estimatedDays: matchedState.estimatedDays || "2-4 Days",
-        isFreeShipping: false,
-        baseFee: matchedState.fee,
-        heavySurcharge,
-        partnerSuggestion: matchedState.fee <= 60 ? "Regional Ground Courier" : "National Express",
-      };
+  let isLargeWeight = false;
+  let totalWeightGrams = 0;
+
+  if (items && items.length > 0) {
+    for (const it of items) {
+      const qty = it.quantity || 1;
+      const itemWeightGrams =
+        it.weightGrams ??
+        it.weight ??
+        (it.weightKg ? it.weightKg * 1000 : 500);
+      totalWeightGrams += itemWeightGrams * qty;
+
+      const nameLower = (it.name || "").toLowerCase();
+      const tagsLower = Array.isArray(it.tags) ? it.tags.map((t: string) => t.toLowerCase()) : [];
+
+      // Large weight / heavy order indicators:
+      // Weight >= threshold (2.0kg) OR explicit large resin statue / diorama / 1/4 scale / 3-sword set
+      const isExplicitLargeItem =
+        itemWeightGrams >= thresholdGrams ||
+        tagsLower.includes("statue") ||
+        tagsLower.includes("resin") ||
+        tagsLower.includes("diorama") ||
+        tagsLower.includes("large-statue") ||
+        nameLower.includes("statue") ||
+        nameLower.includes("diorama") ||
+        nameLower.includes("3-sword complete set");
+
+      if (isExplicitLargeItem) {
+        isLargeWeight = true;
+      }
+    }
+
+    if (totalWeightGrams >= thresholdGrams) {
+      isLargeWeight = true;
     }
   }
 
-  // 6. Default National / Base Delivery Fee (defaults to ₹100)
-  const defaultFee = Number(settings.defaultBaseFee ?? 100);
-  const totalFee = defaultFee + heavySurcharge;
+  if (isLargeWeight) {
+    return {
+      fee: largeFee,
+      ruleApplied: "LARGE_WEIGHT",
+      ruleName: "Large Weight Order Delivery (Statues & Heavy Orders)",
+      estimatedDays: "3-5 Business Days",
+      isFreeShipping: false,
+      baseFee: largeFee,
+      heavySurcharge: 0,
+      partnerSuggestion: "Heavy Surface Cargo / BlueDart Express",
+    };
+  }
 
+  // Light Weight Orders (Katanas, Keychains, Small Action Figures < 2.0kg)
   return {
-    fee: totalFee,
-    ruleApplied: "DEFAULT_BASE",
-    ruleName: "Standard Delivery",
-    estimatedDays: settings.nationalEstDays || "3-5 Days",
+    fee: lightFee,
+    ruleApplied: "LIGHT_WEIGHT",
+    ruleName: "Light Weight Order Delivery (Katanas, Keychains & Small Figures)",
+    estimatedDays: settings.nationalEstDays || "2-4 Business Days",
     isFreeShipping: false,
-    baseFee: defaultFee,
-    heavySurcharge,
-    partnerSuggestion: "Standard Courier",
+    baseFee: lightFee,
+    heavySurcharge: 0,
+    partnerSuggestion: "Standard Air Express / Courier",
   };
 }
