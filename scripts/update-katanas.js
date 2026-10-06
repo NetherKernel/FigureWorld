@@ -5,7 +5,7 @@ const client = new Client({
   ssl: { rejectUnauthorized: false },
 });
 
-const PRODUCTS_TO_SEED = [
+const KATANAS = [
   {
     name: "FS-111WT Oni Katana Sword",
     slug: "fs-111wt-oni-katana-sword",
@@ -17,9 +17,15 @@ const PRODUCTS_TO_SEED = [
     category_slug: "katanas-replicas",
     brand: "Figure World Armory",
     sku: "KAT-ONI-FS111WT",
-    weight: 1100,
+    weight: 1100, // < 2kg -> light weight delivery tier: ₹180
     dimensions: { length: 99, width: 8, height: 7, unit: "cm" },
-    images: [{ url: "/images/katanas/oni-katana-fs111wt.jpg", isPrimary: true }],
+    images: [
+      {
+        url: "/images/katanas/oni-katana-fs111wt.jpg",
+        isPrimary: true,
+        altText: "FS-111WT Oni Katana Sword - White & Blue Steel Replica",
+      },
+    ],
     tags: ["katana", "oni", "valorant", "steel-blade", "sword-replica", "light-weight", "cosplay"],
     status: "active",
     is_featured: true,
@@ -48,9 +54,15 @@ const PRODUCTS_TO_SEED = [
     category_slug: "katanas-replicas",
     brand: "Wano Armory / One Piece",
     sku: "KAT-OP-NIDAI-002",
-    weight: 1150,
+    weight: 1150, // < 2kg -> light weight delivery tier: ₹180
     dimensions: { length: 104, width: 8, height: 7, unit: "cm" },
-    images: [{ url: "/images/katanas/nidai-kitetsu-katana.jpg", isPrimary: true }],
+    images: [
+      {
+        url: "/images/katanas/nidai-kitetsu-katana.jpg",
+        isPrimary: true,
+        altText: "Nidai Kitetsu Katana Replica - One Piece Cursed Blade",
+      },
+    ],
     tags: ["katana", "one-piece", "nidai-kitetsu", "luffy", "wano", "cursed-sword", "light-weight"],
     status: "active",
     is_featured: true,
@@ -79,9 +91,15 @@ const PRODUCTS_TO_SEED = [
     category_slug: "katanas-replicas",
     brand: "Gotei 13 Armory / Bleach",
     sku: "KAT-BL-ZARAKI-003",
-    weight: 1200,
+    weight: 1200, // < 2kg -> light weight delivery tier: ₹180
     dimensions: { length: 108, width: 9, height: 7, unit: "cm" },
-    images: [{ url: "/images/katanas/kenpachi-zaraki-zanpakuto.jpg", isPrimary: true }],
+    images: [
+      {
+        url: "/images/katanas/kenpachi-zaraki-zanpakuto.jpg",
+        isPrimary: true,
+        altText: "Kenpachi Zaraki Zanpakuto Nozarashi - Bleach Notched Blade",
+      },
+    ],
     tags: ["katana", "bleach", "kenpachi-zaraki", "nozarashi", "zanpakuto", "soul-reaper", "light-weight"],
     status: "active",
     is_featured: true,
@@ -110,9 +128,15 @@ const PRODUCTS_TO_SEED = [
     category_slug: "katanas-replicas",
     brand: "Demon Slayer Armory",
     sku: "KAT-DS-NICHIRIN-004",
-    weight: 1100,
+    weight: 1100, // < 2kg -> light weight delivery tier: ₹180
     dimensions: { length: 104, width: 8, height: 6, unit: "cm" },
-    images: [{ url: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800", isPrimary: true }],
+    images: [
+      {
+        url: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800",
+        isPrimary: true,
+        altText: "Demon Slayer Nichirin Katana Replica - Black Steel Blade",
+      },
+    ],
     tags: ["demon-slayer", "katana", "carbon-steel", "replica", "tanjiro", "light-weight"],
     status: "active",
     is_featured: true,
@@ -131,22 +155,27 @@ const PRODUCTS_TO_SEED = [
   },
 ];
 
-async function seed() {
+async function main() {
   await client.connect();
   console.log("Connected to Supabase PostgreSQL.");
 
-  const catRes = await client.query("SELECT id, slug FROM public.categories");
-  const categoryMap = new Map();
-  catRes.rows.forEach((r) => categoryMap.set(r.slug, r.id));
+  // 1. Get Katanas category ID
+  const catRes = await client.query("SELECT id, name FROM public.categories WHERE slug = 'katanas-replicas'");
+  if (catRes.rows.length === 0) {
+    throw new Error("Category 'katanas-replicas' not found!");
+  }
+  const categoryId = catRes.rows[0].id;
+  console.log("Found Katana category:", catRes.rows[0].name, "(ID:", categoryId, ")");
 
-  // Delete old products
-  await client.query("DELETE FROM public.products");
-  console.log("Deleted old products.");
+  // 2. Delete ALL existing products
+  console.log("Deleting all existing products...");
+  const deleteRes = await client.query("DELETE FROM public.products");
+  console.log(`Deleted ${deleteRes.rowCount} existing products.`);
 
-  for (const p of PRODUCTS_TO_SEED) {
-    const categoryId = categoryMap.get(p.category_slug) || null;
-
-    const query = `
+  // 3. Insert the 4 new katanas
+  console.log("Inserting the 4 new katanas...");
+  for (const katana of KATANAS) {
+    const insertQuery = `
       INSERT INTO public.products (
         name, slug, description, price, discount_price, stock,
         low_stock_threshold, category_id, brand, sku, weight,
@@ -154,49 +183,54 @@ async function seed() {
         age_requirement, shipping_restrictions, rating_average,
         reviews_count, specifications
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+        $1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11,
+        $12, $13, $14, $15, $16, $17,
+        $18, $19, $20,
+        $21, $22
       )
-      ON CONFLICT (slug) DO UPDATE SET
-        price = EXCLUDED.price,
-        discount_price = EXCLUDED.discount_price,
-        stock = EXCLUDED.stock,
-        images = EXCLUDED.images;
+      RETURNING id, name, slug, price, discount_price, sku;
     `;
 
-    await client.query(query, [
-      p.name,
-      p.slug,
-      p.description,
-      p.price,
-      p.discount_price,
-      p.stock,
-      p.low_stock_threshold,
+    const values = [
+      katana.name,
+      katana.slug,
+      katana.description,
+      katana.price,
+      katana.discount_price,
+      katana.stock,
+      katana.low_stock_threshold,
       categoryId,
-      p.brand,
-      p.sku,
-      p.weight,
-      JSON.stringify(p.dimensions),
-      JSON.stringify(p.images),
-      p.tags,
-      p.status,
-      p.is_featured,
-      p.is_restricted,
-      p.age_requirement,
-      p.shipping_restrictions,
-      p.rating_average,
-      p.reviews_count,
-      JSON.stringify(p.specifications),
-    ]);
-    console.log(`Seeded product: ${p.name} (${p.sku})`);
+      katana.brand,
+      katana.sku,
+      katana.weight,
+      JSON.stringify(katana.dimensions),
+      JSON.stringify(katana.images),
+      katana.tags,
+      katana.status,
+      katana.is_featured,
+      katana.is_restricted,
+      katana.age_requirement,
+      katana.shipping_restrictions,
+      katana.rating_average,
+      katana.reviews_count,
+      JSON.stringify(katana.specifications),
+    ];
+
+    const res = await client.query(insertQuery, values);
+    console.log("Inserted:", res.rows[0].name, `[SKU: ${res.rows[0].sku}, Price: ₹${res.rows[0].price}]`);
   }
 
-  const countRes = await client.query("SELECT COUNT(*) FROM public.products");
-  console.log(`\nTotal products in Supabase PostgreSQL: ${countRes.rows[0].count}`);
+  // 4. Verify products count
+  const allProds = await client.query("SELECT id, name, slug, price, discount_price, stock, weight FROM public.products");
+  console.log("\nCurrent products in database (Total:", allProds.rows.length, "):");
+  console.table(allProds.rows);
 
   await client.end();
+  console.log("Database update completed successfully.");
 }
 
-seed().catch((err) => {
-  console.error("Seeding error:", err);
+main().catch((err) => {
+  console.error("Error updating database:", err);
   process.exit(1);
 });
