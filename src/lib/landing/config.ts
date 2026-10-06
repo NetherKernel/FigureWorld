@@ -280,7 +280,7 @@ export const DEFAULT_LANDING_CONFIG: LandingConfig = {
           linkLabel: "See all departments",
           href: "/products",
           tiles: [
-            { id: "t1", label: "Scale figures", image: IMG.figures, href: "/products?category=anime-figures" },
+            { id: "t1", label: "Scale figures", image: "/images/figures/vegito-weekly-color-32cm-figure.jpg", href: "/products?category=action-figures" },
             { id: "t2", label: "Resin statues", image: IMG.statues, href: "/products?category=collectibles" },
             { id: "t3", label: "Chibi & keychains", image: IMG.chibi, href: "/products?category=keychains" },
             { id: "t4", label: "Posters & scrolls", image: IMG.posters, href: "/products?category=posters" },
