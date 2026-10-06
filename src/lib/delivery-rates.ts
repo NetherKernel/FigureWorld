@@ -314,16 +314,10 @@ export async function calculateDeliveryFee(
       const tagsLower = Array.isArray(it.tags) ? it.tags.map((t: string) => t.toLowerCase()) : [];
 
       // Large weight / heavy order indicators:
-      // Weight >= threshold (2.0kg) OR explicit large resin statue / diorama / 1/4 scale / 3-sword set
+      // Weight >= threshold (2.0kg) OR explicit heavy resin statues
       const isExplicitLargeItem =
         itemWeightGrams >= thresholdGrams ||
-        tagsLower.includes("statue") ||
-        tagsLower.includes("resin") ||
-        tagsLower.includes("diorama") ||
-        tagsLower.includes("large-statue") ||
-        nameLower.includes("statue") ||
-        nameLower.includes("diorama") ||
-        nameLower.includes("3-sword complete set");
+        ((tagsLower.includes("large-statue") || nameLower.includes("resin statue") || nameLower.includes("3-sword complete set")) && itemWeightGrams >= 1800);
 
       if (isExplicitLargeItem) {
         isLargeWeight = true;
