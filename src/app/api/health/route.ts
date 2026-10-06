@@ -41,6 +41,12 @@ export async function GET() {
       connected: dbConnected,
       state: dbState,
       client: "Mongoose " + mongoose.version,
+      connectionError: global.lastDbError || null,
+      uriScheme: env.MONGODB_URI?.startsWith("mongodb+srv://")
+        ? "mongodb+srv (MongoDB Atlas Cloud)"
+        : env.MONGODB_URI?.startsWith("mongodb://localhost")
+        ? "mongodb://localhost (Local PC - Not reachable on Vercel)"
+        : "mongodb (Custom/Remote)",
     },
     services: {
       nextServer: "App Router",

@@ -12,6 +12,8 @@ interface MongooseCache {
 declare global {
   // eslint-disable-next-line no-var
   var mongooseCache: MongooseCache | undefined;
+  // eslint-disable-next-line no-var
+  var lastDbError: string | undefined;
 }
 
 let cached = global.mongooseCache;
@@ -37,8 +39,10 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
     cached!.promise = mongoose.connect(env.MONGODB_URI, opts).then((mongooseInstance) => {
       logger.info("MongoDB connected successfully");
       cached!.mode = "mongodb";
+      global.lastDbError = undefined;
       return mongooseInstance;
     }).catch((err) => {
+      global.lastDbError = err.message;
       logger.warn("MongoDB connection unavailable. Activating In-Memory Datastore fallback for local development.", {
         reason: err.message,
       });
