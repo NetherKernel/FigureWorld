@@ -298,7 +298,7 @@ export const DEFAULT_LANDING_CONFIG: LandingConfig = {
             { id: "t5", label: "Oni Katana FS-111WT", image: "/images/katanas/oni-katana-fs111wt.jpg", href: "/products/fs-111wt-oni-katana-sword" },
             { id: "t6", label: "Nidai Kitetsu", image: "/images/katanas/nidai-kitetsu-katana.jpg", href: "/products/nidai-kitetsu-katana-replica" },
             { id: "t7", label: "Zaraki Nozarashi", image: "/images/katanas/kenpachi-zaraki-zanpakuto.jpg", href: "/products/kenpachi-zaraki-zanpakuto-nozarashi" },
-            { id: "t8", label: "Nichirin blade", image: "https://images.unsplash.com/photo-1595590424283-b8f17842773f?w=800", href: "/products/demon-slayer-nichirin-katana-replica" },
+            { id: "t8", label: "Nichirin blade", image: "/images/katanas/tanjiro-nichirin-katana.jpg", href: "/products/demon-slayer-nichirin-katana-replica" },
           ],
         },
         { id: "card-account", kind: "account", offerLabel: "First order offer", offerTitle: "10% off with code", offerCode: "WELCOME10" },
