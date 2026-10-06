@@ -41,11 +41,158 @@ const createProductSchema = z.object({
   shippingRestrictions: z.array(z.string()).default([]),
 });
 
+import { supabase, mapSupabaseProduct } from "@/lib/supabase";
+
+async function getProductsFromSupabase(searchParams: URLSearchParams) {
+  try {
+    const category = searchParams.get("category");
+    const subcategory = searchParams.get("subcategory");
+    const brand = searchParams.get("brand");
+    const search = searchParams.get("search");
+    const status = searchParams.get("status") || "active";
+    const isFeatured = searchParams.get("isFeatured");
+    const isRestricted = searchParams.get("isRestricted");
+    const minPrice = searchParams.get("minPrice");
+    const maxPrice = searchParams.get("maxPrice");
+    const sort = searchParams.get("sort") || "newest";
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10)));
+
+    let query = supabase
+      .from("products")
+      .select("*, categories(id, name, slug)");
+
+    if (status) {
+      query = query.eq("status", status);
+    }
+    if (isFeatured === "true") {
+      query = query.eq("is_featured", true);
+    }
+    if (isRestricted === "true") {
+      query = query.eq("is_restricted", true);
+    } else if (isRestricted === "false") {
+      query = query.eq("is_restricted", false);
+    }
+    if (brand) {
+      query = query.ilike("brand", `%${brand}%`);
+    }
+
+    const { data: rawProducts, error } = await query;
+    if (error || !rawProducts || rawProducts.length === 0) {
+      return null;
+    }
+
+    let products = rawProducts.map((p) => mapSupabaseProduct(p, p.categories));
+
+    // Category filter
+    if (category) {
+      const catLower = category.toLowerCase().trim();
+      products = products.filter(
+        (p: any) =>
+          p.category?.slug === catLower ||
+          p.category?.id === category ||
+          p.category?._id === category ||
+          (typeof p.category === "string" && (p.category === category || p.category === catLower))
+      );
+    }
+
+    // Subcategory filter
+    if (subcategory) {
+      const subLower = subcategory.toLowerCase().trim();
+      products = products.filter(
+        (p: any) =>
+          p.category?.slug === subLower ||
+          p.category?.id === subcategory ||
+          p.tags?.some((t: string) => t.toLowerCase().includes(subLower))
+      );
+    }
+
+    // Search filter
+    if (search && search.trim()) {
+      const term = search.trim().toLowerCase();
+      products = products.filter(
+        (p: any) =>
+          p.name?.toLowerCase().includes(term) ||
+          p.description?.toLowerCase().includes(term) ||
+          p.brand?.toLowerCase().includes(term) ||
+          p.sku?.toLowerCase().includes(term)
+      );
+    }
+
+    // On sale filter
+    if (searchParams.get("onSale") === "true") {
+      products = products.filter((p: any) => p.discountPrice && p.discountPrice > 0);
+    }
+    // In stock filter
+    if (searchParams.get("inStock") === "true") {
+      products = products.filter((p: any) => p.stock > 0);
+    }
+    const minRating = parseFloat(searchParams.get("minRating") || "");
+    if (!Number.isNaN(minRating) && minRating > 0) {
+      products = products.filter((p: any) => (p.ratingAverage || 5) >= minRating);
+    }
+
+    // Price range
+    const min = parseFloat(minPrice || "");
+    const max = parseFloat(maxPrice || "");
+    if (!Number.isNaN(min) || !Number.isNaN(max)) {
+      products = products.filter((p: any) => {
+        const paid = p.discountPrice && p.discountPrice > 0 ? p.discountPrice : p.price;
+        return (Number.isNaN(min) || paid >= min) && (Number.isNaN(max) || paid <= max);
+      });
+    }
+
+    // Sorting
+    const paid = (p: any) => (p.discountPrice && p.discountPrice > 0 ? p.discountPrice : p.price);
+    if (sort === "price-asc") {
+      products.sort((a: any, b: any) => paid(a) - paid(b));
+    } else if (sort === "price-desc") {
+      products.sort((a: any, b: any) => paid(b) - paid(a));
+    } else if (sort === "name") {
+      products.sort((a: any, b: any) => a.name.localeCompare(b.name));
+    } else if (sort === "rating") {
+      products.sort((a: any, b: any) => (b.ratingAverage || 0) - (a.ratingAverage || 0));
+    } else {
+      products.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+
+    const total = products.length;
+    const startIndex = (page - 1) * limit;
+    const paginatedProducts = products.slice(startIndex, startIndex + limit);
+
+    return {
+      products: paginatedProducts,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(req: Request) {
   try {
-    await connectToDatabase();
-
     const { searchParams } = new URL(req.url);
+
+    // 1. Try Supabase products first
+    const supaResult = await getProductsFromSupabase(searchParams);
+    if (supaResult !== null) {
+      return apiSuccess(
+        {
+          products: supaResult.products,
+        },
+        "Products retrieved successfully",
+        200,
+        supaResult.pagination
+      );
+    }
+
+    // 2. Fallback to MongoDB
+    await connectToDatabase();
     const category = searchParams.get("category");
     const subcategory = searchParams.get("subcategory");
     const brand = searchParams.get("brand");

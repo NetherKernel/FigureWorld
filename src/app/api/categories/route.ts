@@ -26,11 +26,85 @@ const createCategorySchema = z.object({
   complianceRequirements: complianceSchema.optional(),
 });
 
+import { supabase, mapSupabaseCategory } from "@/lib/supabase";
+
+async function getCategoriesFromSupabase(searchParams: URLSearchParams) {
+  try {
+    const restrictedOnly = searchParams.get("isRestricted");
+    const parentOnly = searchParams.get("parentOnly") === "true" || searchParams.get("level") === "root";
+    const parentCategory = searchParams.get("parentCategory");
+    const asTree = searchParams.get("tree") === "true";
+
+    const { data: rawCats, error } = await supabase
+      .from("categories")
+      .select("*")
+      .order("display_order", { ascending: true });
+
+    if (error || !rawCats || rawCats.length === 0) {
+      return null;
+    }
+
+    const allCategories = rawCats.map((c) => {
+      const mapped = mapSupabaseCategory(c);
+      const parent = rawCats.find((p) => p.id === c.parent_category_id);
+      return {
+        ...mapped,
+        parentCategory: parent ? { _id: parent.id, id: parent.id, name: parent.name, slug: parent.slug } : null,
+      };
+    });
+
+    if (asTree) {
+      const roots = allCategories.filter((c: any) => !c.parentCategory);
+      return roots.map((root: any) => {
+        const subcategories = allCategories.filter(
+          (c: any) =>
+            c.parentCategory &&
+            (c.parentCategory.id === root.id || c.parentCategory._id === root.id)
+        );
+        return {
+          ...root,
+          subcategories,
+          subcategoriesCount: subcategories.length,
+        };
+      });
+    }
+
+    let filtered = allCategories.filter((c: any) => c.isActive);
+
+    if (restrictedOnly === "true") filtered = filtered.filter((c: any) => c.isRestricted);
+    if (restrictedOnly === "false") filtered = filtered.filter((c: any) => !c.isRestricted);
+
+    if (parentCategory) {
+      const parent = rawCats.find(
+        (p) => p.id === parentCategory || p.slug === parentCategory.toLowerCase().trim()
+      );
+      if (!parent) return [];
+      filtered = filtered.filter(
+        (c: any) => c.parentCategory && (c.parentCategory.id === parent.id || c.parentCategory._id === parent.id)
+      );
+    } else if (parentOnly) {
+      filtered = filtered.filter((c: any) => !c.parentCategory);
+    }
+
+    return filtered;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+
+    // 1. Try Supabase categories first
+    const supaResult = await getCategoriesFromSupabase(searchParams);
+    if (supaResult !== null) {
+      return apiSuccess({ categories: supaResult });
+    }
+
+    // 2. Fallback to MongoDB
     await connectToDatabase();
 
-    const { searchParams } = new URL(req.url);
     const restrictedOnly = searchParams.get("isRestricted");
     const parentOnly = searchParams.get("parentOnly") === "true" || searchParams.get("level") === "root";
     const parentCategory = searchParams.get("parentCategory");

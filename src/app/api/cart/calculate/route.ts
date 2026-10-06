@@ -6,6 +6,7 @@ import { validateRequestBody } from "@/lib/validation";
 import { evaluateCoupon } from "@/lib/coupon";
 import { AppError } from "@/lib/errors";
 import { calculateDeliveryFee } from "@/lib/delivery-rates";
+import { supabase, mapSupabaseProduct } from "@/lib/supabase";
 
 const calculateCartSchema = z.object({
   items: z.array(
@@ -64,7 +65,32 @@ export async function POST(req: Request) {
 
     for (const item of data.items) {
       // Look up authoritative product record from database
-      const product = await Product.findById(item.productId);
+      let product: any = null;
+      try {
+        if (/^[0-9a-fA-F]{24}$/.test(item.productId)) {
+          product = await Product.findById(item.productId);
+        }
+      } catch {
+        product = null;
+      }
+
+      if (!product) {
+        try {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.productId);
+          let supaQuery = supabase.from("products").select("*, categories(*)");
+          if (isUuid) {
+            supaQuery = supaQuery.eq("id", item.productId);
+          } else {
+            supaQuery = supaQuery.or(`id.eq.${item.productId},slug.eq.${item.productId}`);
+          }
+          const { data: supaP } = await supaQuery.maybeSingle();
+          if (supaP) {
+            product = mapSupabaseProduct(supaP, supaP.categories);
+          }
+        } catch {
+          //
+        }
+      }
 
       if (!product || product.status === "archived") {
         verifiedItems.push({

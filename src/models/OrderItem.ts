@@ -3,7 +3,7 @@ import { getModelProxy } from "@/lib/db";
 
 export interface IOrderItem extends Document {
   order: mongoose.Types.ObjectId;
-  product: mongoose.Types.ObjectId;
+  product: mongoose.Types.ObjectId | string;
   productTitle: string;
   productSku: string;
   productImage?: string;
@@ -25,8 +25,7 @@ export const OrderItemSchema = new Schema<IOrderItem>(
       index: true,
     },
     product: {
-      type: Schema.Types.ObjectId,
-      ref: "Product",
+      type: Schema.Types.Mixed,
       required: true,
     },
     productTitle: {

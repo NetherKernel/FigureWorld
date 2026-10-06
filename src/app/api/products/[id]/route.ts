@@ -16,10 +16,36 @@ const patchProductSchema = z.object({
   isRestricted: z.boolean().optional(),
 });
 
+import { supabase, mapSupabaseProduct, mapSupabaseCategory } from "@/lib/supabase";
+
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
 
+    // 1. Try Supabase product first
+    try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      let supaQuery = supabase.from("products").select("*, categories(*)");
+      if (isUuid) {
+        supaQuery = supaQuery.eq("id", id);
+      } else {
+        supaQuery = supaQuery.eq("slug", id.toLowerCase().trim());
+      }
+      const { data: supaProd } = await supaQuery.maybeSingle();
+
+      if (supaProd) {
+        const product = mapSupabaseProduct(supaProd, supaProd.categories);
+        const category = mapSupabaseCategory(supaProd.categories);
+        return apiSuccess({
+          product,
+          category,
+        });
+      }
+    } catch {
+      // Continue to MongoDB fallback
+    }
+
+    // 2. Fallback to MongoDB
     await connectToDatabase();
 
     // Query by MongoDB _id or slug

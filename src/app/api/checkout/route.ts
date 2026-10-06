@@ -8,6 +8,7 @@ import { Order } from "@/models/Order";
 import { OrderItem } from "@/models/OrderItem";
 import { evaluateCoupon } from "@/lib/coupon";
 import { calculateDeliveryFee } from "@/lib/delivery-rates";
+import { supabase, mapSupabaseProduct } from "@/lib/supabase";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { ValidationError, ConflictError } from "@/lib/errors";
@@ -77,7 +78,32 @@ export async function POST(req: Request) {
     let containsRestrictedGoods = false;
 
     for (const item of data.items) {
-      const product = await Product.findById(item.productId);
+      let product: any = null;
+      try {
+        if (/^[0-9a-fA-F]{24}$/.test(item.productId)) {
+          product = await Product.findById(item.productId);
+        }
+      } catch {
+        product = null;
+      }
+
+      if (!product) {
+        try {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.productId);
+          let supaQuery = supabase.from("products").select("*, categories(*)");
+          if (isUuid) {
+            supaQuery = supaQuery.eq("id", item.productId);
+          } else {
+            supaQuery = supaQuery.or(`id.eq.${item.productId},slug.eq.${item.productId}`);
+          }
+          const { data: supaP } = await supaQuery.maybeSingle();
+          if (supaP) {
+            product = mapSupabaseProduct(supaP, supaP.categories);
+          }
+        } catch {
+          //
+        }
+      }
 
       if (!product || product.status === "archived") {
         throw new ValidationError(`Product "${item.productId}" is not available for purchase.`);
@@ -313,12 +339,66 @@ export async function POST(req: Request) {
       orderItemIds.push(orderItem._id);
 
       // Atomic inventory stock decrement
-      itemData.productDoc.stock = Math.max(0, itemData.productDoc.stock - itemData.quantity);
-      await itemData.productDoc.save();
+      const newStock = Math.max(0, (itemData.productDoc.stock || 0) - itemData.quantity);
+      if (typeof itemData.productDoc.save === "function") {
+        itemData.productDoc.stock = newStock;
+        await itemData.productDoc.save();
+      } else if (itemData.productDoc.id) {
+        try {
+          await supabase.from("products").update({ stock: newStock }).eq("id", itemData.productDoc.id);
+        } catch {
+          // Supabase stock sync best-effort
+        }
+      }
     }
 
     newOrder.items = orderItemIds;
     await newOrder.save();
+
+    // Sync order to Supabase orders table
+    try {
+      await supabase.from("orders").insert({
+        order_number: newOrder.orderNumber,
+        user_id:
+          currentUser?.userId &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUser.userId)
+            ? currentUser.userId
+            : null,
+        customer_details: {
+          name: data.customer.fullName,
+          email: data.customer.email,
+          phone: data.customer.mobileNumber,
+        },
+        shipping_address: {
+          address: data.customer.address,
+          landmark: data.customer.landmark || "",
+          city: data.customer.city,
+          state: data.customer.state,
+          postalCode: data.customer.pinCode,
+        },
+        items: orderItemsData.map((it) => ({
+          title: it.productTitle,
+          sku: it.productSku,
+          image: it.productImage,
+          price: it.unitPrice,
+          quantity: it.quantity,
+          total: it.total,
+        })),
+        pricing: newOrder.pricing,
+        payment_method: newOrder.paymentMethod,
+        payment_status: newOrder.paymentStatus,
+        order_status: newOrder.orderStatus,
+        requires_admin_review: Boolean(containsRestrictedGoods),
+        compliance_details: containsRestrictedGoods
+          ? { isRestrictedOrder: true, ageConfirmed: true, verifiedAt: new Date().toISOString() }
+          : {},
+        status_history: [
+          { status: "pending", timestamp: new Date().toISOString(), note: "Order placed via checkout" },
+        ],
+      });
+    } catch {
+      // Supabase order sync best-effort
+    }
 
     // 9. Estimate delivery timeline (3-5 business days)
     const deliveryDate = new Date();

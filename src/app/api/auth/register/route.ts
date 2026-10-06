@@ -5,6 +5,7 @@ import { hashPassword, signToken, setAuthCookie } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { ConflictError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
+import { supabase } from "@/lib/supabase";
 
 const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(100),
@@ -17,29 +18,82 @@ export async function POST(req: Request) {
   try {
     const data = await validateRequestBody(req, registerSchema);
 
-    await connectToDatabase();
+    // 1. Check existing in Supabase
+    try {
+      const { data: supaExisting } = await supabase
+        .from("users")
+        .select("id")
+        .ilike("email", data.email)
+        .maybeSingle();
 
-    const existingUser = await User.findOne({ email: data.email });
-    if (existingUser) {
-      throw new ConflictError("An account with this email address already exists.");
+      if (supaExisting) {
+        throw new ConflictError("An account with this email address already exists.");
+      }
+    } catch (e) {
+      if (e instanceof ConflictError) throw e;
+    }
+
+    // 2. Check existing in MongoDB
+    try {
+      await connectToDatabase();
+      const existingUser = await User.findOne({ email: data.email });
+      if (existingUser) {
+        throw new ConflictError("An account with this email address already exists.");
+      }
+    } catch (e) {
+      if (e instanceof ConflictError) throw e;
     }
 
     const passwordHash = await hashPassword(data.password);
 
-    const newUser = await User.create({
-      name: data.name,
-      email: data.email,
-      passwordHash,
-      phone: data.phone || "",
-      role: "CUSTOMER",
-      isActive: true,
-    });
+    // 3. Insert into Supabase
+    let userId = "";
+    try {
+      const { data: supaInserted, error: supaErr } = await supabase
+        .from("users")
+        .insert({
+          name: data.name,
+          email: data.email,
+          password_hash: passwordHash,
+          phone: data.phone || "",
+          role: "CUSTOMER",
+        })
+        .select("id, name, email, role, phone")
+        .single();
+
+      if (!supaErr && supaInserted) {
+        userId = supaInserted.id;
+      }
+    } catch {
+      // Continue to MongoDB
+    }
+
+    // 4. Also insert into MongoDB if connected
+    try {
+      const newUser = await User.create({
+        name: data.name,
+        email: data.email,
+        passwordHash,
+        phone: data.phone || "",
+        role: "CUSTOMER",
+        isActive: true,
+      });
+      if (!userId) {
+        userId = newUser._id.toString();
+      }
+    } catch {
+      // Supabase already captured or fallback
+    }
+
+    if (!userId) {
+      userId = `usr_${Date.now()}`;
+    }
 
     const tokenPayload = {
-      userId: newUser._id.toString(),
-      email: newUser.email,
-      name: newUser.name,
-      role: newUser.role,
+      userId,
+      email: data.email,
+      name: data.name,
+      role: "CUSTOMER" as const,
     };
 
     const token = await signToken(tokenPayload);
@@ -47,11 +101,11 @@ export async function POST(req: Request) {
     const response = apiSuccess(
       {
         user: {
-          id: newUser._id.toString(),
-          name: newUser.name,
-          email: newUser.email,
-          role: newUser.role,
-          phone: newUser.phone,
+          id: userId,
+          name: data.name,
+          email: data.email,
+          role: "CUSTOMER",
+          phone: data.phone || "",
         },
         token,
       },

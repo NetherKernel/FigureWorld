@@ -7,8 +7,18 @@ import mongoose from "mongoose";
 
 const startTime = Date.now();
 
+import { supabase } from "@/lib/supabase";
+
 export async function GET() {
   logger.info("Health check endpoint requested");
+
+  let supabaseConnected = false;
+  try {
+    const { error } = await supabase.from("products").select("id", { count: "exact", head: true });
+    supabaseConnected = !error;
+  } catch {
+    supabaseConnected = false;
+  }
 
   let dbConnected = false;
   let dbState = "disconnected";
@@ -32,29 +42,33 @@ export async function GET() {
     dbState = "error";
   }
 
+  const isHealthy = supabaseConnected || dbConnected;
+
   const payload = {
-    status: dbConnected ? "healthy" : "degraded",
+    status: isHealthy ? "healthy" : "degraded",
     timestamp: new Date().toISOString(),
     uptimeSeconds: Math.floor((Date.now() - startTime) / 1000),
     environment: env.NODE_ENV,
     database: {
-      connected: dbConnected,
-      state: dbState,
-      client: "Mongoose " + mongoose.version,
-      connectionError: global.lastDbError || null,
-      uriScheme: env.MONGODB_URI?.startsWith("mongodb+srv://")
-        ? "mongodb+srv (MongoDB Atlas Cloud)"
-        : env.MONGODB_URI?.startsWith("mongodb://localhost")
-        ? "mongodb://localhost (Local PC - Not reachable on Vercel)"
-        : "mongodb (Custom/Remote)",
+      supabase: {
+        connected: supabaseConnected,
+        provider: "Supabase PostgreSQL",
+        url: "https://jcafygcduqekgoaixddo.supabase.co",
+      },
+      mongodb: {
+        connected: dbConnected,
+        state: dbState,
+        client: "Mongoose " + mongoose.version,
+        connectionError: global.lastDbError || null,
+      },
     },
     services: {
       nextServer: "App Router",
       apiVersion: "1.0.0",
-      architecture: "Website -> Next.js -> API -> MongoDB",
+      architecture: "Website -> Next.js -> Supabase PostgreSQL & MongoDB",
     },
     registeredModels: Object.keys(mongoose.models),
   };
 
-  return apiSuccess(payload, dbConnected ? "System is operational" : "System operational with degraded database");
+  return apiSuccess(payload, isHealthy ? "System is operational" : "System operational with degraded database");
 }
