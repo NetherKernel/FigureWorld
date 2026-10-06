@@ -234,12 +234,11 @@ const ProductSchema = new Schema<IProduct>(
   },
   {
     timestamps: true,
-    strictPopulate: false,
   }
 );
 
 // Pre-save hook to ensure name and title stay synced
-ProductSchema.pre("save", function () {
+ProductSchema.pre("save", function (this: any) {
   if (this.name && !this.title) {
     this.title = this.name;
   } else if (this.title && !this.name) {

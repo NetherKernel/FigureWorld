@@ -105,7 +105,7 @@ export async function POST(req: Request) {
           displayOrder: item.parent.displayOrder,
           isRestricted: Boolean((item.parent as any).isRestricted),
           isActive: true,
-          parentCategory: null,
+          parentCategory: undefined,
         });
         createdParents++;
       }

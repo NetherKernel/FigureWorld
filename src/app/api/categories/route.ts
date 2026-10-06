@@ -106,7 +106,7 @@ export async function POST(req: Request) {
     }
 
     // Validate parent category if provided
-    let parentCategoryId = null;
+    let parentCategoryId: mongoose.Types.ObjectId | undefined = undefined;
     if (data.parentCategory && data.parentCategory.trim()) {
       const cleanParent = data.parentCategory.trim();
       let parentDoc = null;
@@ -119,12 +119,13 @@ export async function POST(req: Request) {
       if (!parentDoc) {
         throw new NotFoundError(`Parent category "${cleanParent}" not found.`);
       }
-      parentCategoryId = parentDoc._id;
+      parentCategoryId = parentDoc._id as mongoose.Types.ObjectId;
     }
 
-    const newCategory = await Category.create({
-      ...data,
-      parentCategory: parentCategoryId,
+    const { parentCategory: _ignored, ...categoryData } = data;
+    const newCategory: any = await Category.create({
+      ...categoryData,
+      ...(parentCategoryId ? { parentCategory: parentCategoryId } : {}),
     });
 
     const populated = await Category.findById(newCategory._id)

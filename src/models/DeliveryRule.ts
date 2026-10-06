@@ -16,7 +16,7 @@ export interface IDeliveryPartnerPreset {
   name: string;
   type: "PORTER" | "DUNZO" | "LOCAL_RIDER" | "STANDARD_COURIER" | "OTHER";
   baseRate: number;
-  description: string;
+  description?: string;
 }
 
 export interface IDeliveryRule extends Document {
