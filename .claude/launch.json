@@ -13,6 +13,13 @@
       "runtimeArgs": ["run", "dev"],
       "port": 3200,
       "autoPort": true
+    },
+    {
+      "name": "prod-start",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start"],
+      "port": 3400,
+      "autoPort": true
     }
   ]
 }

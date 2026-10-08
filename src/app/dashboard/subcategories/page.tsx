@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import Link from "next/link";
 import {
   FolderTree,
@@ -37,6 +38,7 @@ interface CategoryItem {
 }
 
 export default function SubcategoriesDashboardPage() {
+  const [confirmDialog, ask] = useConfirm();
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -179,7 +181,12 @@ export default function SubcategoriesDashboardPage() {
   };
 
   const handleDelete = async (id: string, catName: string) => {
-    if (!confirm(`Are you sure you want to delete subcategory "${catName}"?`)) return;
+    const ok = await ask({
+      title: `Delete subcategory "${catName}"?`,
+      message: "This removes it from the store menu. Products in it are not deleted.",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
 
     try {
       setFeedback(null);
@@ -199,8 +206,8 @@ export default function SubcategoriesDashboardPage() {
   };
 
   const handleSeedFranchises = async () => {
-    if (!confirm("Seed or sync all anime franchises (Dragon Ball, Marvel, DC, Jujutsu Kaisen, One Piece, etc.)?"))
-      return;
+    const ok = await ask({ title: "Seed or sync all anime franchises (Dragon Ball, Marvel, DC, Jujutsu Kaisen, One Piece, etc.)?", confirmLabel: "Seed", danger: false });
+    if (!ok) return;
     try {
       setSeeding(true);
       setFeedback(null);
@@ -247,6 +254,7 @@ export default function SubcategoriesDashboardPage() {
 
   return (
     <div className="space-y-6">
+      {confirmDialog}
       {/* Top Banner & Header */}
       <div className="rounded-3xl bg-gradient-to-br from-surface to-surface-2 p-6 md:p-8 border border-line shadow-sm relative overflow-hidden">
         <div className="absolute right-0 top-0 -mt-10 -mr-10 h-64 w-64 rounded-full bg-brand/5 blur-3xl pointer-events-none" />

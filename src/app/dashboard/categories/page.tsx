@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import Link from "next/link";
 import {
   Layers,
@@ -35,6 +36,7 @@ interface CategoryItem {
 }
 
 export default function DashboardCategoriesPage() {
+  const [confirmDialog, ask] = useConfirm();
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -179,7 +181,12 @@ export default function DashboardCategoriesPage() {
   };
 
   const handleDelete = async (id: string, catName: string) => {
-    if (!confirm(`Are you sure you want to delete category "${catName}"?`)) return;
+    const ok = await ask({
+      title: `Delete category "${catName}"?`,
+      message: "This removes it from the store menu. Products in it are not deleted.",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
 
     try {
       setFeedback(null);
@@ -199,8 +206,8 @@ export default function DashboardCategoriesPage() {
   };
 
   const handleSeedFranchises = async () => {
-    if (!confirm("Seed all anime franchises & subcategories (Dragon Ball, Marvel, DC, Jujutsu Kaisen, etc.)?"))
-      return;
+    const ok = await ask({ title: "Seed all anime franchises & subcategories (Dragon Ball, Marvel, DC, Jujutsu Kaisen, etc.)?", confirmLabel: "Seed", danger: false });
+    if (!ok) return;
     try {
       setSeeding(true);
       setFeedback(null);
@@ -240,6 +247,7 @@ export default function DashboardCategoriesPage() {
 
   return (
     <div className="space-y-6">
+      {confirmDialog}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
