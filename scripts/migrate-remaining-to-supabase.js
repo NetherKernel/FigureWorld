@@ -189,6 +189,29 @@ async function main() {
     }
     log(`notification history: copying ${logs}`);
 
+    // 7. Link migrated orders / invoices to customer accounts (they were copied without user ids,
+    //    so "Your Orders" and invoice ownership could not find them). Only fills empty links.
+    const [{ n: unlinkedOrders }] = await q(
+      `select count(*)::int as n from orders o join users u on lower(u.email) = lower(o.customer_details->>'email') where o.user_id is null`
+    );
+    log(`orders: linking ${unlinkedOrders} to customer accounts by email`);
+    if (!DRY_RUN) {
+      await pg.query(
+        `update orders o set user_id = u.id from users u where o.user_id is null and lower(u.email) = lower(o.customer_details->>'email')`
+      );
+    }
+    const [{ n: unlinkedInvoices }] = await q(
+      `select count(*)::int as n from invoices i join orders o on o.order_number = i.order_number
+       where i.customer_id is null and (o.user_id is not null or exists (select 1 from users u where lower(u.email) = lower(o.customer_details->>'email')))`
+    );
+    log(`invoices: linking ${unlinkedInvoices} to customer accounts / orders`);
+    if (!DRY_RUN) {
+      await pg.query(
+        `update invoices i set customer_id = o.user_id from orders o where i.customer_id is null and o.order_number = i.order_number and o.user_id is not null`
+      );
+      await pg.query(`update invoices i set order_id = o.id from orders o where i.order_id is null and o.order_number = i.order_number`);
+    }
+
     if (!DRY_RUN) await pg.query("commit");
     log("done");
   } catch (err) {

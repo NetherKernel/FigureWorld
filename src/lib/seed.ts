@@ -52,7 +52,7 @@ export async function seedStoreData() {
   }
 
   // 2. Ensure Promotional Coupons in Supabase
-  const coupons = [
+  const coupons: any[] = [
     {
       code: "WELCOME10",
       description: "10% off for new anime collectors",
@@ -68,6 +68,7 @@ export async function seedStoreData() {
       discount_type: "fixed",
       discount_value: 500,
       min_order_amount: 2999,
+      max_discount_amount: null,
       is_active: true,
     },
     {
@@ -89,7 +90,7 @@ export async function seedStoreData() {
       .maybeSingle();
 
     if (!existing) {
-      await supabase.from("coupons").insert(c);
+      await supabase.from("coupons").insert(c as any);
       logger.info(`Seeded coupon in Supabase: ${c.code}`);
     }
   }

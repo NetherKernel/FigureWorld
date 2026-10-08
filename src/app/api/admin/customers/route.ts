@@ -9,14 +9,20 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const query = (searchParams.get("q") || "").toLowerCase().trim();
 
-    // Fetch all customer users and all orders from Supabase
-    const [usersRes, ordersRes] = await Promise.all([
-      supabase.from("users").select("*").ilike("role", "CUSTOMER").order("created_at", { ascending: false }),
-      supabase.from("orders").select("*"),
+    // Fetch all customer users, their orders and saved addresses from Supabase
+    const [usersRes, ordersRes, addressesRes] = await Promise.all([
+      supabase.from("users").select("id, name, email, phone, role, created_at").ilike("role", "CUSTOMER").order("created_at", { ascending: false }),
+      supabase.from("orders").select("customer_details, shipping_address, order_status, pricing, placed_at, created_at"),
+      supabase.from("addresses").select("user_id"),
     ]);
 
     const customers = usersRes.data || [];
     const orders = ordersRes.data || [];
+
+    const addressCounts = new Map<string, number>();
+    (addressesRes.data || []).forEach((a: any) => {
+      if (a.user_id) addressCounts.set(a.user_id, (addressCounts.get(a.user_id) || 0) + 1);
+    });
 
     // Aggregate stats by customer email
     const orderAggMap = new Map<
@@ -69,7 +75,7 @@ export async function GET(req: Request) {
         role: c.role,
         isActive: true,
         isEmailVerified: true,
-        addressesCount: 0,
+        addressesCount: addressCounts.get(c.id) || 0,
         ordersCount: stats.ordersCount,
         totalSpent: stats.totalSpent,
         lastOrderDate: stats.lastOrderDate,

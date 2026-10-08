@@ -234,14 +234,25 @@ export class NotificationService {
     let invoice: any = null;
     if (invoiceOrNumber) {
       if (typeof invoiceOrNumber === "string") {
-        invoice = await Invoice.findOne({ invoiceNumber: invoiceOrNumber.trim() });
+        const { data: inv } = await supabase
+          .from("invoices")
+          .select("*")
+          .ilike("invoice_number", invoiceOrNumber.trim())
+          .maybeSingle();
+        invoice = inv;
       } else {
         invoice = invoiceOrNumber;
       }
     }
 
-    if (!invoice && ctx.order.invoiceNumber) {
-      invoice = await Invoice.findOne({ invoiceNumber: ctx.order.invoiceNumber });
+    const orderInvNum = ctx.order.invoiceNumber || ctx.order.invoice_number;
+    if (!invoice && orderInvNum) {
+      const { data: inv } = await supabase
+        .from("invoices")
+        .select("*")
+        .ilike("invoice_number", orderInvNum)
+        .maybeSingle();
+      invoice = inv;
     }
 
     if (!invoice) {
@@ -423,6 +434,34 @@ export class NotificationService {
       body: text,
       dispatchResult: result,
       metadata: { deliveredAt: new Date() },
+    });
+  }
+
+  /**
+   * 6. Custom Notification:
+   * Direct custom message dispatched to the customer.
+   */
+  static async sendCustomNotification(
+    orderOrNumber: string | IOrder,
+    options: { message: string; phoneOverride?: string }
+  ): Promise<INotificationLog> {
+    const ctx = await resolveOrderContext(orderOrNumber);
+    const phone = options.phoneOverride || ctx.recipientPhone;
+    const text = options.message;
+
+    const result = await sendWhatsAppText({ to: phone, text });
+
+    return recordNotificationLog({
+      recipientPhone: formatWhatsAppPhone(phone),
+      recipientEmail: ctx.order.customerEmail,
+      customerName: ctx.customerName,
+      orderNumber: ctx.orderNumber,
+      orderId: ctx.order._id as any,
+      notificationType: "CUSTOM" as any,
+      messageType: "text",
+      body: text,
+      dispatchResult: result,
+      metadata: { custom: true },
     });
   }
 
