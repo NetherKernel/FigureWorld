@@ -1,49 +1,52 @@
-import { connectToDatabase } from "@/lib/db";
-import { User } from "@/models/User";
-import { Order } from "@/models/Order";
 import { requireRole } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
+import { supabase } from "@/lib/supabase";
 
 export async function GET(req: Request) {
   try {
     await requireRole(req, "ADMIN", "STAFF");
-    await connectToDatabase();
 
     const { searchParams } = new URL(req.url);
     const query = (searchParams.get("q") || "").toLowerCase().trim();
 
-    // Fetch all customer users and all orders
-    const [customers, orders] = await Promise.all([
-      User.find({ role: "CUSTOMER" }).sort({ createdAt: -1 }),
-      Order.find({}),
+    // Fetch all customer users and all orders from Supabase
+    const [usersRes, ordersRes] = await Promise.all([
+      supabase.from("users").select("*").ilike("role", "CUSTOMER").order("created_at", { ascending: false }),
+      supabase.from("orders").select("*"),
     ]);
 
+    const customers = usersRes.data || [];
+    const orders = ordersRes.data || [];
+
     // Aggregate stats by customer email
-    const orderAggMap = new Map<string, { ordersCount: number; totalSpent: number; lastOrderDate: Date | null; phone: string }>();
+    const orderAggMap = new Map<
+      string,
+      { ordersCount: number; totalSpent: number; lastOrderDate: Date | null; phone: string }
+    >();
 
     orders.forEach((o: any) => {
-      const email = (o.customerEmail || "").toLowerCase().trim();
+      const email = (o.customer_details?.email || "").toLowerCase().trim();
       if (!email) return;
 
       const existing = orderAggMap.get(email) || {
         ordersCount: 0,
         totalSpent: 0,
         lastOrderDate: null,
-        phone: o.shippingAddress?.phone || "",
+        phone: o.shipping_address?.phone || o.customer_details?.phone || "",
       };
 
       existing.ordersCount++;
-      const st = (o.orderStatus || "").toUpperCase();
+      const st = (o.order_status || "").toUpperCase();
       if (st !== "CANCELLED" && st !== "REFUNDED") {
         existing.totalSpent += Number(o.pricing?.grandTotal || 0);
       }
 
-      const orderDate = new Date(o.placedAt || o.createdAt);
+      const orderDate = new Date(o.placed_at || o.created_at);
       if (!existing.lastOrderDate || orderDate > existing.lastOrderDate) {
         existing.lastOrderDate = orderDate;
       }
-      if (!existing.phone && o.shippingAddress?.phone) {
-        existing.phone = o.shippingAddress.phone;
+      if (!existing.phone && (o.shipping_address?.phone || o.customer_details?.phone)) {
+        existing.phone = o.shipping_address?.phone || o.customer_details?.phone;
       }
 
       orderAggMap.set(email, existing);
@@ -59,18 +62,18 @@ export async function GET(req: Request) {
       };
 
       return {
-        id: c._id.toString(),
-        name: c.name,
+        id: c.id,
+        name: c.name || "Customer",
         email: c.email,
         phone: c.phone || stats.phone || "—",
         role: c.role,
-        isActive: c.isActive ?? true,
-        isEmailVerified: c.isEmailVerified ?? false,
-        addressesCount: Array.isArray(c.addresses) ? c.addresses.length : 0,
+        isActive: true,
+        isEmailVerified: true,
+        addressesCount: 0,
         ordersCount: stats.ordersCount,
         totalSpent: stats.totalSpent,
         lastOrderDate: stats.lastOrderDate,
-        createdAt: c.createdAt,
+        createdAt: c.created_at,
       };
     });
 

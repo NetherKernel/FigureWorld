@@ -1,8 +1,4 @@
 import { z } from "zod";
-import { connectToDatabase } from "@/lib/db";
-import { Order } from "@/models/Order";
-import { OrderItem } from "@/models/OrderItem";
-import { Product } from "@/models/Product";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
@@ -10,6 +6,8 @@ import { validateRequestBody } from "@/lib/validation";
 import { createInvoiceForOrder } from "@/lib/invoice";
 import { NotificationService } from "@/lib/notifications";
 import { logAdminAudit } from "@/lib/audit";
+import { supabase } from "@/lib/supabase";
+import { findSupabaseOrder, restockSupabaseInventory } from "@/lib/orders-supabase";
 
 const verifyPaymentSchema = z.object({
   orderNumber: z.string().optional(),
@@ -36,84 +34,85 @@ export async function POST(req: Request) {
       throw new ValidationError("Either orderNumber or orderId must be provided.");
     }
 
-    await connectToDatabase();
-
-    const order = data.orderId
-      ? await Order.findById(data.orderId)
-      : await Order.findOne({ orderNumber: data.orderNumber?.toUpperCase() });
+    const order = await findSupabaseOrder(data.orderId || data.orderNumber!);
 
     if (!order) {
-      throw new NotFoundError(`Order not found.`);
+      throw new NotFoundError("Order not found.");
     }
 
-    if (!order.paymentDetails) {
-      order.paymentDetails = {};
-    }
+    const paymentDetails = { ...(order.payment_details || {}) };
+    let newPaymentStatus = "PENDING";
+    let newOrderStatus = order.order_status || "pending";
 
     if (data.action === "CONFIRM") {
-      // Payment confirmed -> Order confirmed
-      order.paymentStatus = "PAID";
-      order.orderStatus = "confirmed";
-      order.paymentDetails.verifiedAt = new Date();
-      order.paymentDetails.verifiedBy = user.userId;
+      newPaymentStatus = "PAID";
+      newOrderStatus = "confirmed";
+      paymentDetails.verifiedAt = new Date().toISOString();
+      paymentDetails.verifiedBy = user.userId;
       if (data.notes) {
-        order.paymentDetails.verificationNotes = data.notes;
+        paymentDetails.verificationNotes = data.notes;
       }
     } else if (data.action === "REJECT") {
-      // Payment failed/rejected -> Order cancelled & inventory restored
-      order.paymentStatus = "FAILED";
-      order.orderStatus = "cancelled";
-      order.paymentDetails.rejectionReason =
+      newPaymentStatus = "FAILED";
+      newOrderStatus = "cancelled";
+      paymentDetails.rejectionReason =
         data.rejectionReason || data.notes || "Transaction reference could not be verified with bank.";
 
-      // Restore inventory stock
-      const items = await OrderItem.find({ order: order._id });
-      for (const item of items) {
-        if (item.product) {
-          const product = await Product.findById(item.product);
-          if (product) {
-            product.stock += item.quantity;
-            await product.save();
-          }
-        }
+      // Restore inventory in Supabase
+      if (Array.isArray(order.items)) {
+        await restockSupabaseInventory(order.items);
       }
     } else if (data.action === "EXPIRE") {
-      // Payment expired -> Order cancelled & inventory restored
-      order.paymentStatus = "EXPIRED";
-      order.orderStatus = "cancelled";
-      order.paymentDetails.rejectionReason = "Payment session expired without valid transaction reference.";
+      newPaymentStatus = "FAILED";
+      newOrderStatus = "cancelled";
+      paymentDetails.rejectionReason = "Payment session expired without valid transaction reference.";
 
-      // Restore inventory stock
-      const items = await OrderItem.find({ order: order._id });
-      for (const item of items) {
-        if (item.product) {
-          const product = await Product.findById(item.product);
-          if (product) {
-            product.stock += item.quantity;
-            await product.save();
-          }
-        }
+      // Restore inventory in Supabase
+      if (Array.isArray(order.items)) {
+        await restockSupabaseInventory(order.items);
       }
     } else if (data.action === "REFUND") {
-      order.paymentStatus = "REFUNDED";
-      order.orderStatus = "refunded";
+      newPaymentStatus = "REFUNDED";
+      newOrderStatus = "refunded";
       if (data.notes) {
-        order.paymentDetails.verificationNotes = `Refunded: ${data.notes}`;
+        paymentDetails.verificationNotes = `Refunded: ${data.notes}`;
       }
     }
 
-    await order.save();
+    const statusHistory = Array.isArray(order.status_history) ? [...order.status_history] : [];
+    statusHistory.push({
+      status: newOrderStatus,
+      timestamp: new Date().toISOString(),
+      updatedBy: user.email,
+      note: `Payment action: ${data.action}. ${data.notes || ""}`.trim(),
+    });
+
+    const { data: updatedOrder, error: updateErr } = await supabase
+      .from("orders")
+      .update({
+        payment_status: newPaymentStatus,
+        order_status: newOrderStatus,
+        payment_details: paymentDetails,
+        status_history: statusHistory,
+      })
+      .eq("id", order.id)
+      .select("*")
+      .single();
+
+    if (updateErr || !updatedOrder) {
+      throw new Error(`Failed to update order payment: ${updateErr?.message || "Unknown error"}`);
+    }
 
     if (data.action === "CONFIRM") {
       try {
-        await createInvoiceForOrder(order.orderNumber);
+        await createInvoiceForOrder(updatedOrder.order_number);
       } catch (invErr) {
         console.error("Invoice auto-generation error:", invErr);
       }
       try {
-        await NotificationService.sendPaymentConfirmation(order);
-        await NotificationService.sendOrderConfirmation(order);
-        await NotificationService.sendInvoice(order);
+        await NotificationService.sendPaymentConfirmation(updatedOrder);
+        await NotificationService.sendOrderConfirmation(updatedOrder);
+        await NotificationService.sendInvoice(updatedOrder);
       } catch (notifErr) {
         console.error("WhatsApp notification error:", notifErr);
       }
@@ -124,13 +123,13 @@ export async function POST(req: Request) {
       actor: user,
       resource: {
         type: "PAYMENT",
-        id: order._id.toString(),
-        identifier: order.orderNumber,
+        id: updatedOrder.id,
+        identifier: updatedOrder.order_number,
       },
       details: {
         action: data.action,
-        paymentStatus: order.paymentStatus,
-        orderStatus: order.orderStatus,
+        paymentStatus: updatedOrder.payment_status,
+        orderStatus: updatedOrder.order_status,
         notes: data.notes || data.rejectionReason,
       },
       req,
@@ -138,10 +137,10 @@ export async function POST(req: Request) {
 
     return apiSuccess(
       {
-        orderNumber: order.orderNumber,
-        paymentStatus: order.paymentStatus,
-        orderStatus: order.orderStatus,
-        paymentDetails: order.paymentDetails,
+        orderNumber: updatedOrder.order_number,
+        paymentStatus: updatedOrder.payment_status,
+        orderStatus: updatedOrder.order_status,
+        paymentDetails: updatedOrder.payment_details,
       },
       `Payment ${data.action} processed successfully.`
     );

@@ -1,5 +1,3 @@
-import { connectToDatabase } from "@/lib/db";
-import { Category } from "@/models/Category";
 import { requireRole } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { supabase } from "@/lib/supabase";
@@ -58,32 +56,36 @@ const SUBCATEGORY_TREE = [
       { name: "Nichirin Blades", slug: "nichirin-blades", description: "Demon Slayer forged steel replica swords" },
       { name: "Samurai Katanas", slug: "samurai-swords", description: "Carbon steel folded traditional katanas" },
       { name: "Cosplay & Foam Swords", slug: "cosplay-swords", description: "Convention-safe bamboo and foam swords" },
+      { name: "Zoro's Swords", slug: "zoros-swords", description: "One Piece Shusui, Wado Ichimonji & Enma steel replicas" },
+      { name: "Bankai Swords", slug: "bankai-swords", description: "Bleach Zangetsu, Senbonzakura and Kyoka Suigetsu blades" },
     ],
   },
   {
     parent: {
-      name: "Posters",
-      slug: "posters",
-      description: "Vibrant high-definition wall art, canvas prints and metal displates",
+      name: "Nendoroid & Chibi",
+      slug: "nendoroid-chibi",
+      description: "Adorable interchangeable chibi figures and mini desktop desk buddies",
       displayOrder: 4,
     },
     subcategories: [
-      { name: "Framed Canvas Art", slug: "framed-canvas", description: "Gallery-wrapped anime canvas paintings" },
-      { name: "Metal Displates", slug: "metal-displates", description: "Magnetic metal wall prints" },
-      { name: "Wall Scrolls", slug: "wall-scrolls", description: "Traditional Japanese silk fabric hanging scrolls" },
+      { name: "Nendoroids", slug: "nendoroid", description: "Official Good Smile style interchangeable chibi figures" },
+      { name: "Funko Pop!", slug: "funko-pop", description: "Vinyl anime and pop culture figures" },
+      { name: "Mini Figures & Bobbleheads", slug: "mini-figures", description: "Desk buddies and dashboard figures" },
     ],
   },
   {
     parent: {
-      name: "Other Merchandise",
-      slug: "other-merchandise",
-      description: "Anime hoodies, apparel, LED lamps and desk mats",
+      name: "Apparel & Accessories",
+      slug: "apparel-accessories",
+      description: "Anime oversized tees, hoodies, keychains, cosplay props and jewelry",
       displayOrder: 5,
     },
     subcategories: [
-      { name: "Anime Apparel & Hoodies", slug: "anime-apparel", description: "Heavyweight streetwear hoodies & tees" },
-      { name: "LED Night Lamps", slug: "led-lamps", description: "3D acrylic illusion neon LED night lights" },
-      { name: "Desk Mats & Mousepads", slug: "desk-mats", description: "XXL stitched-edge gaming anime desk mats" },
+      { name: "Anime Oversized Tees", slug: "anime-tees", description: "Heavyweight graphic print anime t-shirts" },
+      { name: "Anime Hoodies", slug: "anime-hoodies", description: "Winter fleece anime and gaming hoodies" },
+      { name: "Metal Keychains", slug: "metal-keychains", description: "Miniature weapons and character keyrings" },
+      { name: "Posters & Wall Scrolls", slug: "posters-scrolls", description: "High-definition matte and silk art scrolls" },
+      { name: "Cosplay Props & Cloaks", slug: "cosplay-props", description: "Akatsuki cloaks, Survey Corps jackets and headbands" },
     ],
   },
 ];
@@ -91,7 +93,6 @@ const SUBCATEGORY_TREE = [
 export async function POST(req: Request) {
   try {
     await requireRole(req, "ADMIN", "STAFF");
-    await connectToDatabase();
 
     let createdParents = 0;
     let createdSubs = 0;
@@ -100,14 +101,14 @@ export async function POST(req: Request) {
       // 1. Ensure Parent exists in Supabase
       let supaParentId: string | null = null;
       try {
-        const { data: supaParent } = await supabase
+        const { data: existingSupaP } = await supabase
           .from("categories")
           .select("id, slug")
           .eq("slug", item.parent.slug)
           .maybeSingle();
 
-        if (supaParent) {
-          supaParentId = supaParent.id;
+        if (existingSupaP) {
+          supaParentId = existingSupaP.id;
         } else {
           const { data: createdSupaP } = await supabase
             .from("categories")
@@ -123,32 +124,16 @@ export async function POST(req: Request) {
             .single();
           if (createdSupaP) {
             supaParentId = createdSupaP.id;
+            createdParents++;
           }
         }
       } catch (err) {
         console.error(`Error ensuring parent ${item.parent.slug} in Supabase:`, err);
       }
 
-      // 2. Ensure Parent exists in MongoDB
-      let mongoParent = await Category.findOne({ slug: item.parent.slug });
-      if (!mongoParent) {
-        mongoParent = await Category.create({
-          name: item.parent.name,
-          slug: item.parent.slug,
-          description: item.parent.description,
-          displayOrder: item.parent.displayOrder,
-          isRestricted: Boolean((item.parent as any).isRestricted),
-          isActive: true,
-          parentCategory: undefined,
-        });
-        createdParents++;
-      }
-
-      // 3. Ensure Subcategories exist in Supabase and MongoDB
+      // 2. Ensure Subcategories exist in Supabase
       for (let i = 0; i < item.subcategories.length; i++) {
         const sub = item.subcategories[i];
-
-        // Supabase Subcategory
         try {
           const { data: supaSub } = await supabase
             .from("categories")
@@ -166,6 +151,7 @@ export async function POST(req: Request) {
               is_active: true,
               is_restricted: Boolean((item.parent as any).isRestricted),
             });
+            createdSubs++;
           } else if (supaParentId && supaSub.parent_category_id !== supaParentId) {
             await supabase
               .from("categories")
@@ -174,24 +160,6 @@ export async function POST(req: Request) {
           }
         } catch (err) {
           console.error(`Error ensuring subcategory ${sub.slug} in Supabase:`, err);
-        }
-
-        // MongoDB Subcategory
-        let mongoSubDoc = await Category.findOne({ slug: sub.slug });
-        if (!mongoSubDoc) {
-          await Category.create({
-            name: sub.name,
-            slug: sub.slug,
-            description: sub.description,
-            parentCategory: mongoParent._id,
-            displayOrder: i + 1,
-            isActive: true,
-            isRestricted: Boolean((item.parent as any).isRestricted),
-          });
-          createdSubs++;
-        } else if (!mongoSubDoc.parentCategory) {
-          mongoSubDoc.parentCategory = mongoParent._id;
-          await mongoSubDoc.save();
         }
       }
     }

@@ -239,9 +239,9 @@ export default function StoreCounterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className="min-h-screen animate-page-in">
       {/* Top bar */}
-      <header className="sticky top-0 z-30 border-b border-white/5 bg-ink text-white">
+      <header className="surface-ink sticky top-0 z-30 !border-x-0 !border-t-0 text-white shadow-[0_10px_30px_-18px_rgba(0,0,0,0.7)]">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-3 px-4 py-2.5">
           <div className="flex items-center gap-3">
             <Logo href="/staff" />

@@ -1,9 +1,6 @@
-import { connectToDatabase } from "@/lib/db";
-import { Order } from "@/models/Order";
-import { OrderItem } from "@/models/OrderItem";
-import { Address } from "@/models/Address";
 import { requireAuth } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
+import { supabase } from "@/lib/supabase";
 
 const MAX_ORDERS = 50;
 
@@ -14,65 +11,61 @@ const MAX_ORDERS = 50;
 export async function GET(req: Request) {
   try {
     const user = await requireAuth(req);
-    await connectToDatabase();
+    const emailLower = user.email.toLowerCase().trim();
 
-    const emails = Array.from(new Set([user.email, user.email.toLowerCase()]));
-    const batches = await Promise.all([
-      Order.find({ customer: user.userId }),
-      ...emails.map((email) => Order.find({ customerEmail: email })),
-    ]);
+    // Query Supabase directly
+    const { data: supaOrders, error } = await supabase
+      .from("orders")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(MAX_ORDERS);
+
+    if (error) {
+      throw new Error(`Failed to load orders: ${error.message}`);
+    }
 
     const seen = new Set<string>();
-    const orders = batches
-      .flat()
-      .filter((o: any) => {
-        const id = String(o._id);
-        if (seen.has(id)) return false;
-        seen.add(id);
-        return true;
-      })
-      .sort((a: any, b: any) => new Date(b.placedAt || b.createdAt).getTime() - new Date(a.placedAt || a.createdAt).getTime())
-      .slice(0, MAX_ORDERS);
+    const result: any[] = [];
 
-    const result = await Promise.all(
-      orders.map(async (order: any) => {
-        const [items, shippingAddress] = await Promise.all([
-          OrderItem.find({ order: order._id }),
-          order.shippingAddress ? Address.findById(order.shippingAddress) : null,
-        ]);
-        return {
-          orderNumber: order.orderNumber,
-          orderId: order._id,
-          customerEmail: order.customerEmail,
-          pricing: order.pricing,
-          paymentMethod: order.paymentMethod,
-          paymentStatus: order.paymentStatus,
-          orderStatus: order.orderStatus,
-          shippingAddress: shippingAddress
-            ? {
-                fullName: shippingAddress.fullName,
-                phone: shippingAddress.phone,
-                address: shippingAddress.streetLine1,
-                landmark: shippingAddress.landmark,
-                city: shippingAddress.city,
-                state: shippingAddress.state,
-                pinCode: shippingAddress.postalCode,
-              }
-            : null,
-          items: items.map((it: any) => ({
-            productId: it.product ? String(it.product) : undefined,
-            name: it.productTitle,
-            sku: it.productSku,
-            image: it.productImage,
-            unitPrice: it.unitPrice,
-            quantity: it.quantity,
-            total: it.total,
+    for (const so of (supaOrders || [])) {
+      const cEmail = so.customer_details?.email?.toLowerCase()?.trim();
+      const isUserMatch =
+        (so.user_id && so.user_id === user.userId) ||
+        (cEmail && cEmail === emailLower);
+
+      if (isUserMatch && so.order_number && !seen.has(so.order_number)) {
+        seen.add(so.order_number);
+        result.push({
+          orderNumber: so.order_number,
+          orderId: so.id,
+          customerEmail: so.customer_details?.email || user.email,
+          pricing: so.pricing,
+          paymentMethod: so.payment_method,
+          paymentStatus: so.payment_status,
+          orderStatus: so.order_status,
+          shippingAddress: {
+            fullName: so.shipping_address?.fullName || so.customer_details?.name || "",
+            phone: so.shipping_address?.phone || so.customer_details?.phone || "",
+            address: so.shipping_address?.address || so.shipping_address?.street || "",
+            landmark: so.shipping_address?.landmark || "",
+            city: so.shipping_address?.city || "",
+            state: so.shipping_address?.state || "",
+            pinCode: so.shipping_address?.postalCode || so.shipping_address?.postal_code || "",
+          },
+          items: (so.items || []).map((it: any) => ({
+            productId: it.productId || it.product_id,
+            name: it.title || it.productTitle || it.name || "Product",
+            sku: it.sku || "",
+            image: it.image || "",
+            unitPrice: it.unitPrice || it.price || 0,
+            quantity: it.quantity || 1,
+            total: it.total || ((it.unitPrice || it.price || 0) * (it.quantity || 1)),
           })),
-          placedAt: order.placedAt,
-          updatedAt: order.updatedAt,
-        };
-      })
-    );
+          placedAt: so.placed_at || so.created_at,
+          updatedAt: so.updated_at,
+        });
+      }
+    }
 
     return apiSuccess({ orders: result }, "Orders retrieved successfully");
   } catch (error) {

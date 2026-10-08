@@ -2,8 +2,9 @@ import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { env } from "./env";
 import { UnauthorizedError, ForbiddenError } from "./errors";
-import { UserRole } from "@/models/User";
 import { NextResponse } from "next/server";
+
+export type UserRole = "CUSTOMER" | "STAFF" | "ADMIN" | "DEVELOPER";
 
 export interface AuthTokenPayload {
   userId: string;

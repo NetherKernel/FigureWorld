@@ -2,12 +2,16 @@
  * Replaces the store catalog with the real, officially licensed anime merchandise
  * defined in src/lib/catalog/anime-products.json.
  *
- * Every product whose SKU is not in that file (the old placeholder products) is
- * deleted. Past orders are unaffected: order items keep their own snapshot of the
- * product title, SKU, image and price.
+ * The database is the source of truth: catalog products that already exist (matched
+ * by SKU) are left untouched so edits made in the admin dashboard are kept, unless
+ * --overwrite is passed. Products added through the admin are only deleted with
+ * --prune, which removes every product whose SKU is not in the catalog file. Past orders are unaffected either way: order items keep their own
+ * snapshot of the product title, SKU, image and price.
  *
- *   node scripts/seed-anime-products.js            # apply
- *   node scripts/seed-anime-products.js --dry-run  # only print what would change
+ *   node scripts/seed-anime-products.js              # add catalog products that are missing
+ *   node scripts/seed-anime-products.js --overwrite  # also reset existing ones to the catalog values
+ *   node scripts/seed-anime-products.js --prune      # also delete products not in the catalog
+ *   add --dry-run to any of the above to only print what would change
  */
 const fs = require("fs");
 const path = require("path");
@@ -15,6 +19,8 @@ const mongoose = require("mongoose");
 
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/figuresworld";
 const DRY_RUN = process.argv.includes("--dry-run");
+const PRUNE = process.argv.includes("--prune");
+const OVERWRITE = process.argv.includes("--overwrite");
 const CATALOG_PATH = path.join(__dirname, "..", "src", "lib", "catalog", "anime-products.json");
 
 // Subcategories used by the catalog (and the storefront menu) that older databases may lack
@@ -80,18 +86,19 @@ async function main() {
     }
   }
 
-  // 2. Remove the placeholder products
-  const stale = await products.find({ sku: { $nin: [...skus] } }, { projection: { name: 1, sku: 1 } }).toArray();
+  // 2. Optionally remove every product that is not part of the catalog
+  const stale = !PRUNE ? [] : await products.find({ sku: { $nin: [...skus] } }, { projection: { name: 1, sku: 1 } }).toArray();
   for (const p of stale) console.log(`${DRY_RUN ? "[dry-run] would delete" : "Deleted"} ${p.sku}  ${p.name}`);
   if (!DRY_RUN && stale.length > 0) {
     await products.deleteMany({ _id: { $in: stale.map((p) => p._id) } });
   }
 
-  // 3. Upsert the real catalog by SKU
+  // 3. Insert missing catalog products (and reset existing ones with --overwrite)
   let created = 0;
   let updated = 0;
   for (const { categorySlug, subcategorySlug, ...fields } of catalog) {
     const existing = await products.findOne({ sku: fields.sku }, { projection: { _id: 1 } });
+    if (existing && !OVERWRITE) continue;
     if (existing) updated++;
     else created++;
     if (DRY_RUN) continue;
@@ -115,7 +122,7 @@ async function main() {
   }
 
   console.log(
-    `\n${DRY_RUN ? "[dry-run] " : ""}${stale.length} placeholder products removed, ${created} created, ${updated} updated (${catalog.length} in catalog).`
+    `\n${DRY_RUN ? "[dry-run] " : ""}${stale.length} products removed, ${created} created, ${updated} updated (${catalog.length} in catalog).`
   );
   await mongoose.disconnect();
 }

@@ -1,10 +1,7 @@
-import { connectToDatabase } from "@/lib/db";
-import { Order } from "@/models/Order";
-import { OrderItem } from "@/models/OrderItem";
-import { Address } from "@/models/Address";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { generateUpiQrDataUrl } from "@/lib/upi";
+import { findSupabaseOrder, mapSupabaseOrder } from "@/lib/orders-supabase";
 
 export async function GET(
   req: Request,
@@ -17,67 +14,50 @@ export async function GET(
       throw new ValidationError("Order number is required");
     }
 
-    await connectToDatabase();
+    const orderDoc = await findSupabaseOrder(orderNumber);
 
-    const order = await Order.findOne({ orderNumber: orderNumber.toUpperCase() });
-
-    if (!order) {
+    if (!orderDoc) {
       throw new NotFoundError(`Order "${orderNumber}" not found`);
     }
 
-    // Fetch address
-    const shippingAddress = order.shippingAddress
-      ? await Address.findById(order.shippingAddress)
-      : null;
-
-    // Fetch items
-    const items = await OrderItem.find({ order: order._id });
+    const mapped = mapSupabaseOrder(orderDoc);
+    if (!mapped) {
+      throw new NotFoundError(`Order "${orderNumber}" not found`);
+    }
 
     // Generate dynamic QR code if UPI and still PENDING
     let qrDataUrl = "";
     if (
-      order.paymentMethod === "UPI" &&
-      order.paymentDetails?.qrPayload &&
-      (order.paymentStatus === "PENDING" || order.paymentStatus === "UNDER_REVIEW")
+      mapped.paymentMethod === "UPI" &&
+      mapped.paymentDetails?.qrPayload &&
+      (mapped.paymentStatus === "PENDING" || mapped.paymentStatus === "UNDER_REVIEW")
     ) {
-      qrDataUrl = await generateUpiQrDataUrl(order.paymentDetails.qrPayload);
+      try {
+        qrDataUrl = await generateUpiQrDataUrl(mapped.paymentDetails.qrPayload);
+      } catch {}
     }
 
     return apiSuccess(
       {
-        orderNumber: order.orderNumber,
-        orderId: order._id,
-        customerEmail: order.customerEmail,
-        pricing: order.pricing,
-        paymentMethod: order.paymentMethod,
-        paymentStatus: order.paymentStatus,
-        orderStatus: order.orderStatus,
+        orderNumber: mapped.orderNumber,
+        orderId: mapped.id,
+        customerEmail: mapped.customerEmail,
+        pricing: mapped.pricing,
+        paymentMethod: mapped.paymentMethod,
+        paymentStatus: mapped.paymentStatus,
+        orderStatus: mapped.orderStatus,
         paymentDetails: {
-          ...order.paymentDetails,
+          ...mapped.paymentDetails,
           qrDataUrl,
         },
-        codDetails: order.codDetails || null,
-        shippingAddress: shippingAddress
-          ? {
-              fullName: shippingAddress.fullName,
-              phone: shippingAddress.phone,
-              address: shippingAddress.streetLine1,
-              landmark: shippingAddress.landmark,
-              city: shippingAddress.city,
-              state: shippingAddress.state,
-              pinCode: shippingAddress.postalCode,
-            }
-          : null,
-        items: items.map((it: any) => ({
-          name: it.productTitle,
-          sku: it.productSku,
-          image: it.productImage,
-          unitPrice: it.unitPrice,
-          quantity: it.quantity,
-          total: it.total,
-        })),
-        placedAt: order.placedAt,
-        updatedAt: order.updatedAt,
+        codDetails: mapped.codDetails,
+        shippingAddress: mapped.shippingAddress,
+        items: mapped.items,
+        shipment: mapped.shipment,
+        requiresAdminReview: mapped.requiresAdminReview,
+        complianceVerified: mapped.complianceVerified,
+        placedAt: mapped.placedAt,
+        updatedAt: mapped.updatedAt,
       },
       "Order details retrieved successfully"
     );

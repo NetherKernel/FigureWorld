@@ -1,15 +1,11 @@
-import { connectToDatabase } from "@/lib/db";
-import { Order } from "@/models/Order";
-import { Product } from "@/models/Product";
-import { Category } from "@/models/Category";
 import { requireRole } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
+import { supabase } from "@/lib/supabase";
 
 export async function GET(req: Request) {
   try {
     // Require ADMIN or STAFF role
     await requireRole(req, "ADMIN", "STAFF");
-    await connectToDatabase();
 
     const { searchParams } = new URL(req.url);
     const timeframeDays = parseInt(searchParams.get("days") || "14", 10);
@@ -17,12 +13,16 @@ export async function GET(req: Request) {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
 
-    // Fetch all orders and products
-    const [allOrders, allProducts, allCategories] = await Promise.all([
-      Order.find({}).sort({ createdAt: -1 }),
-      Product.find({}),
-      Category.find({}),
+    // Fetch all orders, products, and categories from Supabase
+    const [ordersRes, productsRes, categoriesRes] = await Promise.all([
+      supabase.from("orders").select("*").order("created_at", { ascending: false }),
+      supabase.from("products").select("*"),
+      supabase.from("categories").select("*"),
     ]);
+
+    const allOrders = ordersRes.data || [];
+    const allProducts = productsRes.data || [];
+    const allCategories = categoriesRes.data || [];
 
     // 1. KPI Calculations
     let todayOrders = 0;
@@ -37,11 +37,14 @@ export async function GET(req: Request) {
 
     const categoryMap = new Map<string, string>();
     allCategories.forEach((cat: any) => {
-      categoryMap.set(cat._id.toString(), cat.name);
+      categoryMap.set(cat.id, cat.name);
     });
 
     // Product Sales Map
-    const productSalesMap = new Map<string, { title: string; sku: string; unitsSold: number; revenue: number; stock: number; categoryName: string }>();
+    const productSalesMap = new Map<
+      string,
+      { title: string; sku: string; unitsSold: number; revenue: number; stock: number; categoryName: string }
+    >();
 
     // Category Sales Map
     const categorySalesMap = new Map<string, { name: string; count: number; revenue: number }>();
@@ -56,7 +59,20 @@ export async function GET(req: Request) {
     };
 
     // Date range buckets for charts (last N days)
-    const dailyMap = new Map<string, { date: string; label: string; revenue: number; totalOrders: number; delivered: number; dispatched: number; processing: number; cancelled: number }>();
+    const dailyMap = new Map<
+      string,
+      {
+        date: string;
+        label: string;
+        revenue: number;
+        totalOrders: number;
+        delivered: number;
+        dispatched: number;
+        processing: number;
+        cancelled: number;
+      }
+    >();
+
     for (let i = timeframeDays - 1; i >= 0; i--) {
       const d = new Date(now.getTime() - i * 24 * 3600 * 1000);
       const key = d.toISOString().split("T")[0];
@@ -74,12 +90,12 @@ export async function GET(req: Request) {
     }
 
     allOrders.forEach((order: any) => {
-      const placedDate = new Date(order.placedAt || order.createdAt || now);
+      const placedDate = new Date(order.placed_at || order.created_at || now);
       const isToday = placedDate >= todayStart;
       const grandTotal = Number(order.pricing?.grandTotal || 0);
-      const status = (order.orderStatus || "").toUpperCase();
-      const pStatus = (order.paymentStatus || "").toUpperCase();
-      const pMethod = (order.paymentMethod || "").toUpperCase();
+      const status = (order.order_status || "").toUpperCase();
+      const pStatus = (order.payment_status || "").toUpperCase();
+      const pMethod = (order.payment_method || "").toUpperCase();
 
       // Today's metrics
       if (isToday) {
@@ -151,10 +167,10 @@ export async function GET(req: Request) {
       // Product sales breakdown
       if (Array.isArray(order.items)) {
         order.items.forEach((item: any) => {
-          const itemTitle = item.title || item.name || "Collector Figure";
+          const itemTitle = item.title || item.productTitle || item.name || "Collector Figure";
           const itemSku = item.sku || "FIGURE-SKU";
           const itemQty = Number(item.quantity || 1);
-          const itemTotal = Number(item.total || item.totalPrice || item.price * itemQty || 0);
+          const itemTotal = Number(item.total || item.unitPrice * itemQty || item.price * itemQty || 0);
 
           const existing = productSalesMap.get(itemTitle) || {
             title: itemTitle,
@@ -176,18 +192,18 @@ export async function GET(req: Request) {
 
     // Match products with live stock
     allProducts.forEach((prod: any) => {
-      const catName = categoryMap.get(prod.category?.toString()) || "Collectibles";
-      const existing = productSalesMap.get(prod.title || prod.name);
+      const catName = categoryMap.get(prod.category_id || prod.category) || "Collectibles";
+      const existing = productSalesMap.get(prod.name);
       if (existing) {
-        existing.stock = prod.stock;
+        existing.stock = Number(prod.stock || 0);
         existing.categoryName = catName;
       } else {
-        productSalesMap.set(prod.title || prod.name, {
-          title: prod.title || prod.name,
+        productSalesMap.set(prod.name, {
+          title: prod.name,
           sku: prod.sku,
           unitsSold: 0,
           revenue: 0,
-          stock: prod.stock,
+          stock: Number(prod.stock || 0),
           categoryName: catName,
         });
       }
@@ -208,15 +224,15 @@ export async function GET(req: Request) {
 
     // Low Stock Products
     const lowStockItems = allProducts
-      .filter((p: any) => p.stock <= (p.lowStockThreshold || 5))
+      .filter((p: any) => Number(p.stock || 0) <= Number(p.low_stock_threshold || 5))
       .map((p: any) => ({
-        id: p._id.toString(),
-        title: p.title || p.name,
+        id: p.id,
+        title: p.name,
         sku: p.sku,
-        stock: p.stock,
-        lowStockThreshold: p.lowStockThreshold || 5,
-        price: p.price,
-        category: categoryMap.get(p.category?.toString()) || "Anime Figures",
+        stock: Number(p.stock || 0),
+        lowStockThreshold: Number(p.low_stock_threshold || 5),
+        price: Number(p.price || 0),
+        category: categoryMap.get(p.category_id || p.category) || "Anime Figures",
       }))
       .sort((a: any, b: any) => a.stock - b.stock);
 
@@ -237,7 +253,7 @@ export async function GET(req: Request) {
       .sort((a, b) => b.revenue - a.revenue || b.count - a.count);
 
     // Payment methods total
-    const totalPaymentsCount = (paymentMethodsMap.UPI.count + paymentMethodsMap.COD.count) || 1;
+    const totalPaymentsCount = paymentMethodsMap.UPI.count + paymentMethodsMap.COD.count || 1;
     const paymentMethodsBreakdown = [
       {
         method: "UPI",
@@ -257,14 +273,14 @@ export async function GET(req: Request) {
 
     // Recent 6 orders
     const recentOrders = allOrders.slice(0, 6).map((o: any) => ({
-      orderNumber: o.orderNumber,
-      customerName: o.shippingAddress?.fullName || o.customerEmail,
-      customerEmail: o.customerEmail,
+      orderNumber: o.order_number,
+      customerName: o.shipping_address?.fullName || o.customer_details?.name || o.customer_details?.email,
+      customerEmail: o.customer_details?.email,
       grandTotal: o.pricing?.grandTotal || 0,
-      orderStatus: o.orderStatus,
-      paymentMethod: o.paymentMethod,
-      paymentStatus: o.paymentStatus,
-      placedAt: o.placedAt || o.createdAt,
+      orderStatus: o.order_status,
+      paymentMethod: o.payment_method,
+      paymentStatus: o.payment_status,
+      placedAt: o.placed_at || o.created_at,
       itemsCount: Array.isArray(o.items) ? o.items.length : 1,
     }));
 

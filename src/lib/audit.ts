@@ -1,4 +1,4 @@
-import { AuditLog } from "@/models/AuditLog";
+import { supabase } from "@/lib/supabase";
 import { AuthTokenPayload } from "./auth";
 import { getClientIp } from "./rate-limiter";
 import { logger } from "./logger";
@@ -25,7 +25,7 @@ export async function logAdminAudit(options: LogAuditOptions): Promise<void> {
     const ipAddress = options.req ? getClientIp(options.req) : "127.0.0.1";
     const userAgent = options.req ? options.req.headers.get("user-agent") || "" : "";
 
-    await AuditLog.create({
+    await supabase.from("audit_logs").insert({
       action: options.action,
       actor: {
         userId: options.actor.userId,
@@ -35,9 +35,8 @@ export async function logAdminAudit(options: LogAuditOptions): Promise<void> {
       },
       resource: options.resource,
       details: options.details || {},
-      ipAddress,
-      userAgent,
-      timestamp: new Date(),
+      ip_address: ipAddress,
+      user_agent: userAgent,
     });
 
     logger.info(`[AUDIT] ${options.actor.email} performed ${options.action}`, {

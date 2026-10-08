@@ -40,5 +40,3 @@ export interface HealthCheckResponse {
     apiVersion: string;
   };
 }
-
-export * from "@/models";

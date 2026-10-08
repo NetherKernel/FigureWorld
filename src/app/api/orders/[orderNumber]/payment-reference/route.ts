@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { connectToDatabase } from "@/lib/db";
-import { Order } from "@/models/Order";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { ValidationError, NotFoundError, ConflictError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
+import { supabase } from "@/lib/supabase";
+import { findSupabaseOrder } from "@/lib/orders-supabase";
 
 const paymentRefSchema = z.object({
   transactionRef: z
@@ -27,19 +27,17 @@ export async function POST(
 
     const data = await validateRequestBody(req, paymentRefSchema);
 
-    await connectToDatabase();
-
-    const order = await Order.findOne({ orderNumber: orderNumber.toUpperCase() });
+    const order = await findSupabaseOrder(orderNumber);
 
     if (!order) {
       throw new NotFoundError(`Order "${orderNumber}" not found`);
     }
 
-    if (order.paymentMethod !== "UPI") {
+    if (order.payment_method !== "UPI") {
       throw new ValidationError(`Order "${orderNumber}" is not configured for UPI payment.`);
     }
 
-    const normalizedStatus = (order.paymentStatus || "").toUpperCase();
+    const normalizedStatus = (order.payment_status || "").toUpperCase();
 
     if (normalizedStatus === "PAID") {
       throw new ConflictError("Payment for this order has already been verified and confirmed.");
@@ -49,31 +47,41 @@ export async function POST(
       throw new ConflictError("This order payment window has expired. Please create a new order.");
     }
 
-    // Move to UNDER_REVIEW - explicitly NOT confirmed!
-    order.paymentStatus = "UNDER_REVIEW";
-    order.orderStatus = "pending"; // Remains pending until admin verification!
+    const paymentDetails = {
+      ...(order.payment_details || {}),
+      transactionRef: data.transactionRef.trim(),
+      upiApp: data.upiApp?.trim() || "UPI App",
+      submittedAt: new Date().toISOString(),
+    };
 
-    if (!order.paymentDetails) {
-      order.paymentDetails = {};
-    }
-
-    order.paymentDetails.transactionRef = data.transactionRef.trim();
-    order.paymentDetails.upiApp = data.upiApp?.trim() || "UPI App";
-    order.paymentDetails.submittedAt = new Date();
+    const updatePayload: any = {
+      payment_status: "UNDER_REVIEW",
+      payment_ref: data.transactionRef.trim(),
+      payment_details: paymentDetails,
+    };
 
     if (data.notes) {
-      order.notes = data.notes.trim();
+      updatePayload.notes = data.notes.trim();
     }
 
-    await order.save();
+    const { data: updated, error } = await supabase
+      .from("orders")
+      .update(updatePayload)
+      .eq("id", order.id)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update payment reference: ${error.message}`);
+    }
 
     return apiSuccess(
       {
-        orderNumber: order.orderNumber,
-        paymentStatus: order.paymentStatus,
-        orderStatus: order.orderStatus,
-        transactionRef: order.paymentDetails.transactionRef,
-        submittedAt: order.paymentDetails.submittedAt,
+        orderNumber: updated.order_number,
+        paymentStatus: updated.payment_status,
+        orderStatus: updated.order_status,
+        transactionRef: data.transactionRef.trim(),
+        submittedAt: paymentDetails.submittedAt,
         message:
           "Payment reference submitted successfully. Your transaction is currently UNDER_REVIEW by our team.",
       },

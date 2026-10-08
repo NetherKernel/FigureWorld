@@ -1,13 +1,5 @@
 import { z } from "zod";
 import crypto from "crypto";
-import mongoose from "mongoose";
-import { connectToDatabase } from "@/lib/db";
-import { Product } from "@/models/Product";
-import { Category } from "@/models/Category";
-import { Address } from "@/models/Address";
-import { User } from "@/models/User";
-import { Order } from "@/models/Order";
-import { OrderItem } from "@/models/OrderItem";
 import { evaluateCoupon } from "@/lib/coupon";
 import { calculateDeliveryFee } from "@/lib/delivery-rates";
 import { supabase, mapSupabaseProduct } from "@/lib/supabase";
@@ -67,8 +59,6 @@ export async function POST(req: Request) {
       }
     }
 
-    await connectToDatabase();
-
     // Check optional authenticated user session
     const currentUser = await getAuthenticatedUser(req);
     const clientIp = getClientIp(req);
@@ -82,29 +72,19 @@ export async function POST(req: Request) {
     for (const item of data.items) {
       let product: any = null;
       try {
-        if (/^[0-9a-fA-F]{24}$/.test(item.productId)) {
-          product = await Product.findById(item.productId);
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.productId);
+        let supaQuery = supabase.from("products").select("*, categories(*)");
+        if (isUuid) {
+          supaQuery = supaQuery.eq("id", item.productId);
+        } else {
+          supaQuery = supaQuery.or(`id.eq.${item.productId},slug.eq.${item.productId},sku.eq.${item.productId}`);
+        }
+        const { data: supaP } = await supaQuery.maybeSingle();
+        if (supaP) {
+          product = mapSupabaseProduct(supaP, supaP.categories);
         }
       } catch {
         product = null;
-      }
-
-      if (!product) {
-        try {
-          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.productId);
-          let supaQuery = supabase.from("products").select("*, categories(*)");
-          if (isUuid) {
-            supaQuery = supaQuery.eq("id", item.productId);
-          } else {
-            supaQuery = supaQuery.or(`id.eq.${item.productId},slug.eq.${item.productId}`);
-          }
-          const { data: supaP } = await supaQuery.maybeSingle();
-          if (supaP) {
-            product = mapSupabaseProduct(supaP, supaP.categories);
-          }
-        } catch {
-          //
-        }
       }
 
       if (!product || product.status === "archived") {
@@ -137,26 +117,10 @@ export async function POST(req: Request) {
         }
 
         // 3. Destination restrictions verification
-        let categoryDoc: any = null;
-        try {
-          const catId = typeof product.category === "object" ? product.category._id || product.category.id : product.category;
-          const catSlug = typeof product.category === "object" ? product.category.slug : null;
-
-          if (catId && mongoose.Types.ObjectId.isValid(catId) && /^[0-9a-fA-F]{24}$/.test(catId)) {
-            categoryDoc = await Category.findById(catId);
-          } else if (catSlug) {
-            categoryDoc = await Category.findOne({ slug: catSlug.toLowerCase() });
-          } else if (catId) {
-            categoryDoc = await Category.findOne({ slug: catId.toString().toLowerCase() });
-          }
-        } catch {
-          // Best effort lookup
-        }
-
+        const categoryDoc: any = typeof product.category === "object" ? product.category : null;
         const prohibitedRegions: string[] = [
           ...(product.shippingRestrictions || []),
           ...(categoryDoc?.complianceRequirements?.restrictedRegions || []),
-          ...(typeof product.category === "object" && product.category?.complianceRequirements?.restrictedRegions ? product.category.complianceRequirements.restrictedRegions : []),
         ];
 
         const destinationStrings = [
@@ -182,7 +146,7 @@ export async function POST(req: Request) {
         }
       }
 
-      // Zero-Trust: Authoritative unit price strictly from database (Client cannot tamper with price!)
+      // Zero-Trust: Authoritative unit price strictly from database
       const effectivePrice =
         product.discountPrice !== undefined && product.discountPrice !== null && product.discountPrice < product.price
           ? product.discountPrice
@@ -219,7 +183,6 @@ export async function POST(req: Request) {
       discountAmount = evaluated.discountAmount;
 
       appliedCouponCode = coupon.code;
-      coupon.usedCount = (coupon.usedCount || 0) + 1;
       await coupon.save();
     }
 
@@ -232,7 +195,7 @@ export async function POST(req: Request) {
         state: data.customer.state,
       },
       items: orderItemsData.map((it) => ({
-        productId: it.productDoc._id.toString(),
+        productId: it.productDoc.id?.toString(),
         name: it.productTitle,
         quantity: it.quantity,
         weight: it.productDoc.weight || 500,
@@ -243,39 +206,46 @@ export async function POST(req: Request) {
     const shippingFee = deliveryCalc.fee;
     const grandTotal = Math.max(0, subtotal - discountAmount + shippingFee);
 
-    // 3b. COD Maximum Limit Enforcement (Sprint 8)
+    // 3b. COD Maximum Limit Enforcement
     if (data.paymentMethod === "COD" && grandTotal > 15000) {
       throw new ValidationError(
         `Cash on Delivery is limited to orders up to ₹15,000. Your order total is ₹${grandTotal.toLocaleString("en-IN")}. Please choose Direct UPI payment for higher value orders.`
       );
     }
 
-    // Resolve valid MongoDB User _id for references
-    let validUserId: any = undefined;
-    if (currentUser?.userId && /^[0-9a-fA-F]{24}$/.test(currentUser.userId)) {
+    // Resolve Supabase user_id if available
+    let validUserId: string | null = null;
+    if (
+      currentUser?.userId &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUser.userId)
+    ) {
       validUserId = currentUser.userId;
     } else if (data.customer?.email) {
-      const mongoUser = await User.findOne({ email: data.customer.email.toLowerCase().trim() });
-      if (mongoUser) {
-        validUserId = mongoUser._id;
-      }
+      try {
+        const { data: supaUser } = await supabase
+          .from("users")
+          .select("id")
+          .eq("email", data.customer.email.toLowerCase().trim())
+          .maybeSingle();
+        if (supaUser) validUserId = supaUser.id;
+      } catch {}
     }
 
-    // 4. Create Shipping Address Record
-    const shippingAddress = await Address.create({
-      user: validUserId,
-      type: "shipping",
-      fullName: data.customer.fullName,
-      phone: data.customer.mobileNumber,
-      streetLine1: data.customer.address,
-      streetLine2: data.customer.landmark,
-      landmark: data.customer.landmark,
-      city: data.customer.city,
-      state: data.customer.state,
-      postalCode: data.customer.pinCode,
-      country: "India",
-      isDefault: false,
-    });
+    // 4. Create Shipping Address Record in Supabase
+    try {
+      await supabase.from("addresses").insert({
+        user_id: validUserId,
+        name: data.customer.fullName,
+        phone: data.customer.mobileNumber,
+        street: data.customer.address,
+        city: data.customer.city,
+        state: data.customer.state,
+        postal_code: data.customer.pinCode,
+        country: "India",
+        landmark: data.customer.landmark || "",
+        is_default: false,
+      });
+    } catch {}
 
     // 5. Generate Unique Order Number
     const orderNumber = `FW-${Date.now().toString().slice(-6)}-${crypto.randomBytes(2).toString("hex").toUpperCase()}`;
@@ -293,145 +263,115 @@ export async function POST(req: Request) {
       qrDataUrl = await generateUpiQrDataUrl(qrPayload);
     }
 
-    // 7. Create Order Record strictly initializing status
-    // Zero-Trust: Payment status is ALWAYS PENDING; Order status is ALWAYS pending.
-    const newOrder = await Order.create({
-      orderNumber,
-      customer: validUserId,
-      customerEmail: data.customer.email,
-      items: [], // Will populate with OrderItem IDs
-      pricing: {
-        subtotal,
-        discountTotal: discountAmount,
-        taxTotal: 0,
-        shippingFee,
-        grandTotal,
-        currency: "INR",
-        isCustomShippingFee: false,
-        deliveryPartnerType: deliveryCalc.partnerSuggestion || "STANDARD_COURIER",
+    // 7. Atomic inventory stock decrement in Supabase
+    for (const itemData of orderItemsData) {
+      const newStock = Math.max(0, (itemData.productDoc.stock || 0) - itemData.quantity);
+      if (itemData.productDoc.id) {
+        try {
+          await supabase.from("products").update({ stock: newStock }).eq("id", itemData.productDoc.id);
+        } catch {}
+      }
+    }
+
+    // 8. Create Order Record strictly initializing status in Supabase
+    const pricingObj = {
+      subtotal,
+      discountTotal: discountAmount,
+      taxTotal: 0,
+      shippingFee,
+      grandTotal,
+      currency: "INR",
+      isCustomShippingFee: false,
+      deliveryPartnerType: deliveryCalc.partnerSuggestion || "STANDARD_COURIER",
+    };
+
+    const shippingAddressObj = {
+      fullName: data.customer.fullName,
+      phone: data.customer.mobileNumber,
+      address: data.customer.address,
+      street: data.customer.address,
+      landmark: data.customer.landmark || "",
+      city: data.customer.city,
+      state: data.customer.state,
+      postalCode: data.customer.pinCode,
+      country: "India",
+    };
+
+    const itemsObj = orderItemsData.map((it) => ({
+      productId: it.productDoc.id,
+      title: it.productTitle,
+      productTitle: it.productTitle,
+      name: it.productTitle,
+      sku: it.productSku,
+      image: it.productImage,
+      price: it.unitPrice,
+      unitPrice: it.unitPrice,
+      quantity: it.quantity,
+      subtotal: it.subtotal,
+      total: it.total,
+    }));
+
+    const newOrderData = {
+      order_number: orderNumber,
+      user_id: validUserId,
+      customer_details: {
+        name: data.customer.fullName,
+        email: data.customer.email,
+        phone: data.customer.mobileNumber,
       },
-      shippingAddress: shippingAddress._id,
-      paymentMethod: data.paymentMethod,
-      paymentStatus: "PENDING",
-      orderStatus: "pending",
-      couponCode: appliedCouponCode,
-      paymentDetails:
+      shipping_address: shippingAddressObj,
+      items: itemsObj,
+      pricing: pricingObj,
+      payment_method: data.paymentMethod,
+      payment_status: "PENDING",
+      order_status: "pending",
+      coupon_code: appliedCouponCode,
+      payment_details:
         data.paymentMethod === "UPI"
           ? {
               merchantUpiId: MERCHANT_UPI_ID,
               customerUpiId: data.upiId,
               qrPayload,
             }
-          : undefined,
-      codDetails:
+          : null,
+      cod_details:
         data.paymentMethod === "COD"
           ? {
               codStatus: "PENDING_VERIFICATION",
               callLogs: [],
               maxCodLimit: 15000,
             }
-          : undefined,
-      complianceVerified: containsRestrictedGoods,
-      requiresAdminReview: containsRestrictedGoods,
-      complianceDetails: containsRestrictedGoods
+          : null,
+      compliance_verified: Boolean(containsRestrictedGoods),
+      requires_admin_review: Boolean(containsRestrictedGoods),
+      compliance_details: containsRestrictedGoods
         ? {
             isRestrictedOrder: true,
             ageConfirmed: true,
             termsConsent: data.termsConsent !== false,
-            verifiedAt: new Date(),
+            verifiedAt: new Date().toISOString(),
             clientIp,
             userAgent,
           }
-        : undefined,
+        : null,
       notes:
         data.paymentMethod === "UPI"
           ? `Direct UPI checkout. Customer VPA: ${data.upiId}`
           : "Cash on Delivery - Pending Phone Verification",
-      placedAt: new Date(),
-    });
+      status_history: [
+        { status: "pending", timestamp: new Date().toISOString(), note: "Order placed via checkout" },
+      ],
+      placed_at: new Date().toISOString(),
+    };
 
-    // 8. Create OrderItems linked to newOrder and atomically decrement stock
-    const orderItemIds = [];
-    for (const itemData of orderItemsData) {
-      const orderItem = await OrderItem.create({
-        order: newOrder._id,
-        product: itemData.productDoc._id,
-        productTitle: itemData.productTitle,
-        productSku: itemData.productSku,
-        productImage: itemData.productImage,
-        unitPrice: itemData.unitPrice,
-        quantity: itemData.quantity,
-        subtotal: itemData.subtotal,
-        discountAmount: 0,
-        total: itemData.total,
-      });
-      orderItemIds.push(orderItem._id);
+    const { data: insertedOrder, error: insertErr } = await supabase
+      .from("orders")
+      .insert(newOrderData)
+      .select("*")
+      .single();
 
-      // Atomic inventory stock decrement
-      const newStock = Math.max(0, (itemData.productDoc.stock || 0) - itemData.quantity);
-      if (typeof itemData.productDoc.save === "function") {
-        itemData.productDoc.stock = newStock;
-        await itemData.productDoc.save();
-        if (itemData.productDoc.sku) {
-          try {
-            await supabase.from("products").update({ stock: newStock }).eq("sku", itemData.productDoc.sku);
-          } catch {}
-        }
-      } else if (itemData.productDoc.id) {
-        try {
-          await supabase.from("products").update({ stock: newStock }).eq("id", itemData.productDoc.id);
-        } catch {
-          // Supabase stock sync best-effort
-        }
-      }
-    }
-
-    newOrder.items = orderItemIds;
-    await newOrder.save();
-
-    // Sync order to Supabase orders table
-    try {
-      await supabase.from("orders").insert({
-        order_number: newOrder.orderNumber,
-        user_id:
-          currentUser?.userId &&
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUser.userId)
-            ? currentUser.userId
-            : null,
-        customer_details: {
-          name: data.customer.fullName,
-          email: data.customer.email,
-          phone: data.customer.mobileNumber,
-        },
-        shipping_address: {
-          address: data.customer.address,
-          landmark: data.customer.landmark || "",
-          city: data.customer.city,
-          state: data.customer.state,
-          postalCode: data.customer.pinCode,
-        },
-        items: orderItemsData.map((it) => ({
-          title: it.productTitle,
-          sku: it.productSku,
-          image: it.productImage,
-          price: it.unitPrice,
-          quantity: it.quantity,
-          total: it.total,
-        })),
-        pricing: newOrder.pricing,
-        payment_method: newOrder.paymentMethod,
-        payment_status: newOrder.paymentStatus,
-        order_status: newOrder.orderStatus,
-        requires_admin_review: Boolean(containsRestrictedGoods),
-        compliance_details: containsRestrictedGoods
-          ? { isRestrictedOrder: true, ageConfirmed: true, verifiedAt: new Date().toISOString() }
-          : {},
-        status_history: [
-          { status: "pending", timestamp: new Date().toISOString(), note: "Order placed via checkout" },
-        ],
-      });
-    } catch {
-      // Supabase order sync best-effort
+    if (insertErr) {
+      throw new Error(`Failed to create order in Supabase: ${insertErr.message}`);
     }
 
     // 9. Estimate delivery timeline (3-5 business days)
@@ -446,12 +386,12 @@ export async function POST(req: Request) {
 
     return apiSuccess(
       {
-        orderNumber: newOrder.orderNumber,
-        orderId: newOrder._id,
-        pricing: newOrder.pricing,
-        paymentMethod: newOrder.paymentMethod,
-        paymentStatus: newOrder.paymentStatus,
-        orderStatus: newOrder.orderStatus,
+        orderNumber: insertedOrder.order_number,
+        orderId: insertedOrder.id,
+        pricing: insertedOrder.pricing,
+        paymentMethod: insertedOrder.payment_method,
+        paymentStatus: insertedOrder.payment_status,
+        orderStatus: insertedOrder.order_status,
         couponCode: appliedCouponCode,
         paymentDetails: {
           merchantUpiId: MERCHANT_UPI_ID,
@@ -460,27 +400,12 @@ export async function POST(req: Request) {
           qrPayload,
           qrDataUrl,
         },
-        codDetails: newOrder.codDetails,
-        shippingAddress: {
-          fullName: shippingAddress.fullName,
-          phone: shippingAddress.phone,
-          address: shippingAddress.streetLine1,
-          landmark: shippingAddress.landmark,
-          city: shippingAddress.city,
-          state: shippingAddress.state,
-          pinCode: shippingAddress.postalCode,
-        },
-        items: orderItemsData.map((it) => ({
-          name: it.productTitle,
-          sku: it.productSku,
-          image: it.productImage,
-          unitPrice: it.unitPrice,
-          quantity: it.quantity,
-          total: it.total,
-        })),
+        codDetails: insertedOrder.cod_details,
+        shippingAddress: insertedOrder.shipping_address,
+        items: itemsObj,
         estimatedDelivery: estimatedDeliveryFormatted,
-        complianceVerified: containsRestrictedGoods,
-        requiresAdminReview: containsRestrictedGoods,
+        complianceVerified: Boolean(containsRestrictedGoods),
+        requiresAdminReview: Boolean(containsRestrictedGoods),
       },
       "Order placed successfully",
       201

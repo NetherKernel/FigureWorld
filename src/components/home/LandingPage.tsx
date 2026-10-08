@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { HeroCarousel, type HeroSlide } from "@/components/home/HeroCarousel";
+import { CategoryTile } from "@/components/home/CategoryTile";
 import { ProductCard } from "@/components/product/ProductCard";
 import { ProductShelf, ShelfItem } from "@/components/product/ProductShelf";
 import { Price } from "@/components/ui/Price";
@@ -267,45 +268,28 @@ const TONE_CLASS = {
 function TopCategoriesSection({ section }: { section: SectionOf<"topCategories"> }) {
   return (
     <section className="w-full">
-      {/* Header matching client screenshot: Bold uppercase title, underline with brand accent, orange VIEW ALL button */}
-      <div className="relative mb-3 flex items-center justify-between border-b border-line pb-2.5 sm:mb-5 sm:pb-3">
+      <div className="relative mb-3 flex items-end justify-between gap-3 border-b border-line pb-2.5 sm:mb-5 sm:pb-3">
         <div className="relative">
-          <h2 className="text-base font-black tracking-wider uppercase text-fg sm:text-lg md:text-xl lg:text-2xl">
+          <span className="eyebrow mb-1 hidden sm:inline-flex">
+            <span className="slash" aria-hidden="true" /> Hover to preview
+          </span>
+          <h2 className="text-base font-black uppercase tracking-wider text-fg sm:text-lg md:text-xl lg:text-2xl">
             {section.title}
           </h2>
-          <span className="absolute -bottom-[11px] left-0 h-[3px] w-full rounded-full bg-brand sm:-bottom-[13px]" />
+          <span className="absolute -bottom-[11px] left-0 h-[3px] w-full origin-left rounded-full sm:-bottom-[13px]" style={{ backgroundImage: "var(--brand-gradient)", animation: "grow-x 700ms cubic-bezier(0.2,0.8,0.2,1) both" }} />
         </div>
         {section.seeAllHref && section.seeAllLabel && (
-          <Link
-            href={section.seeAllHref}
-            className="inline-flex items-center justify-center rounded-md bg-[#ea580c] px-3.5 py-1 text-xs font-black uppercase tracking-wider text-white shadow-sm transition-all hover:bg-[#c2410c] hover:shadow active:scale-95 sm:px-4 sm:py-1.5 sm:text-xs"
-          >
+          <Link href={section.seeAllHref} className="btn btn-primary btn-sm group/all uppercase tracking-wider">
             {section.seeAllLabel}
+            <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover/all:translate-x-0.5" aria-hidden="true" />
           </Link>
         )}
       </div>
 
-      {/* Grid: 2 columns on mobile (exact match with client reference screenshot), 4 on tablet/laptop, 8 on wide desktop */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 lg:grid-cols-4 xl:grid-cols-8 lg:gap-5">
-        {section.items.map((item) => (
-          <Link
-            key={item.id}
-            href={item.href}
-            className="group flex flex-col items-center rounded-2xl border border-line/70 bg-surface p-2 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-brand/40 hover:shadow-md sm:p-2.5"
-          >
-            <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-surface-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={item.image}
-                alt={item.name}
-                loading="lazy"
-                className="h-full w-full object-cover object-center transition-transform duration-300 ease-out group-hover:scale-105"
-              />
-            </div>
-            <span className="mt-2.5 text-center text-xs font-extrabold uppercase tracking-wide text-fg transition-colors group-hover:text-brand sm:mt-3 sm:text-sm">
-              {item.name}
-            </span>
-          </Link>
+      {/* 2 columns on phones, 4 on tablets/laptops, 8 on wide screens */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 lg:gap-5 xl:grid-cols-8">
+        {section.items.map((item, index) => (
+          <CategoryTile key={item.id} name={item.name} image={item.image} href={item.href} index={index} />
         ))}
       </div>
     </section>

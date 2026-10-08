@@ -1,6 +1,4 @@
 import { z } from "zod";
-import { connectToDatabase } from "@/lib/db";
-import { Product } from "@/models/Product";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { validateRequestBody } from "@/lib/validation";
 import { evaluateCoupon } from "@/lib/coupon";
@@ -13,11 +11,9 @@ const calculateCartSchema = z.object({
     z.object({
       productId: z.string().min(1, "Product ID is required"),
       quantity: z.number().int().min(1, "Quantity must be at least 1"),
-      // Even if client passes a price, we do NOT use it.
       clientPrice: z.number().optional(),
     })
   ),
-  // Optional coupon preview — validated but never consumed here
   couponCode: z.string().max(40).optional(),
   shippingAddress: z
     .object({
@@ -56,40 +52,27 @@ export async function POST(req: Request) {
   try {
     const data = await validateRequestBody(req, calculateCartSchema);
 
-    await connectToDatabase();
-
     const verifiedItems: IVerifiedCartItem[] = [];
     const stockWarnings: string[] = [];
 
     let subtotal = 0;
 
     for (const item of data.items) {
-      // Look up authoritative product record from database
       let product: any = null;
       try {
-        if (/^[0-9a-fA-F]{24}$/.test(item.productId)) {
-          product = await Product.findById(item.productId);
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.productId);
+        let supaQuery = supabase.from("products").select("*, categories(*)");
+        if (isUuid) {
+          supaQuery = supaQuery.eq("id", item.productId);
+        } else {
+          supaQuery = supaQuery.or(`id.eq.${item.productId},slug.eq.${item.productId},sku.eq.${item.productId}`);
+        }
+        const { data: supaP } = await supaQuery.maybeSingle();
+        if (supaP) {
+          product = mapSupabaseProduct(supaP, supaP.categories);
         }
       } catch {
         product = null;
-      }
-
-      if (!product) {
-        try {
-          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.productId);
-          let supaQuery = supabase.from("products").select("*, categories(*)");
-          if (isUuid) {
-            supaQuery = supaQuery.eq("id", item.productId);
-          } else {
-            supaQuery = supaQuery.or(`id.eq.${item.productId},slug.eq.${item.productId}`);
-          }
-          const { data: supaP } = await supaQuery.maybeSingle();
-          if (supaP) {
-            product = mapSupabaseProduct(supaP, supaP.categories);
-          }
-        } catch {
-          //
-        }
       }
 
       if (!product || product.status === "archived") {
@@ -148,7 +131,7 @@ export async function POST(req: Request) {
         "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=400";
 
       verifiedItems.push({
-        productId: product._id.toString(),
+        productId: product.id?.toString() || item.productId,
         name: product.name,
         slug: product.slug,
         sku: product.sku,

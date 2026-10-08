@@ -121,6 +121,8 @@
   --animate-pop-in: pop-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-slide-in-right: slide-in-right 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-shimmer: shimmer 1.8s infinite;
+  /* Ends on transform:none so fixed-position modals inside the page are not trapped */
+  --animate-page-in: page-in 340ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 html {
@@ -138,6 +140,45 @@ body {
   color: var(--fg);
   font-family: var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Ambient red glow behind every page (storefront, dashboards, account) */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 420px at 85% -120px, rgba(215, 20, 26, 0.07), transparent 70%),
+    radial-gradient(700px 380px at 0% 0%, rgba(255, 140, 60, 0.04), transparent 70%);
+}
+.dark body::before {
+  background:
+    radial-gradient(900px 460px at 85% -140px, rgba(236, 43, 49, 0.14), transparent 70%),
+    radial-gradient(700px 400px at 0% 0%, rgba(255, 140, 60, 0.05), transparent 70%);
+}
+
+/* Slim, theme-aware scrollbars */
+:root {
+  scrollbar-color: var(--line-strong) transparent;
+}
+* {
+  scrollbar-width: thin;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--line-strong);
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--brand);
 }
 
 ::selection {
@@ -168,6 +209,19 @@ body {
     border: 1px solid var(--line);
     border-radius: 0.9rem;
     box-shadow: var(--shadow-card);
+  }
+  .dark .card {
+    box-shadow: var(--shadow-card), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  }
+  /* Data tables inside cards (orders, customers, invoices, POS…): calmer headers, row hover */
+  :where(.card) :where(thead th) {
+    letter-spacing: 0.06em;
+  }
+  :where(.card) :where(tbody tr) {
+    transition: background-color 150ms;
+  }
+  :where(.card) :where(tbody tr:hover) {
+    background-color: color-mix(in oklab, var(--surface-2) 80%, var(--brand) 2%);
   }
   /* Lift on hover for clickable cards */
   .card-hover {
@@ -248,6 +302,25 @@ body {
     background-color: var(--brand-hover);
     box-shadow: var(--shadow-glow), inset 0 -1px 0 rgba(0, 0, 0, 0.14);
   }
+  /* Light sweep across primary buttons on hover */
+  .btn-primary {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  .btn-primary::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.28) 50%, transparent 70%);
+    transform: translateX(-120%);
+    transition: transform 650ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .btn-primary:hover:not(:disabled)::after {
+    transform: translateX(120%);
+  }
   .btn-dark {
     background: var(--fg);
     color: var(--bg);
@@ -302,6 +375,9 @@ body {
   }
   .input::placeholder {
     color: var(--muted);
+  }
+  .input:hover:not(:disabled):not(:focus) {
+    border-color: var(--fg-2);
   }
   .input:focus {
     outline: none;
@@ -391,6 +467,66 @@ body {
   }
 }
 
+/* ------------------------------------------------------------------
+   Top-categories tile: 3D tilt, cursor glare, rotating red border
+   (driven by CategoryTile.tsx via --rx/--ry/--gx/--gy)
+------------------------------------------------------------------- */
+@property --tile-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+.cat-tile {
+  perspective: 900px;
+  outline-offset: 4px;
+}
+.cat-tile__inner {
+  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  box-shadow: var(--shadow-card);
+  transition: transform 450ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 300ms, border-color 300ms;
+  will-change: transform;
+}
+.cat-tile:hover .cat-tile__inner,
+.cat-tile[data-playing] .cat-tile__inner {
+  transition: transform 120ms ease-out, box-shadow 300ms, border-color 300ms;
+  border-color: transparent;
+  box-shadow: 0 24px 40px -24px var(--brand-ring), var(--shadow-pop);
+}
+.cat-tile__inner::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 20;
+  padding: 1.5px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(from var(--tile-angle), transparent 0deg, var(--brand) 70deg, #ff9a3c 120deg, transparent 180deg, transparent 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 300ms;
+  animation: tile-spin 2.6s linear infinite;
+}
+.cat-tile:hover .cat-tile__inner::before,
+.cat-tile:focus-visible .cat-tile__inner::before,
+.cat-tile[data-playing] .cat-tile__inner::before {
+  opacity: 1;
+}
+.cat-tile__glare {
+  background: radial-gradient(circle at var(--gx, 50%) var(--gy, 30%), rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 55%);
+  mix-blend-mode: soft-light;
+  opacity: 0;
+  transition: opacity 300ms;
+}
+.cat-tile:hover .cat-tile__glare {
+  opacity: 1;
+}
+.cat-tile__kenburns {
+  animation: ken-burns 4.5s ease-out both;
+}
+
 /* Hide scrollbars on horizontal carousels */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
@@ -458,6 +594,16 @@ html.theme-transition *::after {
     transform: translateY(0) scale(1);
   }
 }
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 @keyframes slide-in-right {
   from {
     opacity: 0;
@@ -501,9 +647,27 @@ html.theme-transition *::after {
   }
 }
 
+@keyframes tile-spin {
+  to {
+    --tile-angle: 360deg;
+  }
+}
+@keyframes ken-burns {
+  from {
+    transform: scale(1.02);
+  }
+  to {
+    transform: scale(1.14) translate3d(-2%, -1.5%, 0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+  .cat-tile__kenburns,
+  .cat-tile__inner::before {
+    animation: none;
   }
   *,
   *::before,

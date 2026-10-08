@@ -1,9 +1,8 @@
-import { connectToDatabase } from "@/lib/db";
-import { Invoice } from "@/models/Invoice";
 import { sendInvoiceEmail } from "@/lib/email";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
+import { supabase } from "@/lib/supabase";
 
 export async function POST(
   req: Request,
@@ -23,35 +22,46 @@ export async function POST(
       throw new ValidationError("Invoice number is required.");
     }
 
-    await connectToDatabase();
+    const { data: invoice } = await supabase
+      .from("invoices")
+      .select("*")
+      .ilike("invoice_number", invoiceNumber.trim())
+      .maybeSingle();
 
-    const invoice = await Invoice.findOne({ invoiceNumber: invoiceNumber.toUpperCase() });
     if (!invoice) {
       throw new NotFoundError(`Invoice "${invoiceNumber}" not found.`);
     }
 
+    const customerDetails = invoice.customer_details || {};
+    const pricing = invoice.pricing || {};
+
     const emailResult = await sendInvoiceEmail({
-      customerEmail: invoice.customerDetails.email,
-      customerName: invoice.customerDetails.name,
-      invoiceNumber: invoice.invoiceNumber,
-      orderNumber: invoice.orderNumber,
-      grandTotal: invoice.pricing.grandTotal,
-      pdfUrl: `/api/invoices/${invoice.invoiceNumber}/pdf`,
-      pdfPath: invoice.pdfPath,
+      customerEmail: customerDetails.email,
+      customerName: customerDetails.name,
+      invoiceNumber: invoice.invoice_number,
+      orderNumber: invoice.order_number,
+      grandTotal: pricing.grandTotal,
+      pdfUrl: `/api/invoices/${invoice.invoice_number}/pdf`,
+      pdfPath: invoice.pdf_path,
     });
 
-    invoice.sentToCustomer = true;
-    invoice.sentAt = new Date();
-    await invoice.save();
+    const sentAt = new Date().toISOString();
+    await supabase
+      .from("invoices")
+      .update({
+        sent_to_customer: true,
+        sent_at: sentAt,
+      })
+      .eq("id", invoice.id);
 
     return apiSuccess(
       {
-        invoiceNumber: invoice.invoiceNumber,
-        sentTo: invoice.customerDetails.email,
-        sentAt: invoice.sentAt,
+        invoiceNumber: invoice.invoice_number,
+        sentTo: customerDetails.email,
+        sentAt,
         messageId: emailResult.messageId,
       },
-      `Invoice sent to customer at ${invoice.customerDetails.email}.`
+      `Invoice sent to customer at ${customerDetails.email}.`
     );
   } catch (error) {
     return handleApiError(error);

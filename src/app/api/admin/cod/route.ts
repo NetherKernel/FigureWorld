@@ -1,9 +1,7 @@
-import { connectToDatabase } from "@/lib/db";
-import { Order } from "@/models/Order";
-import { Address } from "@/models/Address";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError } from "@/lib/errors";
+import { supabase } from "@/lib/supabase";
 
 export async function GET(req: Request) {
   try {
@@ -16,14 +14,22 @@ export async function GET(req: Request) {
       throw new ForbiddenError("Forbidden: Admin or Staff privileges required.");
     }
 
-    await connectToDatabase();
-
     const { searchParams } = new URL(req.url);
     const statusParam = searchParams.get("status")?.toUpperCase();
     const searchParam = searchParams.get("search")?.toLowerCase().trim();
 
-    // Fetch all COD orders
-    const allCodOrders = await Order.find({ paymentMethod: "COD" }).sort({ createdAt: -1 });
+    // Fetch all COD orders from Supabase
+    const { data: allCodOrders, error } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("payment_method", "COD")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new Error(`Failed to load COD orders: ${error.message}`);
+    }
+
+    const ordersList = allCodOrders || [];
 
     // Compute metrics
     let countPendingVerification = 0;
@@ -32,8 +38,8 @@ export async function GET(req: Request) {
     let countRejected = 0;
     let countCancelled = 0;
 
-    for (const o of allCodOrders) {
-      const codSt = o.codDetails?.codStatus || "PENDING_VERIFICATION";
+    for (const o of ordersList) {
+      const codSt = o.cod_details?.codStatus || "PENDING_VERIFICATION";
       if (codSt === "PENDING_VERIFICATION") countPendingVerification++;
       else if (codSt === "VERIFIED") countVerified++;
       else if (codSt === "DISPATCHED") countDispatched++;
@@ -42,64 +48,62 @@ export async function GET(req: Request) {
     }
 
     // Filter
-    let filteredOrders = allCodOrders;
+    let filteredOrders = ordersList;
 
     if (statusParam && statusParam !== "ALL") {
       filteredOrders = filteredOrders.filter(
-        (o: any) => (o.codDetails?.codStatus || "PENDING_VERIFICATION") === statusParam
+        (o: any) => (o.cod_details?.codStatus || "PENDING_VERIFICATION") === statusParam
       );
     }
 
-    // Populate address details
-    const populated = await Promise.all(
-      filteredOrders.map(async (o: any) => {
-        let shippingAddress = null;
-        if (o.shippingAddress) {
-          shippingAddress = await Address.findById(o.shippingAddress);
-        }
-        return {
-          _id: o._id,
-          orderNumber: o.orderNumber,
-          customerEmail: o.customerEmail,
-          pricing: o.pricing,
-          paymentMethod: o.paymentMethod,
-          paymentStatus: o.paymentStatus,
-          orderStatus: o.orderStatus,
-          codDetails: o.codDetails || { codStatus: "PENDING_VERIFICATION", callLogs: [] },
-          shippingAddress: shippingAddress
-            ? {
-                fullName: shippingAddress.fullName,
-                phone: shippingAddress.phone,
-                address: shippingAddress.streetLine1,
-                city: shippingAddress.city,
-                state: shippingAddress.state,
-                pinCode: shippingAddress.postalCode,
-                landmark: shippingAddress.landmark,
-              }
-            : null,
-          notes: o.notes,
-          placedAt: o.placedAt || o.createdAt,
-          createdAt: o.createdAt,
-        };
-      })
-    );
+    let populated = filteredOrders.map((o: any) => {
+      const shippingAddress = o.shipping_address || {};
+      const customerDetails = o.customer_details || {};
+      return {
+        _id: o.id,
+        id: o.id,
+        orderNumber: o.order_number,
+        customerEmail: customerDetails.email || "",
+        pricing: o.pricing,
+        paymentMethod: o.payment_method,
+        paymentStatus: o.payment_status,
+        orderStatus: o.order_status,
+        codDetails: o.cod_details || { codStatus: "PENDING_VERIFICATION", callLogs: [] },
+        shippingAddress: {
+          fullName: shippingAddress.fullName || customerDetails.name || "",
+          phone: shippingAddress.phone || customerDetails.phone || "",
+          address: shippingAddress.address || shippingAddress.street || "",
+          city: shippingAddress.city || "",
+          state: shippingAddress.state || "",
+          pinCode: shippingAddress.postalCode || shippingAddress.postal_code || "",
+          landmark: shippingAddress.landmark || "",
+        },
+        notes: o.notes,
+        placedAt: o.placed_at || o.created_at,
+        createdAt: o.created_at,
+      };
+    });
 
-    let finalOrders = populated;
     if (searchParam) {
-      finalOrders = populated.filter((o) => {
+      populated = populated.filter((o) => {
         const num = (o.orderNumber || "").toLowerCase();
         const email = (o.customerEmail || "").toLowerCase();
         const name = (o.shippingAddress?.fullName || "").toLowerCase();
         const phone = (o.shippingAddress?.phone || "").toLowerCase();
-        return num.includes(searchParam) || email.includes(searchParam) || name.includes(searchParam) || phone.includes(searchParam);
+        return (
+          num.includes(searchParam) ||
+          email.includes(searchParam) ||
+          name.includes(searchParam) ||
+          phone.includes(searchParam)
+        );
       });
     }
 
     return apiSuccess(
       {
-        orders: finalOrders,
+        orders: populated,
         metrics: {
-          total: allCodOrders.length,
+          total: ordersList.length,
           pendingVerification: countPendingVerification,
           verified: countVerified,
           dispatched: countDispatched,

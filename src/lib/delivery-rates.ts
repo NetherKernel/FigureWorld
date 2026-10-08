@@ -1,5 +1,44 @@
-import { connectToDatabase } from "./db";
-import { DeliveryRule, IDeliveryRule, IPincodeRate } from "@/models/DeliveryRule";
+import { supabase } from "./supabase";
+
+export interface IPincodeRate {
+  pincode: string;
+  areaName: string;
+  fee: number;
+  estimatedDays: string;
+  isActive: boolean;
+  notes?: string;
+}
+
+export interface IDeliveryPartnerPreset {
+  id: string;
+  name: string;
+  type: "PORTER" | "DUNZO" | "LOCAL_RIDER" | "STANDARD_COURIER" | "OTHER";
+  baseRate: number;
+  description?: string;
+}
+
+export interface IDeliveryRule {
+  lightWeightFee: number;
+  largeWeightFee: number;
+  heavyWeightThresholdKg: number;
+  defaultBaseFee: number;
+  freeShippingThreshold: number;
+  isFreeShippingActive: boolean;
+  enableLocalDelivery: boolean;
+  localCity: string;
+  localCityFee: number;
+  localCityEstDays: string;
+  enableRegionalDelivery: boolean;
+  regionalState: string;
+  regionalStateFee: number;
+  regionalStateEstDays: string;
+  nationalFee: number;
+  nationalEstDays: string;
+  heavyItemSurcharge: number;
+  pincodeRates: IPincodeRate[];
+  partnerPresets: IDeliveryPartnerPreset[];
+  updatedBy?: string;
+}
 
 // Global cache for delivery settings
 declare global {
@@ -51,7 +90,7 @@ export interface DeliveryCalculationResult {
   partnerSuggestion?: string;
 }
 
-export const DEFAULT_DELIVERY_SETTINGS = {
+export const DEFAULT_DELIVERY_SETTINGS: IDeliveryRule = {
   lightWeightFee: 180, // For katanas, keychains, small action figures (< 2kg)
   largeWeightFee: 299, // For large resin statues, 1/4 scales, heavy orders (≥ 2kg)
   heavyWeightThresholdKg: 2.0, // 2000g threshold
@@ -105,9 +144,9 @@ export const DEFAULT_DELIVERY_SETTINGS = {
 const CACHE_TTL_MS = 15000; // 15 seconds memory cache
 
 /**
- * Retrieves the store's delivery settings, backed by MongoDB with caching.
+ * Retrieves the store's delivery settings, backed by Supabase with caching.
  */
-export async function getDeliverySettings(): Promise<any> {
+export async function getDeliverySettings(): Promise<IDeliveryRule> {
   const now = Date.now();
   if (
     global.__figuresWorldDeliverySettings &&
@@ -118,21 +157,25 @@ export async function getDeliverySettings(): Promise<any> {
   }
 
   try {
-    await connectToDatabase();
-    let ruleDoc = await DeliveryRule.findOne().lean();
+    const { data } = await supabase
+      .from("delivery_rules")
+      .select("*")
+      .limit(1)
+      .maybeSingle();
 
+    let ruleDoc = data?.settings || data;
     if (!ruleDoc) {
-      const created = await DeliveryRule.create({
-        ...DEFAULT_DELIVERY_SETTINGS,
+      await supabase.from("delivery_rules").insert({
+        rule_name: "Default Store Delivery",
+        settings: DEFAULT_DELIVERY_SETTINGS,
       });
-      ruleDoc = created.toObject();
+      ruleDoc = { ...DEFAULT_DELIVERY_SETTINGS };
     }
 
     global.__figuresWorldDeliverySettings = ruleDoc;
     global.__figuresWorldDeliverySettingsTimestamp = now;
     return ruleDoc;
   } catch (err) {
-    console.error("Failed to load delivery settings from DB, falling back to cache or defaults:", err);
     if (global.__figuresWorldDeliverySettings) {
       return global.__figuresWorldDeliverySettings;
     }
@@ -146,27 +189,37 @@ export async function getDeliverySettings(): Promise<any> {
 export async function saveDeliverySettings(
   data: Partial<IDeliveryRule>,
   updatedBy?: string
-): Promise<any> {
-  await connectToDatabase();
-  const existing = await DeliveryRule.findOne();
+): Promise<IDeliveryRule> {
+  const updated: IDeliveryRule = {
+    ...DEFAULT_DELIVERY_SETTINGS,
+    ...(global.__figuresWorldDeliverySettings || {}),
+    ...data,
+  };
 
-  let saved;
-  if (existing) {
-    Object.assign(existing, data);
-    if (updatedBy) existing.updatedBy = updatedBy;
-    saved = await existing.save();
-  } else {
-    saved = await DeliveryRule.create({
-      ...DEFAULT_DELIVERY_SETTINGS,
-      ...data,
-      updatedBy,
-    });
-  }
+  try {
+    const { data: existing } = await supabase
+      .from("delivery_rules")
+      .select("id")
+      .limit(1)
+      .maybeSingle();
 
-  const plain = saved.toObject ? saved.toObject() : saved;
-  global.__figuresWorldDeliverySettings = plain;
+    if (existing?.id) {
+      await supabase
+        .from("delivery_rules")
+        .update({ settings: updated, updated_by: updatedBy })
+        .eq("id", existing.id);
+    } else {
+      await supabase.from("delivery_rules").insert({
+        rule_name: "Default Store Delivery",
+        settings: updated,
+        updated_by: updatedBy,
+      });
+    }
+  } catch {}
+
+  global.__figuresWorldDeliverySettings = updated;
   global.__figuresWorldDeliverySettingsTimestamp = Date.now();
-  return plain;
+  return updated;
 }
 
 /**

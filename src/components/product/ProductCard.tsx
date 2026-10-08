@@ -34,6 +34,8 @@ export function ProductCard({ product: p, variant = "grid", className = "" }: Pr
   const lowStock = !outOfStock && p.stock <= 5;
   const href = productHref(p);
   const compact = variant === "compact";
+  const cover = primaryImage(p);
+  const altImage = p.images?.find((img) => img.url && img.url !== cover)?.url;
 
   const handleAdd = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -54,11 +56,24 @@ export function ProductCard({ product: p, variant = "grid", className = "" }: Pr
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={primaryImage(p)}
+          src={cover}
           alt={p.name}
           loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.06]"
+          className={`h-full w-full object-cover transition-[transform,opacity] duration-700 ease-out group-hover:scale-[1.06] ${
+            altImage ? "group-hover:opacity-0" : ""
+          }`}
         />
+        {/* Second product photo fades in on hover */}
+        {altImage && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={altImage}
+            alt=""
+            aria-hidden="true"
+            loading="lazy"
+            className="absolute inset-0 h-full w-full scale-[1.06] object-cover opacity-0 transition-[transform,opacity] duration-700 ease-out group-hover:scale-100 group-hover:opacity-100"
+          />
+        )}
         {/* soft bottom shade so badges and the image edge read on any photo */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/25 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
         <div className="absolute left-2.5 top-2.5 flex flex-col items-start gap-1">

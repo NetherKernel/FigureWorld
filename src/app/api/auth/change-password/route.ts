@@ -1,10 +1,9 @@
 import { z } from "zod";
-import { connectToDatabase } from "@/lib/db";
-import { User } from "@/models/User";
 import { requireAuth, comparePassword, hashPassword } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { ValidationError, NotFoundError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
+import { supabase } from "@/lib/supabase";
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
@@ -16,20 +15,30 @@ export async function POST(req: Request) {
     const auth = await requireAuth(req);
     const data = await validateRequestBody(req, changePasswordSchema);
 
-    await connectToDatabase();
+    const { data: user, error } = await supabase
+      .from("users")
+      .select("id, password_hash")
+      .eq("id", auth.userId)
+      .maybeSingle();
 
-    const user = await User.findById(auth.userId).select("+passwordHash");
-    if (!user || !user.passwordHash) {
+    if (error || !user || !user.password_hash) {
       throw new NotFoundError("User not found");
     }
 
-    const isMatch = await comparePassword(data.currentPassword, user.passwordHash);
+    const isMatch = await comparePassword(data.currentPassword, user.password_hash);
     if (!isMatch) {
       throw new ValidationError("Current password is incorrect.");
     }
 
-    user.passwordHash = await hashPassword(data.newPassword);
-    await user.save();
+    const newHash = await hashPassword(data.newPassword);
+    const { error: updateErr } = await supabase
+      .from("users")
+      .update({ password_hash: newHash })
+      .eq("id", user.id);
+
+    if (updateErr) {
+      throw new Error(`Failed to update password: ${updateErr.message}`);
+    }
 
     return apiSuccess({ updated: true }, "Password changed successfully");
   } catch (error) {

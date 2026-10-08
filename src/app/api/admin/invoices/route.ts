@@ -1,25 +1,30 @@
-import { connectToDatabase } from "@/lib/db";
-import { Invoice } from "@/models/Invoice";
 import { requireRole } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
+import { supabase } from "@/lib/supabase";
 
 export async function GET(req: Request) {
   try {
     await requireRole(req, "ADMIN", "STAFF");
-    await connectToDatabase();
 
     const { searchParams } = new URL(req.url);
     const query = (searchParams.get("q") || "").toLowerCase().trim();
 
-    const invoices = await Invoice.find({}).sort({ createdAt: -1 });
+    const { data: invoices, error } = await supabase
+      .from("invoices")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-    let filtered = invoices;
+    if (error) {
+      throw new Error(`Failed to load invoices: ${error.message}`);
+    }
+
+    let filtered = invoices || [];
     if (query) {
-      filtered = invoices.filter((inv: any) => {
-        const invNum = (inv.invoiceNumber || "").toLowerCase();
-        const ordNum = (inv.orderNumber || "").toLowerCase();
-        const custName = (inv.customerDetails?.name || inv.customer?.name || "").toLowerCase();
-        const custEmail = (inv.customerDetails?.email || inv.customer?.email || "").toLowerCase();
+      filtered = filtered.filter((inv: any) => {
+        const invNum = (inv.invoice_number || "").toLowerCase();
+        const ordNum = (inv.order_number || "").toLowerCase();
+        const custName = (inv.customer_details?.name || "").toLowerCase();
+        const custEmail = (inv.customer_details?.email || "").toLowerCase();
         return (
           invNum.includes(query) ||
           ordNum.includes(query) ||
@@ -30,39 +35,38 @@ export async function GET(req: Request) {
     }
 
     const totalAmount = filtered.reduce(
-      (sum: number, inv: any) => sum + Number(inv.pricing?.grandTotal || inv.grandTotal || 0),
+      (sum: number, inv: any) => sum + Number(inv.pricing?.grandTotal || 0),
       0
     );
     const totalTax = filtered.reduce(
-      (sum: number, inv: any) => sum + Number(inv.gstDetails?.totalTax || inv.pricing?.taxTotal || 0),
+      (sum: number, inv: any) => sum + Number(inv.gst_details?.totalTax || inv.pricing?.taxTotal || 0),
       0
     );
 
     const mapped = filtered.map((inv: any) => ({
-      _id: inv._id.toString(),
-      invoiceNumber: inv.invoiceNumber,
-      orderNumber: inv.orderNumber,
-      invoiceDate: inv.issuedAt || inv.invoiceDate || inv.createdAt,
-      customerName: inv.customerDetails?.name || inv.customer?.name || "Customer",
-      customerEmail: inv.customerDetails?.email || inv.customer?.email || "",
-      customerPhone: inv.customerDetails?.phone || inv.customer?.phone || "",
-      grandTotal: Number(inv.pricing?.grandTotal || inv.grandTotal || 0),
-      subtotal: Number(inv.pricing?.subtotal || inv.subtotal || 0),
-      totalTax: Number(inv.gstDetails?.totalTax || inv.pricing?.taxTotal || 0),
-      paymentMethod: inv.paymentMethod || inv.paymentDetails?.method || "UPI",
-      paymentStatus: inv.paymentStatus || inv.paymentDetails?.status || "PAID",
-      pdfUrl: `/api/invoices/${inv.invoiceNumber}/pdf`,
-      sentAt: inv.sentAt || null,
-      status: inv.sentToCustomer ? "SENT" : "ISSUED",
+      _id: inv.id,
+      id: inv.id,
+      invoiceNumber: inv.invoice_number,
+      orderNumber: inv.order_number,
+      invoiceDate: inv.issued_at || inv.created_at,
+      customerName: inv.customer_details?.name || "Customer",
+      customerEmail: inv.customer_details?.email || "",
+      customerPhone: inv.customer_details?.phone || "",
+      grandTotal: Number(inv.pricing?.grandTotal || 0),
+      subtotal: Number(inv.pricing?.subtotal || 0),
+      totalTax: Number(inv.gst_details?.totalTax || inv.pricing?.taxTotal || 0),
+      paymentMethod: inv.payment_method || "UPI",
+      paymentStatus: inv.payment_status || "PAID",
+      pdfUrl: `/api/invoices/${inv.invoice_number}/pdf`,
+      sentAt: inv.sent_at || null,
+      status: inv.sent_to_customer ? "SENT" : "ISSUED",
     }));
 
     return apiSuccess({
       invoices: mapped,
-      metrics: {
-        totalInvoices: mapped.length,
-        totalAmount,
-        totalTax,
-      },
+      totalInvoices: mapped.length,
+      totalAmount,
+      totalTax,
     });
   } catch (err) {
     return handleApiError(err);

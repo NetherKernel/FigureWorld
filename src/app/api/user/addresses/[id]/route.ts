@@ -1,11 +1,9 @@
 import { z } from "zod";
-import { connectToDatabase } from "@/lib/db";
-import { Address } from "@/models/Address";
-import { User } from "@/models/User";
 import { requireAuth } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { NotFoundError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
+import { supabase } from "@/lib/supabase";
 
 const updateAddressSchema = z.object({
   type: z.enum(["shipping", "billing", "both"]).optional(),
@@ -20,27 +18,74 @@ const updateAddressSchema = z.object({
   isDefault: z.boolean().optional(),
 });
 
+function mapSupabaseAddress(a: any) {
+  if (!a) return null;
+  return {
+    _id: a.id,
+    id: a.id,
+    user: a.user_id,
+    fullName: a.name,
+    phone: a.phone,
+    streetLine1: a.street,
+    streetLine2: a.landmark || "",
+    landmark: a.landmark || "",
+    city: a.city,
+    state: a.state,
+    postalCode: a.postal_code,
+    country: a.country || "India",
+    isDefault: Boolean(a.is_default),
+    createdAt: a.created_at,
+    updatedAt: a.updated_at,
+  };
+}
+
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = await requireAuth(req);
     const { id } = await params;
     const data = await validateRequestBody(req, updateAddressSchema);
 
-    await connectToDatabase();
+    const { data: address } = await supabase
+      .from("addresses")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", auth.userId)
+      .maybeSingle();
 
-    const address = await Address.findOne({ _id: id, user: auth.userId });
     if (!address) {
       throw new NotFoundError("Address not found or does not belong to you.");
     }
 
     if (data.isDefault) {
-      await Address.updateMany({ user: auth.userId }, { $set: { isDefault: false } });
+      await supabase
+        .from("addresses")
+        .update({ is_default: false })
+        .eq("user_id", auth.userId);
     }
 
-    Object.assign(address, data);
-    await address.save();
+    const updates: Record<string, any> = {};
+    if (data.fullName !== undefined) updates.name = data.fullName;
+    if (data.phone !== undefined) updates.phone = data.phone;
+    if (data.streetLine1 !== undefined) updates.street = data.streetLine1;
+    if (data.streetLine2 !== undefined) updates.landmark = data.streetLine2;
+    if (data.city !== undefined) updates.city = data.city;
+    if (data.state !== undefined) updates.state = data.state;
+    if (data.postalCode !== undefined) updates.postal_code = data.postalCode;
+    if (data.country !== undefined) updates.country = data.country;
+    if (data.isDefault !== undefined) updates.is_default = data.isDefault;
 
-    return apiSuccess({ address }, "Address updated successfully");
+    const { data: updated, error } = await supabase
+      .from("addresses")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error || !updated) {
+      throw new Error(`Failed to update address: ${error?.message || "Unknown error"}`);
+    }
+
+    return apiSuccess({ address: mapSupabaseAddress(updated) }, "Address updated successfully");
   } catch (error) {
     return handleApiError(error);
   }
@@ -51,24 +96,41 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const auth = await requireAuth(req);
     const { id } = await params;
 
-    await connectToDatabase();
+    const { data: address } = await supabase
+      .from("addresses")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", auth.userId)
+      .maybeSingle();
 
-    const address = await Address.findOneAndDelete({ _id: id, user: auth.userId });
     if (!address) {
       throw new NotFoundError("Address not found or does not belong to you.");
     }
 
-    // Remove from User addresses array
-    await User.findByIdAndUpdate(auth.userId, {
-      $pull: { addresses: address._id },
-    });
+    const { error: delErr } = await supabase
+      .from("addresses")
+      .delete()
+      .eq("id", id);
+
+    if (delErr) {
+      throw new Error(`Failed to delete address: ${delErr.message}`);
+    }
 
     // If deleted address was default, set another address as default
-    if (address.isDefault) {
-      const remainingAddress = await Address.findOne({ user: auth.userId }).sort({ createdAt: -1 });
-      if (remainingAddress) {
-        remainingAddress.isDefault = true;
-        await remainingAddress.save();
+    if (address.is_default) {
+      const { data: remaining } = await supabase
+        .from("addresses")
+        .select("id")
+        .eq("user_id", auth.userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (remaining) {
+        await supabase
+          .from("addresses")
+          .update({ is_default: true })
+          .eq("id", remaining.id);
       }
     }
 

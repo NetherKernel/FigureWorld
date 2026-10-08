@@ -20,27 +20,32 @@ import {
   Menu,
   X,
   SlidersHorizontal,
+  Store,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 interface NavItem {
   name: string;
   href: string;
   icon: React.ElementType;
+  group: "Overview" | "Sales" | "Catalog" | "People" | "Setup";
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { name: "Overview", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Orders", href: "/dashboard/orders", icon: ShoppingBag },
-  { name: "Products", href: "/dashboard/products", icon: Package },
-  { name: "Categories", href: "/dashboard/categories", icon: Layers },
-  { name: "Subcategories", href: "/dashboard/subcategories", icon: FolderTree },
-  { name: "Customers", href: "/dashboard/customers", icon: Users },
-  { name: "Payments", href: "/dashboard/payments", icon: CreditCard },
-  { name: "Invoices", href: "/dashboard/invoices", icon: FileText },
-  { name: "Shipments", href: "/dashboard/shipments", icon: Truck },
-  { name: "Customize Delivery", href: "/dashboard/customize-delivery", icon: SlidersHorizontal },
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
+  { name: "Overview", href: "/dashboard", icon: LayoutDashboard, group: "Overview" },
+  { name: "Orders", href: "/dashboard/orders", icon: ShoppingBag, group: "Sales" },
+  { name: "Payments", href: "/dashboard/payments", icon: CreditCard, group: "Sales" },
+  { name: "Invoices", href: "/dashboard/invoices", icon: FileText, group: "Sales" },
+  { name: "Shipments", href: "/dashboard/shipments", icon: Truck, group: "Sales" },
+  { name: "Products", href: "/dashboard/products", icon: Package, group: "Catalog" },
+  { name: "Categories", href: "/dashboard/categories", icon: Layers, group: "Catalog" },
+  { name: "Subcategories", href: "/dashboard/subcategories", icon: FolderTree, group: "Catalog" },
+  { name: "Customers", href: "/dashboard/customers", icon: Users, group: "People" },
+  { name: "Customize Delivery", href: "/dashboard/customize-delivery", icon: SlidersHorizontal, group: "Setup" },
+  { name: "Settings", href: "/dashboard/settings", icon: Settings, group: "Setup" },
 ];
+
+const NAV_GROUPS = [...new Set(NAV_ITEMS.map((item) => item.group))];
 
 export default function DashboardLayout({
   children,
@@ -74,7 +79,7 @@ export default function DashboardLayout({
   );
 
   return (
-    <div className="min-h-screen bg-bg flex flex-col md:flex-row">
+    <div className="min-h-screen flex flex-col md:flex-row">
       {/* Mobile top bar — sticky (the storefront header isn't shown on dashboard pages) */}
       <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-white/5 bg-ink px-3 py-2.5 text-white md:hidden">
         <button
@@ -105,7 +110,7 @@ export default function DashboardLayout({
 
       {/* Sidebar navigation — mobile: slide-in drawer; desktop: sticky full height */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex h-[100dvh] w-[min(80vw,272px)] shrink-0 flex-col justify-between overflow-y-auto border-r border-white/5 bg-ink p-4 text-white transition-transform duration-300 [transition-timing-function:cubic-bezier(0.2,0.8,0.2,1)] md:sticky md:top-0 md:z-10 md:h-screen md:w-60 md:translate-x-0 lg:w-64 ${
+        className={`surface-ink fixed inset-y-0 left-0 z-50 flex h-[100dvh] w-[min(80vw,272px)] shrink-0 flex-col justify-between overflow-y-auto !border-y-0 !border-l-0 p-4 text-white transition-transform duration-300 [transition-timing-function:cubic-bezier(0.2,0.8,0.2,1)] md:sticky md:top-0 md:z-10 md:h-screen md:w-60 md:translate-x-0 lg:w-64 ${
           mobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
         }`}
       >
@@ -137,39 +142,61 @@ export default function DashboardLayout({
           </div>
 
           {/* Navigation Links */}
-          <nav className="space-y-0.5">
-            {NAV_ITEMS.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                item.href === "/dashboard"
-                  ? pathname === "/dashboard"
-                  : pathname.startsWith(item.href);
+          <nav className="space-y-4">
+            {NAV_GROUPS.map((group) => (
+              <div key={group}>
+                {group !== "Overview" && (
+                  <p className="mb-1 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">{group}</p>
+                )}
+                <div className="space-y-0.5">
+                  {NAV_ITEMS.filter((item) => item.group === group).map((item) => {
+                    const Icon = item.icon;
+                    const isActive =
+                      item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
 
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  aria-current={isActive ? "page" : undefined}
-                  className={`relative flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold md:py-2.5 md:text-xs transition-colors duration-150 ${
-                    isActive
-                      ? "bg-white/10 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] before:absolute before:inset-y-2 before:left-0 before:w-[4px] before:skew-x-[-20deg] before:rounded-sm before:bg-brand"
-                      : "text-white/65 hover:bg-white/5 hover:text-white"
-                  }`}
-                >
-                  <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-[#ff5a60]" : "text-white/40"}`} />
-                  <span>{item.name}</span>
-                </Link>
-              );
-            })}
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        onClick={() => setMobileMenuOpen(false)}
+                        aria-current={isActive ? "page" : undefined}
+                        className={`group/nav relative flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-semibold transition-all duration-200 md:py-2.5 md:text-xs ${
+                          isActive
+                            ? "bg-gradient-to-r from-brand/30 via-white/[0.07] to-transparent text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)] before:absolute before:inset-y-2 before:left-0 before:w-[4px] before:skew-x-[-20deg] before:rounded-sm before:bg-brand before:shadow-[0_0_12px_2px_rgba(236,43,49,0.6)]"
+                            : "text-white/65 hover:translate-x-0.5 hover:bg-white/5 hover:text-white"
+                        }`}
+                      >
+                        <Icon
+                          className={`h-4 w-4 shrink-0 transition-colors ${
+                            isActive ? "text-[#ff5a60]" : "text-white/40 group-hover/nav:text-white/80"
+                          }`}
+                        />
+                        <span>{item.name}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </nav>
         </div>
 
         {/* Bottom Profile & Actions */}
         <div className="mt-6 border-t border-white/10 pt-4 space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] font-semibold text-white/50">Appearance</span>
+            <ThemeToggle />
+          </div>
           <div className="rounded-xl border border-white/10 bg-white/5 p-2.5">
             <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
+              <span
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black text-white shadow-glow"
+                style={{ backgroundImage: "var(--brand-gradient)" }}
+                aria-hidden="true"
+              >
+                {(user?.name || "A").trim().charAt(0).toUpperCase()}
+              </span>
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-white truncate">{user?.name || "Admin"}</p>
                 <p className="text-[10px] text-white/50 truncate">{user?.email}</p>
               </div>
@@ -192,25 +219,36 @@ export default function DashboardLayout({
       <div className="flex-1 flex flex-col min-w-0">
         {/* Breadcrumb bar */}
         <header className="sticky top-0 z-20 hidden items-center justify-between border-b border-line bg-surface/90 px-6 py-3.5 backdrop-blur md:flex lg:px-8">
-          <div className="flex items-center gap-2 text-xs text-muted">
-            <span className="font-semibold text-fg-2">Dashboard</span>
-            <span>/</span>
-            <span className="font-display text-sm font-bold capitalize text-fg">
-              {pathname.replace("/dashboard", "").replace("/", "").replace(/-/g, " ") || "Overview"}
-            </span>
+          <div className="flex items-center gap-3">
+            {currentNav && (
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-soft text-brand-ink">
+                <currentNav.icon className="h-4 w-4" aria-hidden="true" />
+              </span>
+            )}
+            <div className="leading-tight">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+                Dashboard{currentNav && currentNav.group !== "Overview" ? ` · ${currentNav.group}` : ""}
+              </p>
+              <p className="font-display text-base font-bold text-fg">{currentNav?.name || "Overview"}</p>
+            </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50/80 px-3 py-1 text-[11px] font-medium text-emerald-700 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-300">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
               <span>Live</span>
             </div>
-
+            <Link href="/" className="btn btn-secondary btn-sm">
+              <Store className="h-3.5 w-3.5" aria-hidden="true" />
+              View store
+            </Link>
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="mx-auto w-full max-w-[1600px] flex-1 p-3 sm:p-6 lg:p-8">{children}</main>
+        {/* Page Content — re-keyed per route so each page eases in */}
+        <main key={pathname} className="mx-auto w-full max-w-[1600px] flex-1 animate-page-in p-3 sm:p-6 lg:p-8">
+          {children}
+        </main>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 /**
  * Client-safe product shape and display helpers shared by storefront pages.
- * (The Mongoose model in src/models/Product.ts is server-only.)
+ * (PostgreSQL product shape in Supabase.)
  */
 
 export interface StoreProduct {

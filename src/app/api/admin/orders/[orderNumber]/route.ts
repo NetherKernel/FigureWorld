@@ -1,14 +1,10 @@
-import mongoose from "mongoose";
-import { connectToDatabase } from "@/lib/db";
-import { Order } from "@/models/Order";
-import { Address } from "@/models/Address";
-import { OrderItem } from "@/models/OrderItem";
-import { Invoice } from "@/models/Invoice";
+import { supabase } from "@/lib/supabase";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { logAdminAudit } from "@/lib/audit";
-import { buildUpiUri, generateUpiQrDataUrl } from "@/lib/upi";
+import { buildUpiUri } from "@/lib/upi";
+import { findSupabaseOrder, mapSupabaseOrder } from "@/lib/orders-supabase";
 
 export async function GET(
   req: Request,
@@ -29,123 +25,13 @@ export async function GET(
       throw new ValidationError("Order number or ID is required.");
     }
 
-    await connectToDatabase();
-
-    const cleanIdentifier = orderNumber.trim();
-    let order: any = null;
-
-    // Lookup by ObjectId if valid, or by orderNumber (case-insensitive)
-    if (mongoose.Types.ObjectId.isValid(cleanIdentifier)) {
-      order = await Order.findById(cleanIdentifier)
-        .populate("shippingAddress")
-        .populate("billingAddress")
-        .populate({
-          path: "customer",
-          select: "name email phone role",
-        });
+    const rawOrder = await findSupabaseOrder(orderNumber);
+    if (!rawOrder) {
+      throw new NotFoundError(`Order "${orderNumber}" not found.`);
     }
 
-    if (!order) {
-      order = await Order.findOne({
-        orderNumber: { $regex: new RegExp(`^${cleanIdentifier}$`, "i") },
-      })
-        .populate("shippingAddress")
-        .populate("billingAddress")
-        .populate({
-          path: "customer",
-          select: "name email phone role",
-        });
-    }
-
-    if (!order) {
-      throw new NotFoundError(`Order "${cleanIdentifier}" not found.`);
-    }
-
-    // Fetch order items
-    const items = await OrderItem.find({ order: order._id }).lean();
-
-    // Harmonize shipment details (fallback to codDetails if COD)
-    const courier =
-      order.shipmentDetails?.courier ||
-      order.codDetails?.courierPartner ||
-      "";
-    const trackingNumber =
-      order.shipmentDetails?.trackingNumber ||
-      order.codDetails?.trackingNumber ||
-      "";
-    const dispatchedAt =
-      order.shipmentDetails?.dispatchedAt ||
-      order.codDetails?.dispatchedAt ||
-      null;
-
-    const shippingAddress = order.shippingAddress
-      ? {
-          _id: order.shippingAddress._id?.toString(),
-          fullName: order.shippingAddress.fullName,
-          phone: order.shippingAddress.phone,
-          streetLine1: order.shippingAddress.streetLine1,
-          streetLine2: order.shippingAddress.streetLine2,
-          landmark: order.shippingAddress.landmark,
-          city: order.shippingAddress.city,
-          state: order.shippingAddress.state,
-          postalCode: order.shippingAddress.postalCode,
-          country: order.shippingAddress.country || "India",
-        }
-      : null;
-
-    return apiSuccess({
-      orderId: order._id.toString(),
-      orderNumber: order.orderNumber,
-      customerEmail: order.customerEmail,
-      customer: order.customer
-        ? {
-            id: order.customer._id?.toString(),
-            name: order.customer.name,
-            email: order.customer.email,
-            phone: order.customer.phone,
-          }
-        : {
-            name: shippingAddress?.fullName || "Guest Customer",
-            email: order.customerEmail,
-            phone: shippingAddress?.phone || "N/A",
-          },
-      shippingAddress,
-      items: items.map((it: any) => ({
-        _id: it._id?.toString(),
-        product: it.product?.toString(),
-        productTitle: it.productTitle,
-        productSku: it.productSku,
-        productImage: it.productImage,
-        unitPrice: it.unitPrice,
-        quantity: it.quantity,
-        subtotal: it.subtotal,
-        discountAmount: it.discountAmount || 0,
-        total: it.total,
-      })),
-      pricing: order.pricing,
-      paymentMethod: order.paymentMethod,
-      paymentStatus: order.paymentStatus,
-      orderStatus: order.orderStatus,
-      paymentDetails: order.paymentDetails || null,
-      codDetails: order.codDetails || null,
-      shipment: {
-        courier,
-        trackingNumber,
-        trackingUrl: order.shipmentDetails?.trackingUrl || "",
-        dispatchedAt,
-        estimatedDelivery: order.shipmentDetails?.estimatedDelivery || null,
-        deliveredAt: order.shipmentDetails?.deliveredAt || null,
-        shippingNotes: order.shipmentDetails?.shippingNotes || "",
-      },
-      statusHistory: order.statusHistory || [],
-      invoiceNumber: order.invoiceNumber || null,
-      invoiceId: order.invoiceId ? order.invoiceId.toString() : null,
-      complianceVerified: order.complianceVerified || false,
-      notes: order.notes || "",
-      placedAt: order.placedAt || order.createdAt,
-      createdAt: order.createdAt,
-      updatedAt: order.updatedAt,
-    });
+    const mapped = mapSupabaseOrder(rawOrder);
+    return apiSuccess(mapped);
   } catch (error) {
     return handleApiError(error);
   }
@@ -170,21 +56,10 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    await connectToDatabase();
-    const cleanId = orderNumber.trim();
+    const rawOrder = await findSupabaseOrder(orderNumber);
 
-    let order: any = null;
-    if (mongoose.Types.ObjectId.isValid(cleanId)) {
-      order = await Order.findById(cleanId);
-    }
-    if (!order) {
-      order = await Order.findOne({
-        orderNumber: { $regex: new RegExp(`^${cleanId}$`, "i") },
-      });
-    }
-
-    if (!order) {
-      throw new NotFoundError(`Order "${cleanId}" not found.`);
+    if (!rawOrder) {
+      throw new NotFoundError(`Order "${orderNumber}" not found.`);
     }
 
     // Handle Custom Delivery Fee adjustment
@@ -194,80 +69,52 @@ export async function PATCH(
         throw new ValidationError("customShippingFee must be a non-negative number.");
       }
 
-      const oldShippingFee = order.pricing.shippingFee;
-      const oldGrandTotal = order.pricing.grandTotal;
-      const subtotal = order.pricing.subtotal || 0;
-      const discountTotal = order.pricing.discountTotal || 0;
-      const taxTotal = order.pricing.taxTotal || 0;
+      const pricing = rawOrder.pricing || {};
+      const oldShippingFee = Number(pricing.shippingFee || 0);
+      const subtotal = Number(pricing.subtotal || 0);
+      const discountTotal = Number(pricing.discountTotal || 0);
+      const taxTotal = Number(pricing.taxTotal || 0);
       const newGrandTotal = Math.max(0, subtotal - discountTotal + taxTotal + newShippingFee);
 
-      if (!order.pricing.isCustomShippingFee && order.pricing.originalShippingFee === undefined) {
-        order.pricing.originalShippingFee = oldShippingFee;
-      }
+      const newPricing = {
+        ...pricing,
+        originalShippingFee: pricing.originalShippingFee !== undefined ? pricing.originalShippingFee : oldShippingFee,
+        shippingFee: newShippingFee,
+        grandTotal: newGrandTotal,
+        isCustomShippingFee: true,
+        shippingFeeAdjustmentReason: body.reason || pricing.shippingFeeAdjustmentReason,
+        deliveryPartnerType: body.partnerType || pricing.deliveryPartnerType,
+      };
 
-      order.pricing.shippingFee = newShippingFee;
-      order.pricing.grandTotal = newGrandTotal;
-      order.pricing.isCustomShippingFee = true;
-      if (body.reason) {
-        order.pricing.shippingFeeAdjustmentReason = body.reason;
-        order.deliveryAdjustmentNotes = body.reason;
-      }
-      if (body.partnerType) {
-        order.pricing.deliveryPartnerType = body.partnerType;
-        order.deliveryPartnerType = body.partnerType;
-      }
-
-      // If pending UPI, recompute QR payload
-      if (
-        order.paymentMethod === "UPI" &&
-        (order.paymentStatus === "PENDING" || order.paymentStatus === "pending")
-      ) {
-        const upiPayload = buildUpiUri({
-          pa: order.paymentDetails?.merchantUpiId,
-          am: newGrandTotal,
-          tn: `Order_${order.orderNumber}`,
-        });
-        if (!order.paymentDetails) order.paymentDetails = {};
-        order.paymentDetails.qrPayload = upiPayload;
-      }
-
-      // Sync invoice
-      await Invoice.updateOne(
-        { order: order._id },
-        {
-          $set: {
-            "pricing.shippingFee": newShippingFee,
-            "pricing.grandTotal": newGrandTotal,
-          },
-        }
-      );
-
-      if (!order.statusHistory) order.statusHistory = [];
-      order.statusHistory.push({
-        status: order.orderStatus,
-        changedAt: new Date(),
+      const history = Array.isArray(rawOrder.status_history) ? [...rawOrder.status_history] : [];
+      history.push({
+        status: rawOrder.order_status,
+        changedAt: new Date().toISOString(),
         changedBy: user.userId,
         notes: `Delivery cost adjusted to ₹${newShippingFee} (${body.reason || "Admin update"})`,
       });
 
-      order.markModified("pricing");
-      order.markModified("paymentDetails");
-      order.markModified("statusHistory");
-      await order.save();
+      await supabase
+        .from("orders")
+        .update({
+          pricing: newPricing,
+          status_history: history,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", rawOrder.id);
 
       await logAdminAudit({
         action: "CUSTOMIZE_ORDER_DELIVERY_FEE",
         actor: user,
         resource: {
           type: "ORDER",
-          id: order._id.toString(),
-          identifier: order.orderNumber,
+          id: rawOrder.id,
+          identifier: rawOrder.order_number,
         },
         details: {
-          orderNumber: order.orderNumber,
+          orderNumber: rawOrder.order_number,
           oldShippingFee,
           newShippingFee,
-          oldGrandTotal,
           newGrandTotal,
           reason: body.reason,
         },
@@ -275,19 +122,21 @@ export async function PATCH(
       });
 
       return apiSuccess({
-        orderNumber: order.orderNumber,
-        pricing: order.pricing,
+        orderNumber: rawOrder.order_number,
+        pricing: newPricing,
       }, "Order delivery fee customized successfully");
     }
 
-    // Generic notes update if provided
     if (body.notes !== undefined) {
-      order.notes = body.notes;
-      await order.save();
-      return apiSuccess({ orderNumber: order.orderNumber, notes: order.notes });
+      await supabase
+        .from("orders")
+        .update({ notes: body.notes, updated_at: new Date().toISOString() })
+        .eq("id", rawOrder.id);
+
+      return apiSuccess({ orderNumber: rawOrder.order_number, notes: body.notes });
     }
 
-    return apiSuccess({ orderNumber: order.orderNumber });
+    return apiSuccess({ orderNumber: rawOrder.order_number });
   } catch (error) {
     return handleApiError(error);
   }

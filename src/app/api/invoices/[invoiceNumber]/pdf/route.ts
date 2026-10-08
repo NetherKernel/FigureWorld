@@ -1,5 +1,4 @@
-import { connectToDatabase } from "@/lib/db";
-import { Invoice } from "@/models/Invoice";
+import { supabase } from "@/lib/supabase";
 import { renderInvoicePdf } from "@/lib/invoice";
 import { getAuthenticatedUser } from "@/lib/auth";
 
@@ -19,18 +18,21 @@ export async function GET(
       return new Response("Authentication required to access invoice document", { status: 401 });
     }
 
-    await connectToDatabase();
+    const { data: invoice, error } = await supabase
+      .from("invoices")
+      .select("*")
+      .ilike("invoice_number", invoiceNumber.trim())
+      .maybeSingle();
 
-    const invoice = await Invoice.findOne({ invoiceNumber: invoiceNumber.toUpperCase() });
-    if (!invoice) {
+    if (error || !invoice) {
       return new Response(`Invoice ${invoiceNumber} not found`, { status: 404 });
     }
 
     // RBAC Ownership Check
     if (user.role === "CUSTOMER") {
-      const customerEmail = (invoice.customerDetails?.email || "").toLowerCase().trim();
+      const customerEmail = (invoice.customer_details?.email || "").toLowerCase().trim();
       const userEmail = (user.email || "").toLowerCase().trim();
-      const customerId = invoice.customer?.toString();
+      const customerId = invoice.customer_id?.toString();
       const userId = user.userId?.toString();
 
       const isOwner = (userEmail && customerEmail === userEmail) || (userId && customerId === userId);
@@ -39,14 +41,27 @@ export async function GET(
       }
     }
 
-    // Always render from the stored invoice data, so every copy uses the current template
-    const pdfBuffer = await renderInvoicePdf(invoice);
+    const invoiceDoc = {
+      invoiceNumber: invoice.invoice_number,
+      orderNumber: invoice.order_number,
+      issuedAt: invoice.issued_at,
+      customerDetails: invoice.customer_details,
+      storeDetails: invoice.store_details,
+      gstDetails: invoice.gst_details,
+      items: invoice.items,
+      pricing: invoice.pricing,
+      paymentMethod: invoice.payment_method,
+      paymentStatus: invoice.payment_status,
+      paymentRef: invoice.payment_ref,
+    };
+
+    const pdfBuffer = await renderInvoicePdf(invoiceDoc);
 
     return new Response(Buffer.from(pdfBuffer), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${invoice.invoiceNumber}.pdf"`,
+        "Content-Disposition": `inline; filename="${invoice.invoice_number}.pdf"`,
         "Cache-Control": "private, no-cache, no-store, must-revalidate",
         "X-Content-Type-Options": "nosniff",
       },

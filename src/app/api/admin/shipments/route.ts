@@ -1,9 +1,7 @@
-import { connectToDatabase } from "@/lib/db";
-import { Order } from "@/models/Order";
-import { Shipment } from "@/models/Shipment";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError } from "@/lib/errors";
+import { supabase } from "@/lib/supabase";
 
 export async function GET(req: Request) {
   try {
@@ -15,71 +13,24 @@ export async function GET(req: Request) {
       throw new ForbiddenError("Forbidden: Admin or Staff privileges required.");
     }
 
-    await connectToDatabase();
-
     const { searchParams } = new URL(req.url);
-    const queue = searchParams.get("queue") || "all";
+    const queue = (searchParams.get("queue") || "all").toLowerCase();
     const courier = searchParams.get("courier");
-    const search = searchParams.get("search");
+    const search = searchParams.get("search")?.toLowerCase().trim();
     const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10), 100);
     const page = Math.max(parseInt(searchParams.get("page") || "1", 10), 1);
     const skip = (page - 1) * limit;
 
-    const filter: any = {};
+    const { data: allOrders, error } = await supabase
+      .from("orders")
+      .select("*")
+      .order("updated_at", { ascending: false });
 
-    // Queue filter
-    switch (queue.toLowerCase()) {
-      case "ready_to_pack":
-        filter.orderStatus = { $in: ["CONFIRMED", "PROCESSING", "confirmed", "processing"] };
-        break;
-      case "ready_to_dispatch":
-        filter.orderStatus = "PACKED";
-        break;
-      case "in_transit":
-        filter.orderStatus = { $in: ["DISPATCHED", "OUT_FOR_DELIVERY", "shipped"] };
-        break;
-      case "delivered":
-        filter.orderStatus = { $in: ["DELIVERED", "delivered"] };
-        break;
-      default:
-        // Exclude cancelled & refunded orders by default from active logistics pipeline
-        filter.orderStatus = {
-          $nin: ["CANCELLED", "REFUNDED", "RETURNED", "cancelled", "refunded", "returned"],
-        };
-        break;
+    if (error) {
+      throw new Error(`Failed to load orders: ${error.message}`);
     }
 
-    if (courier) {
-      filter["shipmentDetails.courier"] = { $regex: new RegExp(courier.trim(), "i") };
-    }
-
-    if (search) {
-      const q = search.trim();
-      filter.$or = [
-        { orderNumber: { $regex: new RegExp(q, "i") } },
-        { customerEmail: { $regex: new RegExp(q, "i") } },
-        { "shipmentDetails.trackingNumber": { $regex: new RegExp(q, "i") } },
-        { "shipmentDetails.courier": { $regex: new RegExp(q, "i") } },
-      ];
-    }
-
-    const [orders, totalInQueue, countsAggregate] = await Promise.all([
-      Order.find(filter)
-        .populate("shippingAddress")
-        .populate({ path: "items", populate: "product" })
-        .sort({ updatedAt: -1 })
-        .skip(skip)
-        .limit(limit),
-      Order.countDocuments(filter),
-      Order.aggregate([
-        {
-          $group: {
-            _id: { $toUpper: "$orderStatus" },
-            count: { $sum: 1 },
-          },
-        },
-      ]),
-    ]);
+    const ordersList = allOrders || [];
 
     const metrics = {
       total: 0,
@@ -89,41 +40,96 @@ export async function GET(req: Request) {
       delivered: 0,
     };
 
-    for (const item of countsAggregate) {
-      const st = item._id;
-      metrics.total += item.count;
+    for (const order of ordersList) {
+      const st = (order.order_status || "").toUpperCase();
+      metrics.total++;
       if (st === "CONFIRMED" || st === "PROCESSING") {
-        metrics.readyToPack += item.count;
+        metrics.readyToPack++;
       } else if (st === "PACKED") {
-        metrics.readyToDispatch += item.count;
+        metrics.readyToDispatch++;
       } else if (st === "DISPATCHED" || st === "OUT_FOR_DELIVERY" || st === "SHIPPED") {
-        metrics.inTransit += item.count;
+        metrics.inTransit++;
       } else if (st === "DELIVERED") {
-        metrics.delivered += item.count;
+        metrics.delivered++;
       }
     }
 
-    // Attach shipment record if available
-    const orderNumbers = orders.map((o) => o.orderNumber);
-    const shipments = await Shipment.find({ orderNumber: { $in: orderNumbers } });
-    const shipmentMap = new Map((shipments as any[]).map((s: any) => [s.orderNumber, s]));
+    let filtered = ordersList;
 
-    const mappedOrders = orders.map((order) => {
-      const shipmentDoc = shipmentMap.get(order.orderNumber);
+    switch (queue) {
+      case "ready_to_pack":
+        filtered = filtered.filter((o) => ["CONFIRMED", "PROCESSING"].includes((o.order_status || "").toUpperCase()));
+        break;
+      case "ready_to_dispatch":
+        filtered = filtered.filter((o) => (o.order_status || "").toUpperCase() === "PACKED");
+        break;
+      case "in_transit":
+        filtered = filtered.filter((o) =>
+          ["DISPATCHED", "OUT_FOR_DELIVERY", "SHIPPED"].includes((o.order_status || "").toUpperCase())
+        );
+        break;
+      case "delivered":
+        filtered = filtered.filter((o) => (o.order_status || "").toUpperCase() === "DELIVERED");
+        break;
+      default:
+        filtered = filtered.filter(
+          (o) => !["CANCELLED", "REFUNDED", "RETURNED"].includes((o.order_status || "").toUpperCase())
+        );
+        break;
+    }
+
+    if (courier) {
+      const cLower = courier.toLowerCase().trim();
+      filtered = filtered.filter((o) => {
+        const c = (o.shipping_details?.courier || "").toLowerCase();
+        return c.includes(cLower);
+      });
+    }
+
+    if (search) {
+      filtered = filtered.filter((o) => {
+        const num = (o.order_number || "").toLowerCase();
+        const email = (o.customer_details?.email || "").toLowerCase();
+        const trk = (o.shipping_details?.trackingNumber || "").toLowerCase();
+        const c = (o.shipping_details?.courier || "").toLowerCase();
+        return num.includes(search) || email.includes(search) || trk.includes(search) || c.includes(search);
+      });
+    }
+
+    const totalInQueue = filtered.length;
+    const paginatedOrders = filtered.slice(skip, skip + limit);
+
+    // Attach shipment record if available
+    const orderNumbers = paginatedOrders.map((o) => o.order_number);
+    let shipmentMap = new Map<string, any>();
+    if (orderNumbers.length > 0) {
+      const { data: shipments } = await supabase
+        .from("shipments")
+        .select("*")
+        .in("order_number", orderNumbers);
+
+      (shipments || []).forEach((s) => {
+        shipmentMap.set(s.order_number, s);
+      });
+    }
+
+    const mappedOrders = paginatedOrders.map((order) => {
+      const shipmentDoc = shipmentMap.get(order.order_number);
       return {
-        _id: order._id,
-        orderNumber: order.orderNumber,
-        customerEmail: order.customerEmail,
-        shippingAddress: order.shippingAddress,
-        itemsCount: order.items?.length || 0,
+        _id: order.id,
+        id: order.id,
+        orderNumber: order.order_number,
+        customerEmail: order.customer_details?.email || "",
+        shippingAddress: order.shipping_address,
+        itemsCount: Array.isArray(order.items) ? order.items.length : 0,
         grandTotal: order.pricing?.grandTotal || 0,
-        paymentMethod: order.paymentMethod,
-        paymentStatus: order.paymentStatus,
-        orderStatus: order.orderStatus,
-        shipmentDetails: order.shipmentDetails,
+        paymentMethod: order.payment_method,
+        paymentStatus: order.payment_status,
+        orderStatus: order.order_status,
+        shipmentDetails: order.shipping_details,
         shipmentRecord: shipmentDoc || null,
-        placedAt: order.placedAt || order.createdAt,
-        updatedAt: order.updatedAt,
+        placedAt: order.placed_at || order.created_at,
+        updatedAt: order.updated_at,
       };
     });
 

@@ -1,7 +1,5 @@
 import { z } from "zod";
-import { connectToDatabase } from "@/lib/db";
-import { User } from "@/models/User";
-import { hashPassword, signToken, setAuthCookie } from "@/lib/auth";
+import { hashPassword, signToken, setAuthCookie, UserRole } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { ConflictError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
@@ -18,82 +16,42 @@ export async function POST(req: Request) {
   try {
     const data = await validateRequestBody(req, registerSchema);
 
-    // 1. Check existing in Supabase
-    try {
-      const { data: supaExisting } = await supabase
-        .from("users")
-        .select("id")
-        .ilike("email", data.email)
-        .maybeSingle();
+    // Check existing in Supabase
+    const { data: supaExisting } = await supabase
+      .from("users")
+      .select("id")
+      .ilike("email", data.email)
+      .maybeSingle();
 
-      if (supaExisting) {
-        throw new ConflictError("An account with this email address already exists.");
-      }
-    } catch (e) {
-      if (e instanceof ConflictError) throw e;
-    }
-
-    // 2. Check existing in MongoDB
-    try {
-      await connectToDatabase();
-      const existingUser = await User.findOne({ email: data.email });
-      if (existingUser) {
-        throw new ConflictError("An account with this email address already exists.");
-      }
-    } catch (e) {
-      if (e instanceof ConflictError) throw e;
+    if (supaExisting) {
+      throw new ConflictError("An account with this email address already exists.");
     }
 
     const passwordHash = await hashPassword(data.password);
 
-    // 3. Insert into Supabase
-    let userId = "";
-    try {
-      const { data: supaInserted, error: supaErr } = await supabase
-        .from("users")
-        .insert({
-          name: data.name,
-          email: data.email,
-          password_hash: passwordHash,
-          phone: data.phone || "",
-          role: "CUSTOMER",
-        })
-        .select("id, name, email, role, phone")
-        .single();
-
-      if (!supaErr && supaInserted) {
-        userId = supaInserted.id;
-      }
-    } catch {
-      // Continue to MongoDB
-    }
-
-    // 4. Also insert into MongoDB if connected
-    try {
-      const newUser = await User.create({
+    // Insert into Supabase
+    const { data: supaInserted, error: supaErr } = await supabase
+      .from("users")
+      .insert({
         name: data.name,
         email: data.email,
-        passwordHash,
+        password_hash: passwordHash,
         phone: data.phone || "",
         role: "CUSTOMER",
-        isActive: true,
-      });
-      if (!userId) {
-        userId = newUser._id.toString();
-      }
-    } catch {
-      // Supabase already captured or fallback
+      })
+      .select("id, name, email, role, phone")
+      .single();
+
+    if (supaErr || !supaInserted) {
+      throw new Error(`Failed to create user in database: ${supaErr?.message || "Unknown error"}`);
     }
 
-    if (!userId) {
-      userId = `usr_${Date.now()}`;
-    }
-
+    const role = (supaInserted.role || "CUSTOMER").toUpperCase() as UserRole;
     const tokenPayload = {
-      userId,
-      email: data.email,
-      name: data.name,
-      role: "CUSTOMER" as const,
+      userId: supaInserted.id,
+      email: supaInserted.email,
+      name: supaInserted.name,
+      role,
     };
 
     const token = await signToken(tokenPayload);
@@ -101,15 +59,16 @@ export async function POST(req: Request) {
     const response = apiSuccess(
       {
         user: {
-          id: userId,
-          name: data.name,
-          email: data.email,
-          role: "CUSTOMER",
-          phone: data.phone || "",
+          id: supaInserted.id,
+          name: supaInserted.name,
+          email: supaInserted.email,
+          role,
+          phone: supaInserted.phone,
+          avatar: "",
         },
         token,
       },
-      "Registration successful",
+      "Account registered successfully",
       201
     );
 

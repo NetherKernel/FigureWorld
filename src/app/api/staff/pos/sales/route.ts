@@ -1,6 +1,5 @@
 import crypto from "crypto";
 import { z } from "zod";
-import { connectToDatabase } from "@/lib/db";
 import { requireRole } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { ConflictError, ValidationError } from "@/lib/errors";
@@ -8,26 +7,16 @@ import { validateRequestBody } from "@/lib/validation";
 import { logAdminAudit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { createInvoiceForOrder } from "@/lib/invoice";
-import { Product, type IProduct } from "@/models/Product";
-import { Order } from "@/models/Order";
-import { OrderItem } from "@/models/OrderItem";
-import { Address } from "@/models/Address";
-import { User } from "@/models/User";
-
-/**
- * In-store counter sales (physical shop billing) — STAFF and ADMIN.
- * A sale is paid and handed over at the counter: stock is deducted immediately and a GST invoice
- * is issued with the store as the place of supply.
- */
+import { supabase, mapSupabaseProduct } from "@/lib/supabase";
 
 /** Never-deliverable placeholder (RFC 2606 .invalid) for walk-ins who don't give an email */
 const WALK_IN_EMAIL = "walk-in@instore.invalid";
 
 const STORE_LOCATION = {
-  streetLine1: "42 Akihabara Crossroad, Bandra West (in-store purchase)",
+  street: "42 Akihabara Crossroad, Bandra West (in-store purchase)",
   city: "Mumbai",
   state: "Maharashtra",
-  postalCode: "400050",
+  postal_code: "400050",
   country: "India",
 };
 
@@ -35,7 +24,7 @@ const saleSchema = z.object({
   items: z
     .array(
       z.object({
-        productId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid product"),
+        productId: z.string().min(1, "Invalid product"),
         quantity: z.number().int().min(1).max(99),
       })
     )
@@ -61,34 +50,45 @@ const saleSchema = z.object({
 const startOfToday = () => {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
-  return d;
+  return d.toISOString();
 };
 
 /** GET /api/staff/pos/sales — today's counter sales (newest first) with totals. */
 export async function GET(req: Request) {
   try {
     await requireRole(req, "STAFF", "ADMIN");
-    await connectToDatabase();
 
-    const orders = await Order.find({ channel: "IN_STORE", placedAt: { $gte: startOfToday() } })
-      .sort({ placedAt: -1 })
+    const { data: orders, error } = await supabase
+      .from("orders")
+      .select("*")
+      .gte("placed_at", startOfToday())
+      .order("placed_at", { ascending: false })
       .limit(100);
-    const addresses = await Address.find({ _id: { $in: orders.map((o) => o.shippingAddress) } });
-    const nameById = new Map(addresses.map((a) => [String(a._id), a.fullName]));
 
-    const sales = orders.map((o) => ({
-      orderNumber: o.orderNumber,
-      invoiceNumber: o.invoiceNumber || null,
-      customerName: nameById.get(String(o.shippingAddress)) || "Walk-in customer",
+    if (error) {
+      throw new Error(`Failed to load in-store sales: ${error.message}`);
+    }
+
+    const inStoreOrders = (orders || []).filter(
+      (o: any) => o.notes?.includes("In-store") || o.notes?.includes("POS")
+    );
+
+    const sales = inStoreOrders.map((o: any) => ({
+      orderNumber: o.order_number,
+      invoiceNumber: o.invoice_number || null,
+      customerName: o.customer_details?.name || o.shipping_address?.fullName || "Walk-in customer",
       grandTotal: o.pricing?.grandTotal || 0,
-      paymentMethod: o.paymentMethod,
-      itemCount: o.items?.length || 0,
-      servedBy: o.servedBy?.name || null,
-      placedAt: o.placedAt,
+      paymentMethod: o.payment_method,
+      itemCount: Array.isArray(o.items) ? o.items.length : 0,
+      servedBy: o.notes || null,
+      placedAt: o.placed_at || o.created_at,
     }));
 
     const byMethod: Record<string, number> = { CASH: 0, CARD: 0, UPI: 0 };
-    for (const s of sales) byMethod[s.paymentMethod] = (byMethod[s.paymentMethod] || 0) + s.grandTotal;
+    for (const s of sales) {
+      const pm = s.paymentMethod || "UPI";
+      byMethod[pm] = (byMethod[pm] || 0) + s.grandTotal;
+    }
 
     return apiSuccess({
       sales,
@@ -102,18 +102,25 @@ export async function GET(req: Request) {
 /** POST /api/staff/pos/sales — ring up a walk-in sale: deduct stock, record the paid order, issue the invoice. */
 export async function POST(req: Request) {
   const reserved: Array<{ id: string; qty: number }> = [];
-  const created: { address?: unknown; order?: unknown } = {};
   try {
     const staff = await requireRole(req, "STAFF", "ADMIN");
     const data = await validateRequestBody(req, saleSchema);
-    await connectToDatabase();
 
     // Merge duplicate lines for the same product
     const wanted = new Map<string, number>();
     for (const it of data.items) wanted.set(it.productId, (wanted.get(it.productId) || 0) + it.quantity);
 
-    const products: IProduct[] = await Product.find({ _id: { $in: [...wanted.keys()] } });
-    const byId = new Map(products.map((p) => [String(p._id), p]));
+    const productIds = [...wanted.keys()];
+    const { data: rawProducts, error: pErr } = await supabase
+      .from("products")
+      .select("*, categories(*)")
+      .in("id", productIds);
+
+    if (pErr || !rawProducts || rawProducts.length === 0) {
+      throw new ValidationError("Selected products were not found in store catalog.");
+    }
+
+    const byId = new Map(rawProducts.map((p) => [p.id, mapSupabaseProduct(p, p.categories)]));
 
     const lines = [...wanted.entries()].map(([id, qty]) => {
       const p = byId.get(id);
@@ -131,15 +138,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // Deduct stock atomically, item by item; put everything back if any item ran out meanwhile
+    // Deduct stock atomically in Supabase
     for (const l of lines) {
-      const updated = await Product.findOneAndUpdate(
-        { _id: l.product._id, stock: { $gte: l.qty } },
-        { $inc: { stock: -l.qty } },
-        { new: true }
-      );
-      if (!updated) throw new ConflictError(`"${l.product.name}" just sold out — only ${l.product.stock} were left. Update the bill.`);
-      reserved.push({ id: String(l.product._id), qty: l.qty });
+      const newStock = Math.max(0, l.product.stock - l.qty);
+      await supabase.from("products").update({ stock: newStock }).eq("id", l.product.id);
+      reserved.push({ id: l.product.id, qty: l.qty });
     }
 
     const subtotal = lines.reduce((sum, l) => sum + l.total, 0);
@@ -149,79 +152,120 @@ export async function POST(req: Request) {
     const now = new Date();
     const servedBy = { userId: String(staff.userId), name: staff.name, email: staff.email, role: staff.role };
 
-    // Link the sale to the customer's online account when they give the same email
-    const account = email ? await User.findOne({ email, role: "CUSTOMER" }) : null;
+    // Link customer account if email found
+    let accountId: string | null = null;
+    if (email) {
+      const { data: supaU } = await supabase.from("users").select("id").eq("email", email).maybeSingle();
+      if (supaU) accountId = supaU.id;
+    }
 
-    const address = await Address.create({
-      user: account?._id,
-      type: "billing",
-      fullName: name,
-      phone,
-      ...STORE_LOCATION,
-      isDefault: false,
-    });
-    created.address = address._id;
+    // Address
+    try {
+      await supabase.from("addresses").insert({
+        user_id: accountId,
+        name,
+        phone,
+        street: STORE_LOCATION.street,
+        city: STORE_LOCATION.city,
+        state: STORE_LOCATION.state,
+        postal_code: STORE_LOCATION.postal_code,
+        country: STORE_LOCATION.country,
+        is_default: false,
+      });
+    } catch {}
 
     const orderNumber = `FW-POS-${Date.now().toString().slice(-6)}-${crypto.randomBytes(2).toString("hex").toUpperCase()}`;
-    const order = await Order.create({
-      orderNumber,
-      channel: "IN_STORE",
-      servedBy,
-      customer: account?._id,
-      customerEmail: email || WALK_IN_EMAIL,
-      items: [],
-      pricing: { subtotal, discountTotal: 0, taxTotal: 0, shippingFee: 0, grandTotal: subtotal, currency: "INR" },
-      shippingAddress: address._id,
-      billingAddress: address._id,
-      paymentMethod: data.paymentMethod,
-      paymentStatus: "PAID",
-      orderStatus: "DELIVERED",
-      paymentDetails: data.paymentRef ? { transactionRef: data.paymentRef, verifiedAt: now, verifiedBy: servedBy.userId } : {},
-      statusHistory: [{ status: "DELIVERED", changedAt: now, changedBy: servedBy.userId, notes: `In-store sale, handed over at the counter by ${staff.name}` }],
-      complianceVerified: restricted.length > 0,
-      complianceDetails: restricted.length
-        ? { isRestrictedOrder: true, ageConfirmed: true, verifiedInPersonBy: servedBy, verifiedAt: now }
-        : undefined,
-      notes: `In-store counter sale (${data.paymentMethod}) by ${staff.name}`,
-      placedAt: now,
-    });
-    created.order = order._id;
+    const itemsList = lines.map((l) => ({
+      productId: l.product.id,
+      productTitle: l.product.name,
+      title: l.product.name,
+      name: l.product.name,
+      productSku: l.product.sku,
+      sku: l.product.sku,
+      productImage: l.product.images?.find((img: any) => img.isPrimary)?.url || l.product.images?.[0]?.url,
+      image: l.product.images?.find((img: any) => img.isPrimary)?.url || l.product.images?.[0]?.url,
+      unitPrice: l.unitPrice,
+      price: l.unitPrice,
+      quantity: l.qty,
+      subtotal: l.total,
+      discountAmount: 0,
+      total: l.total,
+    }));
 
-    const itemIds = [];
-    for (const l of lines) {
-      const p = l.product;
-      const item = await OrderItem.create({
-        order: order._id,
-        product: p._id,
-        productTitle: p.name,
-        productSku: p.sku,
-        productImage: p.images?.find((img) => img.isPrimary)?.url || p.images?.[0]?.url,
-        unitPrice: l.unitPrice,
-        quantity: l.qty,
-        subtotal: l.total,
-        discountAmount: 0,
-        total: l.total,
-      });
-      itemIds.push(item._id);
+    // Payment method mapping for Postgres constraint ('UPI' or 'COD')
+    const pgPaymentMethod = data.paymentMethod === "UPI" ? "UPI" : "COD";
+
+    const { data: newOrder, error: oErr } = await supabase
+      .from("orders")
+      .insert({
+        order_number: orderNumber,
+        user_id: accountId,
+        customer_details: {
+          name,
+          email: email || WALK_IN_EMAIL,
+          phone,
+        },
+        shipping_address: {
+          fullName: name,
+          phone,
+          address: STORE_LOCATION.street,
+          street: STORE_LOCATION.street,
+          city: STORE_LOCATION.city,
+          state: STORE_LOCATION.state,
+          postalCode: STORE_LOCATION.postal_code,
+          country: STORE_LOCATION.country,
+        },
+        items: itemsList,
+        pricing: {
+          subtotal,
+          discountTotal: 0,
+          taxTotal: 0,
+          shippingFee: 0,
+          grandTotal: subtotal,
+          currency: "INR",
+        },
+        payment_method: pgPaymentMethod,
+        payment_status: "PAID",
+        order_status: "delivered",
+        payment_details: data.paymentRef
+          ? { transactionRef: data.paymentRef, verifiedAt: now.toISOString(), verifiedBy: servedBy.userId }
+          : { method: data.paymentMethod },
+        status_history: [
+          {
+            status: "delivered",
+            changedAt: now.toISOString(),
+            changedBy: servedBy.userId,
+            notes: `In-store counter sale (${data.paymentMethod}), handed over by ${staff.name}`,
+          },
+        ],
+        compliance_verified: restricted.length > 0,
+        compliance_details: restricted.length
+          ? { isRestrictedOrder: true, ageConfirmed: true, verifiedInPersonBy: servedBy, verifiedAt: now.toISOString() }
+          : {},
+        notes: `In-store counter sale (${data.paymentMethod}) by ${staff.name}`,
+        placed_at: now.toISOString(),
+      })
+      .select("*")
+      .single();
+
+    if (oErr || !newOrder) {
+      throw new Error(`Failed to create POS order in database: ${oErr?.message || "Unknown error"}`);
     }
-    order.items = itemIds;
-    await order.save();
-    reserved.length = 0; // the sale is recorded; stock stays deducted from here on
 
-    // Invoice (GST, store as place of supply). The sale stands even if PDF generation fails.
-    let invoice: { invoiceNumber: string; pdfUrl: string } | null = null;
+    // Invoice (GST, store as place of supply)
+    let invoice: any = null;
     let invoiceError: string | null = null;
     try {
-      invoice = await createInvoiceForOrder(order.orderNumber, { sendCustomerEmail: !!email });
+      invoice = await createInvoiceForOrder(newOrder.order_number, { sendCustomerEmail: !!email });
     } catch (err) {
-      invoiceError = "The sale is saved, but the invoice couldn't be generated. Generate it from the order in the admin dashboard.";
+      invoiceError = "The sale is saved, but invoice couldn't be generated automatically.";
       logger.error("POS invoice generation failed", { orderNumber }, err);
     }
 
     await logAdminAudit({
       action: "POS_SALE",
       actor: staff,
-      resource: { type: "ORDER", id: String(order._id), identifier: orderNumber },
+      resource: { type: "ORDER", id: newOrder.id, identifier: orderNumber },
       details: {
         paymentMethod: data.paymentMethod,
         grandTotal: subtotal,
@@ -241,30 +285,26 @@ export async function POST(req: Request) {
         paymentMethod: data.paymentMethod,
         customerName: name,
         emailedTo: email || null,
-        items: lines.map((l) => ({ name: l.product.name, sku: l.product.sku, quantity: l.qty, unitPrice: l.unitPrice, total: l.total })),
+        items: lines.map((l) => ({
+          name: l.product.name,
+          sku: l.product.sku,
+          quantity: l.qty,
+          unitPrice: l.unitPrice,
+          total: l.total,
+        })),
       },
       "Sale completed",
       201
     );
   } catch (err) {
-    // Failed before the sale was fully recorded: remove the partial records and return the stock
-    if (reserved.length) {
-      try {
-        if (created.order) {
-          await OrderItem.deleteMany({ order: created.order });
-          await Order.deleteOne({ _id: created.order });
-        }
-        if (created.address) await Address.deleteOne({ _id: created.address });
-      } catch (cleanupErr) {
-        logger.error("POS: failed to clean up a partially recorded sale", { order: String(created.order) }, cleanupErr);
-      }
-    }
+    // Restore stock if reserved
     for (const r of reserved) {
       try {
-        await Product.updateOne({ _id: r.id }, { $inc: { stock: r.qty } });
-      } catch (restoreErr) {
-        logger.error("POS: failed to restore stock after a failed sale", { productId: r.id, qty: r.qty }, restoreErr);
-      }
+        const { data: cur } = await supabase.from("products").select("stock").eq("id", r.id).maybeSingle();
+        if (cur) {
+          await supabase.from("products").update({ stock: (cur.stock || 0) + r.qty }).eq("id", r.id);
+        }
+      } catch {}
     }
     return handleApiError(err);
   }

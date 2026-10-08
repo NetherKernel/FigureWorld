@@ -977,25 +977,31 @@ export default function ProfilePage() {
   return (
     <div className="mx-auto max-w-[1200px] space-y-10 px-3 py-4 sm:px-4 sm:py-6 lg:px-6">
       {/* Title + greeting */}
-      <div className="flex flex-col gap-4 animate-fade-in sm:flex-row sm:items-center sm:justify-between">
+      <div className="surface-ink relative flex flex-col gap-4 overflow-hidden rounded-2xl p-5 animate-fade-up sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <div className="flex items-center gap-3 sm:gap-4">
-          <div
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand text-base font-bold text-white sm:h-14 sm:w-14 sm:text-lg"
-            aria-hidden="true"
-          >
-            {initialsOf(user.name)}
+          <div className="rounded-full p-[2px] shadow-glow" style={{ backgroundImage: "var(--brand-gradient)" }} aria-hidden="true">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-ink text-base font-bold text-white sm:h-14 sm:w-14 sm:text-lg">
+              {initialsOf(user.name)}
+            </div>
           </div>
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-fg sm:text-3xl">Your Account</h1>
-            <p className="text-sm text-fg-2">
-              Hello, <span className="font-semibold text-fg">{firstName}</span>. Manage your orders, addresses and sign-in
-              details.
-            </p>
+            <span className="eyebrow !text-[#ff7a7f]">
+              <span className="slash" aria-hidden="true" /> Your Account
+            </span>
+            <h1 className="text-2xl font-bold text-white sm:text-3xl">Hello, {firstName}</h1>
+            <p className="text-sm text-white/70">Manage your orders, addresses and sign-in details.</p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-white/70 sm:flex-col sm:items-end">
           <span className="break-all">{user.email}</span>
-          {user.role !== "CUSTOMER" && <span className="chip chip-neutral">{user.role === "ADMIN" ? "Admin" : user.role === "DEVELOPER" ? "Developer" : "Staff"}</span>}
+          <div className="flex items-center gap-2">
+            <span className="chip bg-white/10 text-white ring-1 ring-white/15">
+              {orders.length} {orders.length === 1 ? "order" : "orders"}
+            </span>
+            {user.role !== "CUSTOMER" && (
+              <span className="chip chip-brand">{user.role === "ADMIN" ? "Admin" : user.role === "DEVELOPER" ? "Developer" : "Staff"}</span>
+            )}
+          </div>
         </div>
       </div>
 

@@ -1,8 +1,7 @@
-import { connectToDatabase } from "@/lib/db";
-import { Order } from "@/models/Order";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError } from "@/lib/errors";
+import { supabase } from "@/lib/supabase";
 
 export async function GET(req: Request) {
   try {
@@ -15,14 +14,21 @@ export async function GET(req: Request) {
       throw new ForbiddenError("Forbidden: Admin or Staff privileges required.");
     }
 
-    await connectToDatabase();
-
     const { searchParams } = new URL(req.url);
     const statusParam = searchParams.get("status");
     const searchParam = searchParams.get("search")?.toLowerCase().trim();
 
-    // Fetch all orders with payment details
-    const allOrders = await Order.find({}).sort({ createdAt: -1 });
+    // Fetch all orders with payment details from Supabase
+    const { data: allOrders, error } = await supabase
+      .from("orders")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new Error(`Failed to load payments from database: ${error.message}`);
+    }
+
+    const ordersList = allOrders || [];
 
     // Calculate metrics
     let countUnderReview = 0;
@@ -32,8 +38,8 @@ export async function GET(req: Request) {
     let countExpired = 0;
     let countRefunded = 0;
 
-    for (const o of allOrders) {
-      const st = (o.paymentStatus || "").toUpperCase();
+    for (const o of ordersList) {
+      const st = (o.payment_status || "").toUpperCase();
       if (st === "UNDER_REVIEW") countUnderReview++;
       else if (st === "PENDING") countPending++;
       else if (st === "PAID") countPaid++;
@@ -43,43 +49,44 @@ export async function GET(req: Request) {
     }
 
     // Filter
-    let filteredOrders = allOrders;
+    let filteredOrders = ordersList;
 
     if (statusParam && statusParam.toUpperCase() !== "ALL") {
       const target = statusParam.toUpperCase();
       filteredOrders = filteredOrders.filter(
-        (o: any) => (o.paymentStatus || "").toUpperCase() === target
+        (o: any) => (o.payment_status || "").toUpperCase() === target
       );
     }
 
     if (searchParam) {
       filteredOrders = filteredOrders.filter((o: any) => {
-        const num = (o.orderNumber || "").toLowerCase();
-        const email = (o.customerEmail || "").toLowerCase();
-        const ref = (o.paymentDetails?.transactionRef || "").toLowerCase();
+        const num = (o.order_number || "").toLowerCase();
+        const email = (o.customer_details?.email || "").toLowerCase();
+        const ref = (o.payment_details?.transactionRef || o.payment_ref || "").toLowerCase();
         return num.includes(searchParam) || email.includes(searchParam) || ref.includes(searchParam);
       });
     }
 
     const formattedOrders = filteredOrders.map((o: any) => ({
-      _id: o._id,
-      orderNumber: o.orderNumber,
-      customerEmail: o.customerEmail,
+      _id: o.id,
+      id: o.id,
+      orderNumber: o.order_number,
+      customerEmail: o.customer_details?.email,
       pricing: o.pricing,
-      paymentMethod: o.paymentMethod,
-      paymentStatus: (o.paymentStatus || "PENDING").toUpperCase(),
-      orderStatus: o.orderStatus,
-      paymentDetails: o.paymentDetails || {},
+      paymentMethod: o.payment_method,
+      paymentStatus: (o.payment_status || "PENDING").toUpperCase(),
+      orderStatus: o.order_status,
+      paymentDetails: o.payment_details || (o.payment_ref ? { transactionRef: o.payment_ref } : {}),
       notes: o.notes,
-      placedAt: o.placedAt || o.createdAt,
-      createdAt: o.createdAt,
+      placedAt: o.placed_at || o.created_at,
+      createdAt: o.created_at,
     }));
 
     return apiSuccess(
       {
         orders: formattedOrders,
         metrics: {
-          total: allOrders.length,
+          total: ordersList.length,
           underReview: countUnderReview,
           pending: countPending,
           paid: countPaid,

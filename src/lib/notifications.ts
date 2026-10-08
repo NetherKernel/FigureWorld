@@ -1,14 +1,5 @@
-import mongoose from "mongoose";
-import { connectToDatabase } from "./db";
-import { Order, IOrder } from "@/models/Order";
-import { OrderItem } from "@/models/OrderItem";
-import { Address } from "@/models/Address";
-import { Invoice, IInvoice } from "@/models/Invoice";
-import {
-  NotificationLog,
-  INotificationLog,
-  NotificationType,
-} from "@/models/NotificationLog";
+import { supabase } from "@/lib/supabase";
+import { findSupabaseOrder } from "@/lib/orders-supabase";
 import {
   formatWhatsAppPhone,
   sendWhatsAppText,
@@ -18,9 +9,12 @@ import {
 import { createInvoiceForOrder } from "./invoice";
 import { logger } from "./logger";
 import { env } from "./env";
+export type IOrder = any;
+export type IInvoice = any;
+export type INotificationLog = any;
 
 interface IResolvedOrderContext {
-  order: IOrder;
+  order: any;
   address: any;
   items: any[];
   recipientPhone: string;
@@ -30,60 +24,36 @@ interface IResolvedOrderContext {
 }
 
 /**
- * Resolves full context for an order by orderNumber, ObjectId, or existing IOrder object.
+ * Resolves full context for an order by orderNumber, UUID, or existing order object.
  */
 async function resolveOrderContext(
-  orderOrNumber: string | IOrder
+  orderOrNumber: any
 ): Promise<IResolvedOrderContext> {
-  await connectToDatabase();
-
   let order: any = null;
 
   if (typeof orderOrNumber === "string") {
-    const clean = orderOrNumber.trim();
-    if (mongoose.Types.ObjectId.isValid(clean)) {
-      order = await Order.findById(clean);
-    }
+    order = await findSupabaseOrder(orderOrNumber);
     if (!order) {
-      order = await Order.findOne({
-        orderNumber: { $regex: new RegExp(`^${clean}$`, "i") },
-      });
-    }
-    if (!order) {
-      throw new Error(`Order "${clean}" not found for notification.`);
+      throw new Error(`Order "${orderOrNumber}" not found for notification.`);
     }
   } else {
     order = orderOrNumber;
   }
 
-  // Populate shipping address
-  let address: any = null;
-  if (order.shippingAddress) {
-    if (typeof order.shippingAddress === "object" && (order.shippingAddress as any).phone) {
-      address = order.shippingAddress;
-    } else {
-      address = await Address.findById(order.shippingAddress);
-    }
-  }
-
-  // Populate items
-  let items: any[] = [];
-  if (order.items && order.items.length > 0) {
-    if (typeof order.items[0] === "object" && (order.items[0] as any).productTitle) {
-      items = order.items;
-    } else {
-      items = await OrderItem.find({ order: order._id });
-    }
-  }
+  const address = order.shipping_address || order.shippingAddress || {};
+  const customerDetails = order.customer_details || order.customer || {};
+  const items = Array.isArray(order.items) ? order.items : [];
+  const pricing = order.pricing || {};
 
   const recipientPhone =
-    address?.phone ||
-    order.customerEmail || // fallback string if no phone
+    address.phone ||
+    customerDetails.phone ||
+    customerDetails.email ||
     "";
 
   const customerName =
-    address?.fullName ||
-    order.customerEmail?.split("@")[0] ||
+    customerDetails.name ||
+    address.fullName ||
     "Valued Customer";
 
   return {
@@ -92,66 +62,63 @@ async function resolveOrderContext(
     items,
     recipientPhone,
     customerName,
-    orderNumber: order.orderNumber,
-    grandTotal: order.pricing?.grandTotal || 0,
+    orderNumber: order.order_number || order.orderNumber,
+    grandTotal: Number(pricing.grandTotal || 0),
   };
 }
 
 /**
- * Persists an outbound notification into MongoDB NotificationLog.
+ * Persists an outbound notification into Supabase notification_logs.
  */
-async function recordNotificationLog(params: {
-  recipientPhone: string;
-  recipientEmail?: string;
-  customerName: string;
-  orderNumber: string;
-  orderId?: mongoose.Types.ObjectId;
-  invoiceNumber?: string;
-  notificationType: NotificationType;
-  messageType: "text" | "document" | "template";
-  body?: string;
-  documentUrl?: string;
-  filename?: string;
-  dispatchResult: IWhatsAppDispatchResult;
-  metadata?: Record<string, any>;
-}): Promise<INotificationLog> {
+async function recordNotificationLog(params: any): Promise<any> {
   try {
-    await connectToDatabase();
-    const log = await NotificationLog.create({
-      recipientPhone: params.recipientPhone,
-      recipientEmail: params.recipientEmail,
-      customerName: params.customerName,
-      orderNumber: params.orderNumber,
-      orderId: params.orderId,
-      invoiceNumber: params.invoiceNumber,
-      channel: "WHATSAPP",
-      notificationType: params.notificationType,
-      messageType: params.messageType,
-      body: params.body,
-      documentUrl: params.documentUrl,
-      filename: params.filename,
-      providerMessageId: params.dispatchResult.messageId,
-      status: params.dispatchResult.status || (params.dispatchResult.success ? "SENT" : "FAILED"),
-      error: params.dispatchResult.error,
-      metadata: params.metadata || {},
-      sentAt: params.dispatchResult.sentAt || new Date(),
-    });
-    return log;
+    const { data: log } = await supabase
+      .from("notification_logs")
+      .insert({
+        order_number: params.orderNumber,
+        recipient: params.recipientPhone || params.recipientEmail,
+        channel: "WHATSAPP",
+        template: params.notificationType,
+        status: params.dispatchResult?.status || (params.dispatchResult?.success ? "SENT" : "FAILED"),
+        details: params,
+      })
+      .select("*")
+      .maybeSingle();
+    return log ? mapNotificationLog(log) : params;
   } catch (err: any) {
-    logger.error("Failed to save NotificationLog:", { error: err.message });
-    // Return mock log document representation if DB write fails
-    return {
-      recipientPhone: params.recipientPhone,
-      customerName: params.customerName,
-      orderNumber: params.orderNumber,
-      channel: "WHATSAPP",
-      notificationType: params.notificationType,
-      messageType: params.messageType,
-      providerMessageId: params.dispatchResult.messageId,
-      status: params.dispatchResult.status,
-      sentAt: params.dispatchResult.sentAt,
-    } as any;
+    logger.error("Failed to save NotificationLog to Supabase:", { error: err.message });
+    return params;
   }
+}
+
+export function mapNotificationLog(n: any) {
+  if (!n) return null;
+  const d = n.details || {};
+  return {
+    _id: n.id,
+    id: n.id,
+    recipientPhone: n.recipient || d.recipientPhone || "",
+    recipientEmail: d.recipientEmail || "",
+    customerName: d.customerName || "Customer",
+    orderNumber: n.order_number || d.orderNumber || "",
+    orderId: d.orderId,
+    invoiceNumber: d.invoiceNumber,
+    channel: n.channel || "WHATSAPP",
+    notificationType: n.template || d.notificationType || "ORDER_CONFIRMATION",
+    messageType: d.messageType || "text",
+    body: d.body || "",
+    documentUrl: d.documentUrl,
+    filename: d.filename,
+    providerMessageId: d.dispatchResult?.messageId || d.providerMessageId || n.id,
+    status: n.status || "SENT",
+    error: d.error,
+    metadata: d.metadata || {},
+    sentAt: n.created_at || new Date().toISOString(),
+    deliveredAt: d.deliveredAt,
+    readAt: d.readAt,
+    createdAt: n.created_at,
+    updatedAt: n.updated_at || n.created_at,
+  };
 }
 
 /**
@@ -462,11 +429,14 @@ export class NotificationService {
   /**
    * Helper: Retrieve all notification logs for a specific order.
    */
-  static async getOrderNotifications(orderNumber: string): Promise<INotificationLog[]> {
-    await connectToDatabase();
-    return NotificationLog.find({
-      orderNumber: { $regex: new RegExp(`^${orderNumber.trim()}$`, "i") },
-    }).sort({ createdAt: -1 });
+  static async getOrderNotifications(orderNumber: string): Promise<any[]> {
+    const { data } = await supabase
+      .from("notification_logs")
+      .select("*")
+      .ilike("order_number", orderNumber.trim())
+      .order("created_at", { ascending: false });
+
+    return (data || []).map(mapNotificationLog);
   }
 
   /**
@@ -475,16 +445,17 @@ export class NotificationService {
   static async updateStatusByProviderMessageId(
     providerMessageId: string,
     status: "SENT" | "DELIVERED" | "READ" | "FAILED"
-  ): Promise<INotificationLog | null> {
-    await connectToDatabase();
+  ): Promise<any | null> {
     const update: any = { status };
-    if (status === "DELIVERED") update.deliveredAt = new Date();
-    if (status === "READ") update.readAt = new Date();
+    if (status === "DELIVERED") update.delivered_at = new Date().toISOString();
 
-    return NotificationLog.findOneAndUpdate(
-      { providerMessageId },
-      { $set: update },
-      { new: true }
-    );
+    const { data } = await supabase
+      .from("notification_logs")
+      .update(update)
+      .eq("id", providerMessageId)
+      .select("*")
+      .maybeSingle();
+
+    return data ? mapNotificationLog(data) : null;
   }
 }

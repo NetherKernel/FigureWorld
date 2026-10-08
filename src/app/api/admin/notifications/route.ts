@@ -1,8 +1,8 @@
-import { connectToDatabase } from "@/lib/db";
-import { NotificationLog } from "@/models/NotificationLog";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError } from "@/lib/errors";
+import { supabase } from "@/lib/supabase";
+import { mapNotificationLog } from "@/lib/notifications";
 
 export async function GET(req: Request) {
   try {
@@ -14,67 +14,58 @@ export async function GET(req: Request) {
       throw new ForbiddenError("Forbidden: Admin or Staff privileges required.");
     }
 
-    await connectToDatabase();
-
     const { searchParams } = new URL(req.url);
     const orderNumber = searchParams.get("orderNumber");
     const status = searchParams.get("status");
-    const type = searchParams.get("type");
     const channel = searchParams.get("channel");
     const phone = searchParams.get("phone");
     const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10), 100);
     const page = Math.max(parseInt(searchParams.get("page") || "1", 10), 1);
     const skip = (page - 1) * limit;
 
-    const filter: any = {};
+    let query = supabase.from("notification_logs").select("*", { count: "exact" });
+
     if (orderNumber) {
-      filter.orderNumber = { $regex: new RegExp(orderNumber.trim(), "i") };
+      query = query.ilike("order_number", `%${orderNumber.trim()}%`);
     }
     if (status) {
-      filter.status = status.toUpperCase();
-    }
-    if (type) {
-      filter.notificationType = type.toUpperCase();
+      query = query.eq("status", status.toUpperCase());
     }
     if (channel) {
-      filter.channel = channel.toUpperCase();
+      query = query.eq("channel", channel.toUpperCase());
     }
     if (phone) {
-      filter.recipientPhone = { $regex: new RegExp(phone.trim().replace(/[\+\s]/g, ""), "i") };
+      query = query.ilike("recipient", `%${phone.trim()}%`);
     }
 
-    const [logs, totalCount, statsData] = await Promise.all([
-      NotificationLog.find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit),
-      NotificationLog.countDocuments(filter),
-      NotificationLog.aggregate([
-        {
-          $group: {
-            _id: "$status",
-            count: { $sum: 1 },
-          },
-        },
-      ]),
-    ]);
+    const { data: rawLogs, count, error } = await query
+      .order("created_at", { ascending: false })
+      .range(skip, skip + limit - 1);
 
+    if (error) {
+      throw new Error(`Failed to load notification logs: ${error.message}`);
+    }
+
+    const totalCount = count || 0;
+    const logs = (rawLogs || []).map(mapNotificationLog);
+
+    // Compute status stats
+    const { data: allLogs } = await supabase.from("notification_logs").select("status");
     const stats = {
-      total: 0,
+      total: allLogs?.length || 0,
       sent: 0,
       delivered: 0,
       read: 0,
       failed: 0,
     };
 
-    for (const item of statsData) {
-      const s = (item._id || "").toUpperCase();
-      stats.total += item.count;
-      if (s === "SENT") stats.sent = item.count;
-      if (s === "DELIVERED") stats.delivered = item.count;
-      if (s === "READ") stats.read = item.count;
-      if (s === "FAILED") stats.failed = item.count;
-    }
+    (allLogs || []).forEach((row: any) => {
+      const s = (row.status || "").toUpperCase();
+      if (s === "SENT") stats.sent++;
+      else if (s === "DELIVERED") stats.delivered++;
+      else if (s === "READ") stats.read++;
+      else if (s === "FAILED") stats.failed++;
+    });
 
     return apiSuccess({
       notifications: logs,

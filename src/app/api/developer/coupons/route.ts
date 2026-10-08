@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { connectToDatabase } from "@/lib/db";
-import { Coupon } from "@/models/Coupon";
+import { supabase } from "@/lib/supabase";
 import { requireRole } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { ConflictError } from "@/lib/errors";
@@ -23,16 +22,37 @@ const createCouponSchema = z.object({
 export async function GET(req: Request) {
   try {
     await requireRole(req, "DEVELOPER");
-    await connectToDatabase();
 
     const { searchParams } = new URL(req.url);
     const query = (searchParams.get("q") || "").toUpperCase().trim();
 
-    const coupons = await Coupon.find({}).sort({ createdAt: -1 });
+    const { data: coupons, error } = await supabase
+      .from("coupons")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-    let filtered = coupons;
+    if (error) throw error;
+
+    const mapped = (coupons || []).map((c: any) => ({
+      _id: c.id,
+      id: c.id,
+      code: c.code,
+      description: c.description,
+      discountType: c.discount_type,
+      discountValue: Number(c.discount_value),
+      minimumOrderValue: Number(c.min_order_amount || 0),
+      maximumDiscountAmount: c.max_discount_amount ? Number(c.max_discount_amount) : undefined,
+      validFrom: c.start_date,
+      validUntil: c.end_date,
+      usageLimit: c.usage_limit,
+      usedCount: Number(c.used_count || 0),
+      isActive: Boolean(c.is_active),
+      createdAt: c.created_at,
+    }));
+
+    let filtered = mapped;
     if (query) {
-      filtered = coupons.filter(
+      filtered = mapped.filter(
         (c: any) =>
           c.code.includes(query) ||
           (c.description && c.description.toUpperCase().includes(query))
@@ -57,29 +77,50 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const user = await requireRole(req, "DEVELOPER");
-    await connectToDatabase();
-
     const data = await validateRequestBody(req, createCouponSchema);
 
-    const existing = await Coupon.findOne({ code: data.code });
+    const { data: existing } = await supabase
+      .from("coupons")
+      .select("id")
+      .eq("code", data.code)
+      .maybeSingle();
+
     if (existing) {
       throw new ConflictError(`Coupon code "${data.code}" already exists.`);
     }
 
-    const newCoupon = await Coupon.create(data);
+    const { data: newCoupon, error: insErr } = await supabase
+      .from("coupons")
+      .insert({
+        code: data.code,
+        description: data.description || "",
+        discount_type: data.discountType,
+        discount_value: data.discountValue,
+        min_order_amount: data.minimumOrderValue,
+        max_discount_amount: data.maximumDiscountAmount || null,
+        start_date: data.validFrom.toISOString(),
+        end_date: data.validUntil.toISOString(),
+        usage_limit: data.usageLimit || null,
+        used_count: 0,
+        is_active: data.isActive,
+      })
+      .select("*")
+      .single();
+
+    if (insErr) throw insErr;
 
     await logAdminAudit({
       action: "COUPON_CREATE",
       actor: user,
       resource: {
         type: "COUPON",
-        id: newCoupon._id.toString(),
+        id: newCoupon.id,
         identifier: newCoupon.code,
       },
       details: {
         code: newCoupon.code,
-        discountType: newCoupon.discountType,
-        discountValue: newCoupon.discountValue,
+        discountType: newCoupon.discount_type,
+        discountValue: newCoupon.discount_value,
       },
       req,
     });

@@ -1,11 +1,10 @@
 import { z } from "zod";
-import mongoose from "mongoose";
-import { connectToDatabase } from "@/lib/db";
-import { Order } from "@/models/Order";
+import { supabase } from "@/lib/supabase";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
+import { findSupabaseOrder } from "@/lib/orders-supabase";
 
 const packOrderSchema = z.object({
   notes: z.string().optional(),
@@ -32,65 +31,53 @@ export async function POST(
     }
 
     const data = await validateRequestBody(req, packOrderSchema);
-
-    await connectToDatabase();
-    const cleanId = orderNumber.trim();
-
-    let order: any = null;
-    if (mongoose.Types.ObjectId.isValid(cleanId)) {
-      order = await Order.findById(cleanId);
-    }
-    if (!order) {
-      order = await Order.findOne({
-        orderNumber: { $regex: new RegExp(`^${cleanId}$`, "i") },
-      });
-    }
+    const order = await findSupabaseOrder(orderNumber);
 
     if (!order) {
-      throw new NotFoundError(`Order "${cleanId}" not found.`);
+      throw new NotFoundError(`Order "${orderNumber}" not found.`);
     }
 
-    // Must be in CONFIRMED or PROCESSING state to pack
-    const currentStatus = (order.orderStatus || "").toUpperCase();
-    if (!["CONFIRMED", "PROCESSING", "confirmed", "processing"].includes(order.orderStatus)) {
+    const currentStatus = (order.order_status || "").toUpperCase();
+    if (!["CONFIRMED", "PROCESSING", "confirmed", "processing"].includes(order.order_status)) {
       throw new ValidationError(
         `Cannot pack order in '${currentStatus}' status. Order must be CONFIRMED or PROCESSING.`
       );
     }
 
-    order.orderStatus = "PACKED";
-
-    if (!order.statusHistory) {
-      order.statusHistory = [];
-    }
-
+    const statusHistory = Array.isArray(order.status_history) ? [...order.status_history] : [];
     const noteText = data.notes
       ? `Order packed by ${user.role.toLowerCase()}: ${data.notes}`
       : `Order picked, inspected, and packed into secure shipping carton.`;
 
-    order.statusHistory.push({
+    statusHistory.push({
       status: "PACKED",
-      changedAt: new Date(),
+      changedAt: new Date().toISOString(),
       changedBy: user.userId,
       notes: noteText,
     });
 
-    if (!order.shipmentDetails) {
-      order.shipmentDetails = {};
-    }
+    const shipmentDetails = order.shipping_details || {};
     if (data.boxSize) {
-      order.shipmentDetails.shippingNotes = `Box Size: ${data.boxSize}${data.packageWeightGrams ? `, Weight: ${data.packageWeightGrams}g` : ""}`;
+      shipmentDetails.shippingNotes = `Box Size: ${data.boxSize}${data.packageWeightGrams ? `, Weight: ${data.packageWeightGrams}g` : ""}`;
     }
 
-    await order.save();
+    await supabase
+      .from("orders")
+      .update({
+        order_status: "PACKED",
+        shipping_details: shipmentDetails,
+        status_history: statusHistory,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", order.id);
 
     return apiSuccess(
       {
-        orderNumber: order.orderNumber,
-        orderStatus: order.orderStatus,
-        statusHistory: order.statusHistory,
+        orderNumber: order.order_number,
+        orderStatus: "PACKED",
+        statusHistory,
       },
-      `Order #${order.orderNumber} successfully marked as PACKED.`
+      `Order #${order.order_number} successfully marked as PACKED.`
     );
   } catch (error) {
     return handleApiError(error);

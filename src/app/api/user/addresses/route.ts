@@ -1,10 +1,8 @@
 import { z } from "zod";
-import { connectToDatabase } from "@/lib/db";
-import { Address } from "@/models/Address";
-import { User } from "@/models/User";
 import { requireAuth } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { validateRequestBody } from "@/lib/validation";
+import { supabase } from "@/lib/supabase";
 
 const addressSchema = z.object({
   type: z.enum(["shipping", "billing", "both"]).default("shipping"),
@@ -15,21 +13,47 @@ const addressSchema = z.object({
   city: z.string().min(2, "City is required").max(100),
   state: z.string().min(2, "State/Province is required").max(100),
   postalCode: z.string().min(2, "Postal code is required").max(20),
-  country: z.string().min(2, "Country is required").default("United States"),
+  country: z.string().min(2, "Country is required").default("India"),
   isDefault: z.boolean().default(false),
 });
+
+function mapSupabaseAddress(a: any) {
+  if (!a) return null;
+  return {
+    _id: a.id,
+    id: a.id,
+    user: a.user_id,
+    fullName: a.name,
+    phone: a.phone,
+    streetLine1: a.street,
+    streetLine2: a.landmark || "",
+    landmark: a.landmark || "",
+    city: a.city,
+    state: a.state,
+    postalCode: a.postal_code,
+    country: a.country || "India",
+    isDefault: Boolean(a.is_default),
+    createdAt: a.created_at,
+    updatedAt: a.updated_at,
+  };
+}
 
 export async function GET(req: Request) {
   try {
     const auth = await requireAuth(req);
 
-    await connectToDatabase();
+    const { data: rows, error } = await supabase
+      .from("addresses")
+      .select("*")
+      .eq("user_id", auth.userId)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: false });
 
-    const addresses = await Address.find({ user: auth.userId }).sort({
-      isDefault: -1,
-      createdAt: -1,
-    });
+    if (error) {
+      throw new Error(`Failed to load addresses: ${error.message}`);
+    }
 
+    const addresses = (rows || []).map(mapSupabaseAddress);
     return apiSuccess({ addresses });
   } catch (error) {
     return handleApiError(error);
@@ -41,29 +65,43 @@ export async function POST(req: Request) {
     const auth = await requireAuth(req);
     const data = await validateRequestBody(req, addressSchema);
 
-    await connectToDatabase();
+    // Check existing count to decide if default
+    const { count } = await supabase
+      .from("addresses")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", auth.userId);
 
-    // Check if this is the user's first address, make it default automatically if so
-    const existingCount = await Address.countDocuments({ user: auth.userId });
-    const isFirstAddress = existingCount === 0;
-    const shouldBeDefault = data.isDefault || isFirstAddress;
+    const shouldBeDefault = data.isDefault || (count === 0);
 
     if (shouldBeDefault) {
-      await Address.updateMany({ user: auth.userId }, { $set: { isDefault: false } });
+      await supabase
+        .from("addresses")
+        .update({ is_default: false })
+        .eq("user_id", auth.userId);
     }
 
-    const newAddress = await Address.create({
-      ...data,
-      user: auth.userId,
-      isDefault: shouldBeDefault,
-    });
+    const { data: created, error } = await supabase
+      .from("addresses")
+      .insert({
+        user_id: auth.userId,
+        name: data.fullName,
+        phone: data.phone,
+        street: data.streetLine1,
+        landmark: data.streetLine2 || "",
+        city: data.city,
+        state: data.state,
+        postal_code: data.postalCode,
+        country: data.country || "India",
+        is_default: shouldBeDefault,
+      })
+      .select()
+      .single();
 
-    // Link into User addresses array
-    await User.findByIdAndUpdate(auth.userId, {
-      $addToSet: { addresses: newAddress._id },
-    });
+    if (error || !created) {
+      throw new Error(`Failed to save address: ${error?.message || "Unknown error"}`);
+    }
 
-    return apiSuccess({ address: newAddress }, "Address added successfully", 201);
+    return apiSuccess({ address: mapSupabaseAddress(created) }, "Address added successfully", 201);
   } catch (error) {
     return handleApiError(error);
   }

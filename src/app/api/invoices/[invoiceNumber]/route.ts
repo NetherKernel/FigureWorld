@@ -1,5 +1,4 @@
-import { connectToDatabase } from "@/lib/db";
-import { Invoice } from "@/models/Invoice";
+import { supabase } from "@/lib/supabase";
 import { requireAuth } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { NotFoundError, ValidationError, ForbiddenError } from "@/lib/errors";
@@ -17,18 +16,21 @@ export async function GET(
     // Require authentication
     const user = await requireAuth(req);
 
-    await connectToDatabase();
+    const { data: invoice, error } = await supabase
+      .from("invoices")
+      .select("*")
+      .ilike("invoice_number", invoiceNumber.trim())
+      .maybeSingle();
 
-    const invoice = await Invoice.findOne({ invoiceNumber: invoiceNumber.toUpperCase() });
-    if (!invoice) {
+    if (error || !invoice) {
       throw new NotFoundError(`Invoice "${invoiceNumber}" not found.`);
     }
 
     // RBAC Ownership check: CUSTOMER can only view their own invoice
     if (user.role === "CUSTOMER") {
-      const customerEmail = (invoice.customerDetails?.email || "").toLowerCase().trim();
+      const customerEmail = (invoice.customer_details?.email || "").toLowerCase().trim();
       const userEmail = (user.email || "").toLowerCase().trim();
-      const customerId = invoice.customer?.toString();
+      const customerId = invoice.customer_id?.toString();
       const userId = user.userId?.toString();
 
       const isOwner = (userEmail && customerEmail === userEmail) || (userId && customerId === userId);
@@ -38,20 +40,20 @@ export async function GET(
     }
 
     return apiSuccess({
-      invoiceNumber: invoice.invoiceNumber,
-      orderNumber: invoice.orderNumber,
-      issuedAt: invoice.issuedAt,
-      customerDetails: invoice.customerDetails,
-      storeDetails: invoice.storeDetails,
-      gstDetails: invoice.gstDetails,
+      invoiceNumber: invoice.invoice_number,
+      orderNumber: invoice.order_number,
+      issuedAt: invoice.issued_at,
+      customerDetails: invoice.customer_details,
+      storeDetails: invoice.store_details,
+      gstDetails: invoice.gst_details,
       items: invoice.items,
       pricing: invoice.pricing,
-      paymentMethod: invoice.paymentMethod,
-      paymentStatus: invoice.paymentStatus,
-      paymentRef: invoice.paymentRef,
-      pdfUrl: `/api/invoices/${invoice.invoiceNumber}/pdf`,
-      sentToCustomer: invoice.sentToCustomer,
-      sentAt: invoice.sentAt,
+      paymentMethod: invoice.payment_method,
+      paymentStatus: invoice.payment_status,
+      paymentRef: invoice.payment_ref,
+      pdfUrl: `/api/invoices/${invoice.invoice_number}/pdf`,
+      sentToCustomer: invoice.sent_to_customer,
+      sentAt: invoice.sent_at,
     });
   } catch (error) {
     return handleApiError(error);

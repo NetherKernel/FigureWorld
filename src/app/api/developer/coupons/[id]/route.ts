@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { connectToDatabase } from "@/lib/db";
-import { Coupon } from "@/models/Coupon";
+import { supabase } from "@/lib/supabase";
 import { requireRole } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { NotFoundError } from "@/lib/errors";
@@ -22,27 +21,42 @@ export async function PATCH(
 ) {
   try {
     await requireRole(req, "DEVELOPER");
-    await connectToDatabase();
 
     const { id } = await params;
     const body = await validateRequestBody(req, updateCouponSchema);
 
-    const coupon = await Coupon.findById(id);
-    if (!coupon) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    let checkQuery = supabase.from("coupons").select("*");
+    if (isUuid) {
+      checkQuery = checkQuery.eq("id", id);
+    } else {
+      checkQuery = checkQuery.eq("code", id.toUpperCase());
+    }
+
+    const { data: coupon, error } = await checkQuery.maybeSingle();
+    if (error || !coupon) {
       throw new NotFoundError("Coupon not found");
     }
 
-    if (body.isActive !== undefined) coupon.isActive = body.isActive;
-    if (body.discountValue !== undefined) coupon.discountValue = body.discountValue;
-    if (body.minimumOrderValue !== undefined) coupon.minimumOrderValue = body.minimumOrderValue;
-    if (body.maximumDiscountAmount !== undefined) coupon.maximumDiscountAmount = body.maximumDiscountAmount;
-    if (body.validUntil !== undefined) coupon.validUntil = body.validUntil;
-    if (body.usageLimit !== undefined) coupon.usageLimit = body.usageLimit;
-    if (body.description !== undefined) coupon.description = body.description;
+    const updateFields: Record<string, any> = {};
+    if (body.isActive !== undefined) updateFields.is_active = body.isActive;
+    if (body.discountValue !== undefined) updateFields.discount_value = body.discountValue;
+    if (body.minimumOrderValue !== undefined) updateFields.min_order_amount = body.minimumOrderValue;
+    if (body.maximumDiscountAmount !== undefined) updateFields.max_discount_amount = body.maximumDiscountAmount;
+    if (body.validUntil !== undefined) updateFields.end_date = body.validUntil.toISOString();
+    if (body.usageLimit !== undefined) updateFields.usage_limit = body.usageLimit;
+    if (body.description !== undefined) updateFields.description = body.description;
 
-    await coupon.save();
+    const { data: updated, error: updErr } = await supabase
+      .from("coupons")
+      .update(updateFields)
+      .eq("id", coupon.id)
+      .select("*")
+      .single();
 
-    return apiSuccess({ coupon }, "Coupon updated successfully");
+    if (updErr) throw updErr;
+
+    return apiSuccess({ coupon: updated }, "Coupon updated successfully");
   } catch (err) {
     return handleApiError(err);
   }
@@ -54,11 +68,18 @@ export async function DELETE(
 ) {
   try {
     await requireRole(req, "DEVELOPER");
-    await connectToDatabase();
 
     const { id } = await params;
-    const deleted = await Coupon.findByIdAndDelete(id);
-    if (!deleted) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    let delQuery = supabase.from("coupons").delete();
+    if (isUuid) {
+      delQuery = delQuery.eq("id", id);
+    } else {
+      delQuery = delQuery.eq("code", id.toUpperCase());
+    }
+
+    const { error } = await delQuery;
+    if (error) {
       throw new NotFoundError("Coupon not found");
     }
 

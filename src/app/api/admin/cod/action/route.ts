@@ -1,14 +1,13 @@
 import { z } from "zod";
-import { connectToDatabase } from "@/lib/db";
-import { Order } from "@/models/Order";
-import { OrderItem } from "@/models/OrderItem";
-import { Product } from "@/models/Product";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { validateRequestBody } from "@/lib/validation";
 import { createInvoiceForOrder } from "@/lib/invoice";
 import { NotificationService } from "@/lib/notifications";
+import { logAdminAudit } from "@/lib/audit";
+import { supabase } from "@/lib/supabase";
+import { findSupabaseOrder, restockSupabaseInventory } from "@/lib/orders-supabase";
 
 const codActionSchema = z.object({
   orderNumber: z.string().optional(),
@@ -39,147 +38,140 @@ export async function POST(req: Request) {
       throw new ValidationError("Either orderNumber or orderId must be provided.");
     }
 
-    await connectToDatabase();
-
-    const order = data.orderId
-      ? await Order.findById(data.orderId)
-      : await Order.findOne({ orderNumber: data.orderNumber?.toUpperCase() });
+    const order = await findSupabaseOrder(data.orderId || data.orderNumber!);
 
     if (!order) {
       throw new NotFoundError("Order not found.");
     }
 
-    if (order.paymentMethod !== "COD") {
-      throw new ValidationError(`Order "${order.orderNumber}" is not a Cash on Delivery order.`);
+    if (order.payment_method !== "COD") {
+      throw new ValidationError(`Order "${order.order_number}" is not a Cash on Delivery order.`);
     }
 
-    if (!order.codDetails) {
-      order.codDetails = {
-        codStatus: "PENDING_VERIFICATION",
-        callLogs: [],
+    const codDetails = { ...(order.cod_details || { codStatus: "PENDING_VERIFICATION", callLogs: [] }) };
+    if (!Array.isArray(codDetails.callLogs)) {
+      codDetails.callLogs = [];
+    }
+
+    let newOrderStatus = order.order_status || "pending";
+    let newPaymentStatus = order.payment_status || "PENDING";
+    let shippingDetails = { ...(order.shipping_details || {}) };
+
+    if (data.action === "ACCEPT" || data.action === "MARK_VERIFIED") {
+      codDetails.codStatus = "VERIFIED";
+      codDetails.verifiedAt = new Date().toISOString();
+      codDetails.verifiedBy = user.userId;
+      if (data.notes) {
+        codDetails.verificationNotes = data.notes;
+      }
+      newOrderStatus = "confirmed";
+    } else if (data.action === "LOG_CALL") {
+      codDetails.callLogs.push({
+        calledAt: new Date().toISOString(),
+        calledBy: user.email,
+        status: data.callStatus || "ANSWERED",
+        notes: data.notes || "Verification phone call conducted",
+      });
+      if (data.callStatus === "ANSWERED") {
+        codDetails.phoneVerified = true;
+      }
+    } else if (data.action === "DISPATCH") {
+      codDetails.codStatus = "DISPATCHED";
+      codDetails.dispatchedAt = new Date().toISOString();
+      if (data.courierPartner) codDetails.courierPartner = data.courierPartner;
+      if (data.trackingNumber) codDetails.trackingNumber = data.trackingNumber;
+      newOrderStatus = "shipped";
+      shippingDetails = {
+        ...shippingDetails,
+        courier: data.courierPartner || shippingDetails.courier || "Standard Courier",
+        trackingNumber: data.trackingNumber || shippingDetails.trackingNumber || "",
+        dispatchedAt: new Date().toISOString(),
       };
-    }
+    } else if (data.action === "REJECT") {
+      codDetails.codStatus = "REJECTED";
+      codDetails.rejectionReason = data.rejectionReason || data.notes || "Customer declined or unverified phone.";
+      newOrderStatus = "cancelled";
+      newPaymentStatus = "FAILED";
 
-    if (!Array.isArray(order.codDetails.callLogs)) {
-      order.codDetails.callLogs = [];
-    }
-
-    switch (data.action) {
-      case "LOG_CALL": {
-        if (!data.callStatus) {
-          throw new ValidationError("callStatus is required when logging a customer phone call.");
-        }
-        order.codDetails.callLogs.push({
-          calledAt: new Date(),
-          calledBy: user.email || String(user.userId),
-          callStatus: data.callStatus,
-          notes: data.notes || `Call marked as ${data.callStatus}`,
-        });
-        break;
+      // Restore inventory
+      if (Array.isArray(order.items)) {
+        await restockSupabaseInventory(order.items);
       }
+    } else if (data.action === "CANCEL") {
+      codDetails.codStatus = "CANCELLED";
+      codDetails.cancellationReason = data.cancellationReason || data.notes || "Order cancelled by staff/customer.";
+      newOrderStatus = "cancelled";
+      newPaymentStatus = "FAILED";
 
-      case "ACCEPT":
-      case "MARK_VERIFIED": {
-        // COD Verified -> Order Confirmed
-        order.codDetails.codStatus = "VERIFIED";
-        order.orderStatus = "confirmed";
-        order.codDetails.verifiedAt = new Date();
-        order.codDetails.verifiedBy = user.userId;
-        if (data.notes) {
-          order.notes = (order.notes ? order.notes + " | " : "") + data.notes;
-        }
-        break;
-      }
-
-      case "DISPATCH": {
-        // Must be verified or confirmed first
-        if (order.codDetails.codStatus !== "VERIFIED" && order.orderStatus !== "confirmed") {
-          throw new ValidationError(
-            "COD order must be verified and confirmed with the customer before dispatch."
-          );
-        }
-        order.codDetails.codStatus = "DISPATCHED";
-        order.orderStatus = "shipped";
-        order.codDetails.dispatchedAt = new Date();
-        order.codDetails.courierPartner = data.courierPartner || "Blue Dart Express";
-        order.codDetails.trackingNumber =
-          data.trackingNumber || `BD-${Date.now().toString().slice(-6)}`;
-        break;
-      }
-
-      case "REJECT": {
-        // COD Rejected -> Cancelled & Restore Stock
-        order.codDetails.codStatus = "REJECTED";
-        order.orderStatus = "cancelled";
-        order.codDetails.rejectionReason =
-          data.rejectionReason || data.notes || "Customer rejected COD verification or phone unreachable.";
-
-        // Restore reserved inventory stock
-        const items = await OrderItem.find({ order: order._id });
-        for (const item of items) {
-          if (item.product) {
-            const product = await Product.findById(item.product);
-            if (product) {
-              product.stock += item.quantity;
-              await product.save();
-            }
-          }
-        }
-        break;
-      }
-
-      case "CANCEL": {
-        // Cancelled -> Restore Stock
-        order.codDetails.codStatus = "CANCELLED";
-        order.orderStatus = "cancelled";
-        order.codDetails.cancellationReason =
-          data.cancellationReason || data.notes || "COD Order cancelled by merchant or customer.";
-
-        // Restore reserved inventory stock
-        const items = await OrderItem.find({ order: order._id });
-        for (const item of items) {
-          if (item.product) {
-            const product = await Product.findById(item.product);
-            if (product) {
-              product.stock += item.quantity;
-              await product.save();
-            }
-          }
-        }
-        break;
+      // Restore inventory
+      if (Array.isArray(order.items)) {
+        await restockSupabaseInventory(order.items);
       }
     }
 
-    await order.save();
+    const statusHistory = Array.isArray(order.status_history) ? [...order.status_history] : [];
+    statusHistory.push({
+      status: newOrderStatus,
+      timestamp: new Date().toISOString(),
+      updatedBy: user.email,
+      note: `COD action: ${data.action}. ${data.notes || ""}`.trim(),
+    });
+
+    const { data: updatedOrder, error: updateErr } = await supabase
+      .from("orders")
+      .update({
+        cod_details: codDetails,
+        order_status: newOrderStatus,
+        payment_status: newPaymentStatus,
+        shipping_details: shippingDetails,
+        status_history: statusHistory,
+      })
+      .eq("id", order.id)
+      .select("*")
+      .single();
+
+    if (updateErr || !updatedOrder) {
+      throw new Error(`Failed to update COD order: ${updateErr?.message || "Unknown error"}`);
+    }
 
     if (data.action === "ACCEPT" || data.action === "MARK_VERIFIED") {
       try {
-        await createInvoiceForOrder(order.orderNumber);
+        await createInvoiceForOrder(updatedOrder.order_number);
       } catch (invErr) {
-        console.error("Invoice auto-generation error on COD accept:", invErr);
+        console.error("Invoice generation error on COD verification:", invErr);
       }
       try {
-        await NotificationService.sendOrderConfirmation(order);
-        await NotificationService.sendInvoice(order);
+        await NotificationService.sendOrderConfirmation(updatedOrder);
       } catch (notifErr) {
-        console.error("WhatsApp notification error on COD accept:", notifErr);
-      }
-    } else if (data.action === "DISPATCH") {
-      try {
-        await NotificationService.sendDispatchDetails(order);
-      } catch (notifErr) {
-        console.error("WhatsApp notification error on COD dispatch:", notifErr);
+        console.error("WhatsApp notification error:", notifErr);
       }
     }
 
+    await logAdminAudit({
+      action: `COD_${data.action}`,
+      actor: user,
+      resource: {
+        type: "COD_ORDER",
+        id: updatedOrder.id,
+        identifier: updatedOrder.order_number,
+      },
+      details: {
+        action: data.action,
+        codStatus: codDetails.codStatus,
+        orderStatus: updatedOrder.order_status,
+        notes: data.notes || data.rejectionReason || data.cancellationReason,
+      },
+      req,
+    });
+
     return apiSuccess(
       {
-        orderNumber: order.orderNumber,
-        codDetails: order.codDetails,
-        orderStatus: order.orderStatus,
-        paymentStatus: order.paymentStatus,
+        orderNumber: updatedOrder.order_number,
+        codDetails: updatedOrder.cod_details,
+        orderStatus: updatedOrder.order_status,
+        paymentStatus: updatedOrder.payment_status,
       },
-      `COD action "${data.action}" processed successfully.`
+      `COD action ${data.action} processed successfully.`
     );
   } catch (error) {
     return handleApiError(error);

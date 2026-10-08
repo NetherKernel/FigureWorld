@@ -1,13 +1,9 @@
 import fs from "fs/promises";
 import path from "path";
-import { connectToDatabase } from "./db";
-import { Invoice, IInvoice } from "@/models/Invoice";
-import { Order } from "@/models/Order";
-import { OrderItem } from "@/models/OrderItem";
-import { Address } from "@/models/Address";
+import { supabase } from "./supabase";
 import { logger } from "./logger";
 import { sendInvoiceEmail } from "./email";
-import { NotFoundError, ConflictError } from "./errors";
+import { NotFoundError } from "./errors";
 import { renderInvoicePdf } from "./invoice-pdf";
 
 export { renderInvoicePdf };
@@ -27,29 +23,23 @@ export const STORE_DETAILS = {
 /**
  * Generates an authoritative server-side sequential invoice number.
  * Format: FW-INV-YYYY-XXXX (e.g. FW-INV-2026-0001)
- * NEVER accepts or trusts client-supplied invoice numbers!
  */
 export async function generateServerInvoiceNumber(): Promise<string> {
-  await connectToDatabase();
   const currentYear = new Date().getFullYear();
-  const count = await Invoice.countDocuments();
-  const sequence = String(count + 1).padStart(4, "0");
+  const { count } = await supabase.from("invoices").select("*", { count: "exact", head: true });
+  const sequence = String((count || 0) + 1).padStart(4, "0");
   return `FW-INV-${currentYear}-${sequence}`;
 }
 
 /**
  * Calculates GST breakdown based on destination state.
  * Standard Anime Collectibles HSN: 95030090 (18% GST).
- * Intra-state (MH -> MH): CGST 9% + SGST 9%
- * Inter-state (MH -> outside): IGST 18%
  */
 export function calculateGstBreakdown(subtotal: number, customerState: string) {
-  const isMaharashtra =
-    customerState.toLowerCase().trim() === "maharashtra" ||
-    customerState.toLowerCase().trim() === "mh";
+  const stateStr = (customerState || "").toLowerCase().trim();
+  const isMaharashtra = stateStr === "maharashtra" || stateStr === "mh";
 
   const gstRate = 18;
-  // Compute taxable amount assuming retail subtotal is inclusive of GST
   const taxableSubtotal = Math.round((subtotal / (1 + gstRate / 100)) * 100) / 100;
   const totalTax = Math.round((subtotal - taxableSubtotal) * 100) / 100;
 
@@ -90,95 +80,94 @@ export function calculateGstBreakdown(subtotal: number, customerState: string) {
   }
 }
 
-
 /**
- * Creates and stores an authoritative invoice for a confirmed order.
- * Generates server-side numbering, renders PDF, saves to disk & DB,
- * and triggers customer dispatch.
+ * Creates and stores an authoritative invoice for a confirmed order in Supabase PostgreSQL.
  */
 export async function createInvoiceForOrder(
   orderIdentifier: string,
   options?: { sendCustomerEmail?: boolean }
-): Promise<IInvoice> {
-  await connectToDatabase();
-
-  // Find order
-  let order: any = null;
+): Promise<any> {
   const cleanId = orderIdentifier.trim();
 
-  if (cleanId.match(/^[0-9a-fA-F]{24}$/)) {
-    order = await Order.findById(cleanId);
+  // Find order in Supabase
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+  let supaQuery = supabase.from("orders").select("*");
+  if (isUuid) {
+    supaQuery = supaQuery.eq("id", cleanId);
+  } else {
+    supaQuery = supaQuery.eq("order_number", cleanId.toUpperCase());
   }
-  if (!order) {
-    order = await Order.findOne({ orderNumber: cleanId.toUpperCase() });
-  }
+
+  const { data: order } = await supaQuery.maybeSingle();
 
   if (!order) {
     throw new NotFoundError(`Order "${cleanId}" not found for invoice generation.`);
   }
 
-  // Check if invoice already exists
-  const existingInvoice = await Invoice.findOne({ order: order._id });
+  // Check if invoice already exists in Supabase
+  const { data: existingInvoice } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("order_number", order.order_number)
+    .maybeSingle();
+
   if (existingInvoice) {
     return existingInvoice;
   }
 
-  // Fetch items & address
-  const items = await OrderItem.find({ order: order._id });
-  const address = await Address.findById(order.shippingAddress);
-
-  if (!address) {
-    throw new NotFoundError("Order shipping address record not found.");
-  }
+  const shippingAddr = order.shipping_address || {};
+  const customerDetails = order.customer_details || {};
+  const pricing = order.pricing || { subtotal: 0, grandTotal: 0, shippingFee: 0 };
+  const items = Array.isArray(order.items) ? order.items : [];
 
   // Generate authoritative server-side invoice number
   const invoiceNumber = await generateServerInvoiceNumber();
 
   // Calculate GST tax breakdown
-  const gst = calculateGstBreakdown(order.pricing.subtotal, address.state);
+  const gst = calculateGstBreakdown(pricing.subtotal || 0, shippingAddr.state || "Maharashtra");
 
   // Build items data
   const invoiceItems = items.map((it: any) => {
-    const itemTaxable = Math.round((it.total / 1.18) * 100) / 100;
-    const itemTax = Math.round((it.total - itemTaxable) * 100) / 100;
+    const itemTotal = it.total || it.price * (it.quantity || 1);
+    const itemTaxable = Math.round((itemTotal / 1.18) * 100) / 100;
+    const itemTax = Math.round((itemTotal - itemTaxable) * 100) / 100;
     return {
-      product: it.product,
-      productTitle: it.productTitle,
-      productSku: it.productSku,
+      productTitle: it.title || it.name || "Anime Collectible",
+      productSku: it.sku || "",
       hsn: "95030090",
-      quantity: it.quantity,
-      unitPrice: it.unitPrice,
-      discount: it.discountAmount || 0,
+      quantity: it.quantity || 1,
+      unitPrice: it.price || it.unitPrice || 0,
+      discount: 0,
       taxableAmount: itemTaxable,
       taxRate: 18,
       taxAmount: itemTax,
-      total: it.total,
+      total: itemTotal,
     };
   });
 
   const invoiceData: any = {
     invoiceNumber,
-    order: order._id,
-    orderNumber: order.orderNumber,
-    customer: order.customer,
+    orderId: order.id,
+    orderNumber: order.order_number,
+    customerId: order.user_id,
     customerDetails: {
-      name: address.fullName,
-      email: order.customerEmail,
-      phone: address.phone,
+      name: customerDetails.name || shippingAddr.fullName || "Customer",
+      email: customerDetails.email || "",
+      phone: customerDetails.phone || shippingAddr.phone || "",
       shippingAddress: {
-        street: address.streetLine1,
-        landmark: address.landmark,
-        city: address.city,
-        state: address.state,
-        pinCode: address.postalCode,
-        country: address.country || "India",
+        street: shippingAddr.address || shippingAddr.streetLine1 || "",
+        landmark: shippingAddr.landmark || "",
+        city: shippingAddr.city || "",
+        state: shippingAddr.state || "",
+        pinCode: shippingAddr.postalCode || shippingAddr.pinCode || "",
+        country: shippingAddr.country || "India",
       },
     },
     storeDetails: STORE_DETAILS,
     gstDetails: {
       isApplicable: true,
       gstin: STORE_DETAILS.gstin,
-      state: address.state,
+      state: shippingAddr.state || "Maharashtra",
       stateCode: gst.stateCode,
       hsnCode: "95030090",
       cgstRate: gst.cgstRate,
@@ -191,62 +180,81 @@ export async function createInvoiceForOrder(
     },
     items: invoiceItems,
     pricing: {
-      subtotal: order.pricing.subtotal,
-      discountTotal: order.pricing.discountTotal || 0,
+      subtotal: pricing.subtotal || 0,
+      discountTotal: pricing.discountTotal || 0,
       taxTotal: gst.totalTax,
-      shippingFee: order.pricing.shippingFee,
-      grandTotal: order.pricing.grandTotal,
+      shippingFee: pricing.shippingFee || 0,
+      grandTotal: pricing.grandTotal || 0,
       currency: "INR",
     },
-    paymentMethod: order.paymentMethod,
-    paymentStatus: order.paymentStatus,
-    paymentRef: order.paymentDetails?.transactionRef || undefined,
-    // Served only through the signed-in /api/invoices/:n/pdf route, never from /public
+    paymentMethod: order.payment_method || "COD",
+    paymentStatus: order.payment_status || "PENDING",
+    paymentRef: order.payment_ref || order.payment_details?.transactionRef || "",
     pdfUrl: `/api/invoices/${invoiceNumber}/pdf`,
     pdfPath: path.join(process.cwd(), "storage", "invoices", `${invoiceNumber}.pdf`),
     sentToCustomer: false,
-    issuedAt: new Date(),
+    issuedAt: new Date().toISOString(),
   };
 
   // Render vector PDF
-  const pdfBytes = await renderInvoicePdf(invoiceData);
+  try {
+    const pdfBytes = await renderInvoicePdf(invoiceData);
+    const invoiceDir = path.join(process.cwd(), "storage", "invoices");
+    await fs.mkdir(invoiceDir, { recursive: true });
+    await fs.writeFile(invoiceData.pdfPath, Buffer.from(pdfBytes));
+    logger.info(`Generated PDF invoice: ${invoiceData.pdfPath}`);
+  } catch (pdfErr) {
+    logger.error("Failed to generate PDF invoice:", undefined, pdfErr);
+  }
 
-  // Ensure storage directory exists
-  const invoiceDir = path.join(process.cwd(), "storage", "invoices");
-  await fs.mkdir(invoiceDir, { recursive: true });
+  // Insert into Supabase invoices table
+  const { data: createdInvoice, error: invErr } = await supabase
+    .from("invoices")
+    .insert({
+      invoice_number: invoiceNumber,
+      order_id: order.id,
+      order_number: order.order_number,
+      customer_id: order.user_id,
+      customer_details: invoiceData.customerDetails,
+      store_details: invoiceData.storeDetails,
+      gst_details: invoiceData.gstDetails,
+      items: invoiceData.items,
+      pricing: invoiceData.pricing,
+      payment_method: invoiceData.paymentMethod,
+      payment_status: invoiceData.paymentStatus,
+      payment_ref: invoiceData.paymentRef,
+      pdf_url: invoiceData.pdfUrl,
+      sent_to_customer: false,
+      issued_at: invoiceData.issuedAt,
+    })
+    .select("*")
+    .single();
 
-  // Write PDF file to disk
-  await fs.writeFile(invoiceData.pdfPath, Buffer.from(pdfBytes));
-  logger.info(`Generated PDF invoice: ${invoiceData.pdfPath}`);
+  if (invErr) {
+    logger.error("Error saving invoice to Supabase:", undefined, invErr);
+  }
 
-  // Create Invoice record in MongoDB
-  const createdInvoice = await Invoice.create(invoiceData);
-
-  // Link invoice back to Order
-  order.invoiceNumber = invoiceNumber;
-  order.invoiceId = createdInvoice._id;
-  await order.save();
-
-  // Send to customer
+  // Send to customer if requested
   const shouldSend = options?.sendCustomerEmail !== false;
-  if (shouldSend) {
+  if (shouldSend && invoiceData.customerDetails.email) {
     try {
       await sendInvoiceEmail({
-        customerEmail: order.customerEmail,
-        customerName: address.fullName,
+        customerEmail: invoiceData.customerDetails.email,
+        customerName: invoiceData.customerDetails.name,
         invoiceNumber,
-        orderNumber: order.orderNumber,
-        grandTotal: order.pricing.grandTotal,
+        orderNumber: order.order_number,
+        grandTotal: pricing.grandTotal,
         pdfUrl: invoiceData.pdfUrl,
         pdfPath: invoiceData.pdfPath,
       });
-      createdInvoice.sentToCustomer = true;
-      createdInvoice.sentAt = new Date();
-      await createdInvoice.save();
+      await supabase
+        .from("invoices")
+        .update({ sent_to_customer: true, sent_at: new Date().toISOString() })
+        .eq("invoice_number", invoiceNumber);
     } catch (emailErr) {
       logger.error("Failed to send invoice email to customer:", { error: String(emailErr) });
     }
   }
 
-  return createdInvoice;
+  return createdInvoice || invoiceData;
 }

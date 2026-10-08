@@ -1,9 +1,5 @@
 import { z } from "zod";
-import mongoose from "mongoose";
-import { connectToDatabase } from "@/lib/db";
-import { Order } from "@/models/Order";
-import { OrderItem } from "@/models/OrderItem";
-import { Product } from "@/models/Product";
+import { supabase } from "@/lib/supabase";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
 import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
@@ -11,7 +7,7 @@ import { validateRequestBody } from "@/lib/validation";
 import { createInvoiceForOrder } from "@/lib/invoice";
 import { NotificationService } from "@/lib/notifications";
 import { logAdminAudit } from "@/lib/audit";
-import { supabase } from "@/lib/supabase";
+import { findSupabaseOrder, restockSupabaseOrderItems } from "@/lib/orders-supabase";
 
 const updateStatusSchema = z.object({
   status: z.enum([
@@ -27,7 +23,7 @@ const updateStatusSchema = z.object({
     "RETURN_REQUESTED",
     "RETURNED",
     "REFUNDED",
-    // Also accept lowercase aliases if sent by existing integrations
+    // lowercase aliases
     "pending",
     "confirmed",
     "processing",
@@ -60,23 +56,10 @@ export async function PATCH(
     }
 
     const data = await validateRequestBody(req, updateStatusSchema);
-
-    await connectToDatabase();
-
-    const cleanIdentifier = orderNumber.trim();
-    let order: any = null;
-
-    if (mongoose.Types.ObjectId.isValid(cleanIdentifier)) {
-      order = await Order.findById(cleanIdentifier);
-    }
-    if (!order) {
-      order = await Order.findOne({
-        orderNumber: { $regex: new RegExp(`^${cleanIdentifier}$`, "i") },
-      });
-    }
+    const order = await findSupabaseOrder(orderNumber);
 
     if (!order) {
-      throw new NotFoundError(`Order "${cleanIdentifier}" not found.`);
+      throw new NotFoundError(`Order "${orderNumber}" not found.`);
     }
 
     // Normalize incoming status to canonical uppercase
@@ -84,95 +67,43 @@ export async function PATCH(
     if (targetStatus === "SHIPPED") targetStatus = "DISPATCHED";
     if (targetStatus === "PENDING") targetStatus = "PENDING_PAYMENT";
 
-    const prevStatus = order.orderStatus;
+    const prevStatus = order.order_status;
     const isAlreadyCancelled = ["CANCELLED", "cancelled"].includes(prevStatus);
-
-    const restockOrderProducts = async () => {
-      const orderItems = await OrderItem.find({ order: order._id });
-      for (const item of orderItems) {
-        if (!item.product) continue;
-        const prodIdStr = item.product.toString().trim();
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(prodIdStr);
-        const isObjectId = mongoose.Types.ObjectId.isValid(prodIdStr) && /^[0-9a-fA-F]{24}$/.test(prodIdStr);
-
-        let foundSku = item.productSku || null;
-        let foundSlug: string | null = null;
-
-        // 1. Supabase restock
-        try {
-          let supaQ = supabase.from("products").select("id, stock, sku, slug");
-          if (isUuid) {
-            supaQ = supaQ.eq("id", prodIdStr);
-          } else if (foundSku) {
-            supaQ = supaQ.eq("sku", foundSku);
-          }
-          const { data: supaP } = await supaQ.maybeSingle();
-          if (supaP) {
-            foundSku = supaP.sku || foundSku;
-            foundSlug = supaP.slug;
-            const newStock = (supaP.stock || 0) + item.quantity;
-            await supabase.from("products").update({ stock: newStock }).eq("id", supaP.id);
-          }
-        } catch (err) {
-          console.error("Error restocking product in Supabase:", err);
-        }
-
-        // 2. MongoDB restock
-        try {
-          let mongoFilter: any = null;
-          if (isObjectId) {
-            mongoFilter = { _id: prodIdStr };
-          } else if (foundSku) {
-            mongoFilter = { sku: foundSku };
-          } else if (foundSlug) {
-            mongoFilter = { slug: foundSlug };
-          }
-          if (mongoFilter) {
-            await Product.findOneAndUpdate(mongoFilter, { $inc: { stock: item.quantity } });
-          }
-        } catch (err) {
-          console.error("Error restocking product in MongoDB:", err);
-        }
-      }
-    };
 
     // 1. Stock restoration if moving to CANCELLED (and wasn't already cancelled)
     if (targetStatus === "CANCELLED" && !isAlreadyCancelled) {
-      await restockOrderProducts();
+      await restockSupabaseOrderItems(order);
     }
 
     // 2. Stock restoration if moving to RETURNED (restock inventory)
     if (targetStatus === "RETURNED" && (data.restockInventory !== false)) {
-      await restockOrderProducts();
+      await restockSupabaseOrderItems(order);
     }
+
+    let paymentStatus = order.payment_status;
+    const shippingDetails = order.shipping_details || {};
+    const codDetails = order.cod_details || {};
 
     // 3. Status-specific updates
     if (targetStatus === "DISPATCHED") {
-      if (!order.shipmentDetails) {
-        order.shipmentDetails = {};
+      if (!shippingDetails.dispatchedAt) {
+        shippingDetails.dispatchedAt = new Date().toISOString();
       }
-      if (!order.shipmentDetails.dispatchedAt) {
-        order.shipmentDetails.dispatchedAt = new Date();
-      }
-      if (order.codDetails) {
-        order.codDetails.codStatus = "DISPATCHED";
-        if (!order.codDetails.dispatchedAt) {
-          order.codDetails.dispatchedAt = new Date();
+      if (codDetails) {
+        codDetails.codStatus = "DISPATCHED";
+        if (!codDetails.dispatchedAt) {
+          codDetails.dispatchedAt = new Date().toISOString();
         }
       }
       try {
-        await NotificationService.sendDispatchDetails(order);
+        await NotificationService.sendDispatchDetails({ ...order, shipmentDetails: shippingDetails });
       } catch (notifErr) {
         console.error("WhatsApp dispatch notification error:", notifErr);
       }
     } else if (targetStatus === "DELIVERED") {
-      if (!order.shipmentDetails) {
-        order.shipmentDetails = {};
-      }
-      order.shipmentDetails.deliveredAt = new Date();
-      // If COD and payment was PENDING, doorstep delivery means cash collected
-      if (order.paymentMethod === "COD" && order.paymentStatus === "PENDING") {
-        order.paymentStatus = "PAID";
+      shippingDetails.deliveredAt = new Date().toISOString();
+      if (order.payment_method === "COD" && paymentStatus === "PENDING") {
+        paymentStatus = "PAID";
       }
       try {
         await NotificationService.sendDeliveryUpdate(order);
@@ -180,14 +111,13 @@ export async function PATCH(
         console.error("WhatsApp delivery notification error:", notifErr);
       }
     } else if (targetStatus === "CONFIRMED") {
-      if (order.codDetails && order.codDetails.codStatus === "PENDING_VERIFICATION") {
-        order.codDetails.codStatus = "VERIFIED";
-        order.codDetails.verifiedAt = new Date();
-        order.codDetails.verifiedBy = user.userId;
+      if (codDetails && codDetails.codStatus === "PENDING_VERIFICATION") {
+        codDetails.codStatus = "VERIFIED";
+        codDetails.verifiedAt = new Date().toISOString();
+        codDetails.verifiedBy = user.userId;
       }
-      // Trigger automatic invoice generation on confirmation
       try {
-        await createInvoiceForOrder(order.orderNumber);
+        await createInvoiceForOrder(order.order_number);
       } catch (invErr) {
         console.error("Invoice auto-generation error:", invErr);
       }
@@ -200,27 +130,35 @@ export async function PATCH(
     }
 
     // 4. Update status and append to status history
-    order.orderStatus = targetStatus;
-    if (!order.statusHistory) {
-      order.statusHistory = [];
-    }
-
-    order.statusHistory.push({
+    const statusHistory = Array.isArray(order.status_history) ? [...order.status_history] : [];
+    statusHistory.push({
       status: targetStatus,
-      changedAt: new Date(),
+      changedAt: new Date().toISOString(),
       changedBy: user.userId,
       notes: data.notes || `Order status updated to ${targetStatus} by ${user.role.toLowerCase()}`,
     });
 
-    await order.save();
+    const { error: updErr } = await supabase
+      .from("orders")
+      .update({
+        order_status: targetStatus,
+        payment_status: paymentStatus,
+        shipping_details: shippingDetails,
+        cod_details: codDetails,
+        status_history: statusHistory,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", order.id);
+
+    if (updErr) throw updErr;
 
     await logAdminAudit({
       action: "ORDER_STATUS_UPDATE",
       actor: user,
       resource: {
         type: "ORDER",
-        id: order._id.toString(),
-        identifier: order.orderNumber,
+        id: order.id,
+        identifier: order.order_number,
       },
       details: {
         previousStatus: prevStatus,
@@ -232,11 +170,11 @@ export async function PATCH(
 
     return apiSuccess(
       {
-        orderNumber: order.orderNumber,
+        orderNumber: order.order_number,
         previousStatus: prevStatus,
-        orderStatus: order.orderStatus,
-        paymentStatus: order.paymentStatus,
-        statusHistory: order.statusHistory,
+        orderStatus: targetStatus,
+        paymentStatus: paymentStatus,
+        statusHistory: statusHistory,
       },
       `Order status successfully updated to ${targetStatus}.`
     );

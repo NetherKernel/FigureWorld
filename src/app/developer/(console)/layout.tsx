@@ -27,7 +27,7 @@ export default function DeveloperLayout({ children }: { children: React.ReactNod
   const current = NAV_ITEMS.find((i) => (i.href === "/developer" ? pathname === i.href : pathname.startsWith(i.href)));
 
   return (
-    <div className="min-h-screen bg-bg flex flex-col md:flex-row">
+    <div className="min-h-screen flex flex-col md:flex-row">
       {/* Mobile header */}
       <div className="flex md:hidden items-center justify-between px-4 py-3 bg-ink text-white border-b border-white/5">
         <div className="flex items-center gap-2.5">
@@ -57,7 +57,7 @@ export default function DeveloperLayout({ children }: { children: React.ReactNod
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 h-screen w-64 shrink-0 flex-col justify-between overflow-y-auto border-r border-white/5 bg-ink text-white p-4 md:sticky md:top-0 md:z-10 md:h-screen md:flex ${
+        className={`fixed inset-y-0 left-0 z-50 h-screen w-64 shrink-0 flex-col justify-between overflow-y-auto surface-ink !border-y-0 !border-l-0 text-white p-4 md:sticky md:top-0 md:z-10 md:h-screen md:flex ${
           mobileMenuOpen ? "flex animate-fade-in" : "hidden md:flex"
         }`}
       >
@@ -139,7 +139,7 @@ export default function DeveloperLayout({ children }: { children: React.ReactNod
           </div>
         </header>
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">{children}</main>
+        <main className="flex-1 animate-page-in p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">{children}</main>
       </div>
     </div>
   );

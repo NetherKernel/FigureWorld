@@ -1,6 +1,5 @@
-import { connectToDatabase } from "@/lib/db";
+import { supabase } from "@/lib/supabase";
 import { logger } from "@/lib/logger";
-import { SiteContent } from "@/models/SiteContent";
 import type { AuthTokenPayload } from "@/lib/auth";
 import { DEFAULT_LANDING_CONFIG, LandingConfig, normalizeLandingConfig } from "./config";
 
@@ -42,9 +41,19 @@ function toState(doc: StoredDoc | null): LandingState {
   };
 }
 
-async function findDoc() {
-  await connectToDatabase();
-  return SiteContent.findOne({ key: LANDING_KEY });
+async function findDoc(): Promise<StoredDoc | null> {
+  try {
+    const { data } = await supabase
+      .from("site_contents")
+      .select("content")
+      .eq("key", LANDING_KEY)
+      .maybeSingle();
+
+    return (data?.content as StoredDoc) || null;
+  } catch (err) {
+    logger.error("Failed to query site_contents in Supabase:", undefined, err);
+    return null;
+  }
 }
 
 /** What visitors see. Never throws — falls back to the built-in layout. */
@@ -59,30 +68,47 @@ export async function getPublishedLanding(): Promise<LandingConfig> {
 }
 
 export async function getLandingState(): Promise<LandingState> {
-  return toState((await findDoc()) as StoredDoc | null);
+  return toState(await findDoc());
 }
 
 async function upsert(fields: Record<string, unknown>) {
-  const doc = await findDoc();
-  if (!doc) {
-    await SiteContent.create({ key: LANDING_KEY, published: DEFAULT_LANDING_CONFIG, ...fields });
-  } else {
-    // Works for both Mongoose documents and the in-memory dev fallback
-    Object.assign(doc, fields);
-    // Mixed paths aren't change-tracked by Mongoose
-    doc.markModified?.("draft");
-    doc.markModified?.("published");
-    await doc.save();
+  const existing = await findDoc();
+  const merged = {
+    published: DEFAULT_LANDING_CONFIG,
+    ...(existing || {}),
+    ...fields,
+  };
+
+  try {
+    const { data: row } = await supabase
+      .from("site_contents")
+      .select("id")
+      .eq("key", LANDING_KEY)
+      .maybeSingle();
+
+    if (row?.id) {
+      await supabase
+        .from("site_contents")
+        .update({ content: merged })
+        .eq("id", row.id);
+    } else {
+      await supabase
+        .from("site_contents")
+        .insert({ key: LANDING_KEY, content: merged });
+    }
+  } catch (err) {
+    logger.error("Failed to upsert landing in Supabase:", undefined, err);
   }
+
   return getLandingState();
 }
 
 export function saveLandingDraft(config: LandingConfig, user: AuthTokenPayload) {
-  return upsert({ draft: config, draftUpdatedAt: new Date(), draftUpdatedBy: editor(user) });
+  return upsert({ draft: config, draftUpdatedAt: new Date().toISOString(), draftUpdatedBy: editor(user) });
 }
 
 export function publishLanding(config: LandingConfig, user: AuthTokenPayload) {
-  const now = new Date();
+  const now = new Date().toISOString();
   return upsert({
     draft: config,
     published: config,
@@ -95,5 +121,5 @@ export function publishLanding(config: LandingConfig, user: AuthTokenPayload) {
 
 export async function discardLandingDraft(user: AuthTokenPayload) {
   const { published } = await getLandingState();
-  return upsert({ draft: published, draftUpdatedAt: new Date(), draftUpdatedBy: editor(user) });
+  return upsert({ draft: published, draftUpdatedAt: new Date().toISOString(), draftUpdatedBy: editor(user) });
 }
