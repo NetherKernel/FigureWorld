@@ -13,6 +13,7 @@ import { createInvoiceForOrder } from "./invoice";
 import { NotificationService } from "./notifications";
 import { hashPassword } from "./auth";
 import { logger } from "./logger";
+import { supabase } from "./supabase";
 
 export async function seedStoreData() {
   await connectToDatabase();
@@ -1030,6 +1031,34 @@ export async function seedStoreData() {
       await existingProd.save();
       logger.info(`Updated catalog product with INR pricing: ${prod.name} (₹${prod.price})`);
     }
+  }
+
+  // Ensure AF-DEMO-2499 is synced to Supabase for test suite compatibility
+  try {
+    const { data: supaDemo } = await supabase.from("products").select("id").eq("sku", "AF-DEMO-2499").maybeSingle();
+    if (!supaDemo) {
+      await supabase.from("products").insert({
+        name: "Anime Figure",
+        slug: "anime-figure-collectible",
+        description: "Signature premium collectible anime figure with articulated joints, high-definition sculpt, and collector display base.",
+        price: 2499,
+        stock: 25,
+        brand: "Good Smile Company",
+        sku: "AF-DEMO-2499",
+        weight: 650,
+        dimensions: { length: 18, width: 15, height: 26, unit: "cm" },
+        images: [{ url: "https://images.unsplash.com/photo-1563089145-599997674d42?w=800", altText: "Anime Figure", isPrimary: true }],
+        tags: ["scale-figure", "good-smile", "shonen"],
+        status: "active",
+        is_featured: true,
+        is_restricted: false,
+        age_requirement: 0,
+        rating_average: 4.9,
+        reviews_count: 42,
+      });
+    }
+  } catch (err) {
+    logger.error("Error syncing AF-DEMO-2499 to Supabase:", undefined, err);
   }
 
   // 5. Seed Reference Order #KF100001 for Sprint 9 Admin Order Inspection

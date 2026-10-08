@@ -100,10 +100,19 @@ export const STORE_CATEGORIES: StoreCategoryItem[] = [
     ],
   },
   {
+    label: "Anime Figures",
+    slug: "anime-figures",
+    subcategories: [
+      { label: "Scale Figures", slug: "scale-figures" },
+      { label: "Chibi & Mini Figures", slug: "chibi-figures" },
+    ],
+  },
+  {
     label: "Collectibles & Statues",
     slug: "collectibles",
     subcategories: [
       { label: "Resin Statues", slug: "resin-statues" },
+      { label: "Bobbleheads", slug: "bobbleheads" },
       { label: "Scale Figures", slug: "scale-figures" },
       { label: "Dioramas & Busts", slug: "dioramas-busts" },
       { label: "Limited Editions", slug: "limited-editions" },
@@ -117,6 +126,16 @@ export const STORE_CATEGORIES: StoreCategoryItem[] = [
       { label: "Nichirin Blades", slug: "nichirin-blades", restricted: true },
       { label: "Samurai Katanas", slug: "samurai-swords", restricted: true },
       { label: "Cosplay & Foam Swords", slug: "cosplay-swords" },
+    ],
+  },
+  {
+    label: "Keychains & Accessories",
+    slug: "keychains",
+    subcategories: [
+      { label: "3D Keychains", slug: "3d-keychains" },
+      { label: "Acrylic Keychains", slug: "acrylic-keychains" },
+      { label: "Metal Weapon Props", slug: "metal-weapons" },
+      { label: "Enamel Pins", slug: "enamel-pins" },
     ],
   },
   {
@@ -135,15 +154,6 @@ export const STORE_CATEGORIES: StoreCategoryItem[] = [
       { label: "Shonen Manga", slug: "shonen-manga" },
       { label: "Seinen Manga", slug: "seinen-manga" },
       { label: "Artbooks & Guidebooks", slug: "artbooks" },
-    ],
-  },
-  {
-    label: "Accessories & Keychains",
-    slug: "accessories",
-    subcategories: [
-      { label: "Acrylic Keychains", slug: "acrylic-keychains" },
-      { label: "Metal Weapon Props", slug: "metal-weapons" },
-      { label: "Enamel Pins", slug: "enamel-pins" },
     ],
   },
   {

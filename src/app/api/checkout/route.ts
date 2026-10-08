@@ -1,9 +1,11 @@
 import { z } from "zod";
 import crypto from "crypto";
+import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db";
 import { Product } from "@/models/Product";
 import { Category } from "@/models/Category";
 import { Address } from "@/models/Address";
+import { User } from "@/models/User";
 import { Order } from "@/models/Order";
 import { OrderItem } from "@/models/OrderItem";
 import { evaluateCoupon } from "@/lib/coupon";
@@ -135,10 +137,26 @@ export async function POST(req: Request) {
         }
 
         // 3. Destination restrictions verification
-        const categoryDoc = await Category.findById(product.category);
+        let categoryDoc: any = null;
+        try {
+          const catId = typeof product.category === "object" ? product.category._id || product.category.id : product.category;
+          const catSlug = typeof product.category === "object" ? product.category.slug : null;
+
+          if (catId && mongoose.Types.ObjectId.isValid(catId) && /^[0-9a-fA-F]{24}$/.test(catId)) {
+            categoryDoc = await Category.findById(catId);
+          } else if (catSlug) {
+            categoryDoc = await Category.findOne({ slug: catSlug.toLowerCase() });
+          } else if (catId) {
+            categoryDoc = await Category.findOne({ slug: catId.toString().toLowerCase() });
+          }
+        } catch {
+          // Best effort lookup
+        }
+
         const prohibitedRegions: string[] = [
           ...(product.shippingRestrictions || []),
           ...(categoryDoc?.complianceRequirements?.restrictedRegions || []),
+          ...(typeof product.category === "object" && product.category?.complianceRequirements?.restrictedRegions ? product.category.complianceRequirements.restrictedRegions : []),
         ];
 
         const destinationStrings = [
@@ -232,9 +250,20 @@ export async function POST(req: Request) {
       );
     }
 
+    // Resolve valid MongoDB User _id for references
+    let validUserId: any = undefined;
+    if (currentUser?.userId && /^[0-9a-fA-F]{24}$/.test(currentUser.userId)) {
+      validUserId = currentUser.userId;
+    } else if (data.customer?.email) {
+      const mongoUser = await User.findOne({ email: data.customer.email.toLowerCase().trim() });
+      if (mongoUser) {
+        validUserId = mongoUser._id;
+      }
+    }
+
     // 4. Create Shipping Address Record
     const shippingAddress = await Address.create({
-      user: currentUser?.userId || undefined,
+      user: validUserId,
       type: "shipping",
       fullName: data.customer.fullName,
       phone: data.customer.mobileNumber,
@@ -268,7 +297,7 @@ export async function POST(req: Request) {
     // Zero-Trust: Payment status is ALWAYS PENDING; Order status is ALWAYS pending.
     const newOrder = await Order.create({
       orderNumber,
-      customer: currentUser?.userId || undefined,
+      customer: validUserId,
       customerEmail: data.customer.email,
       items: [], // Will populate with OrderItem IDs
       pricing: {
@@ -343,6 +372,11 @@ export async function POST(req: Request) {
       if (typeof itemData.productDoc.save === "function") {
         itemData.productDoc.stock = newStock;
         await itemData.productDoc.save();
+        if (itemData.productDoc.sku) {
+          try {
+            await supabase.from("products").update({ stock: newStock }).eq("sku", itemData.productDoc.sku);
+          } catch {}
+        }
       } else if (itemData.productDoc.id) {
         try {
           await supabase.from("products").update({ stock: newStock }).eq("id", itemData.productDoc.id);

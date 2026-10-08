@@ -285,8 +285,8 @@ function TopCategoriesSection({ section }: { section: SectionOf<"topCategories">
         )}
       </div>
 
-      {/* Grid: 2 columns on mobile (exact match with client reference screenshot), 3 on tablet, 6 on desktop */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-6 lg:gap-5">
+      {/* Grid: 2 columns on mobile (exact match with client reference screenshot), 4 on tablet/laptop, 8 on wide desktop */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 lg:grid-cols-4 xl:grid-cols-8 lg:gap-5">
         {section.items.map((item) => (
           <Link
             key={item.id}

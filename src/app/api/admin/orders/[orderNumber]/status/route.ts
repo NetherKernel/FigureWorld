@@ -11,6 +11,7 @@ import { validateRequestBody } from "@/lib/validation";
 import { createInvoiceForOrder } from "@/lib/invoice";
 import { NotificationService } from "@/lib/notifications";
 import { logAdminAudit } from "@/lib/audit";
+import { supabase } from "@/lib/supabase";
 
 const updateStatusSchema = z.object({
   status: z.enum([
@@ -86,32 +87,63 @@ export async function PATCH(
     const prevStatus = order.orderStatus;
     const isAlreadyCancelled = ["CANCELLED", "cancelled"].includes(prevStatus);
 
-    // 1. Stock restoration if moving to CANCELLED (and wasn't already cancelled)
-    if (targetStatus === "CANCELLED" && !isAlreadyCancelled) {
+    const restockOrderProducts = async () => {
       const orderItems = await OrderItem.find({ order: order._id });
       for (const item of orderItems) {
-        if (item.product) {
-          const prod = await Product.findById(item.product);
-          if (prod) {
-            prod.stock += item.quantity;
-            await prod.save();
+        if (!item.product) continue;
+        const prodIdStr = item.product.toString().trim();
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(prodIdStr);
+        const isObjectId = mongoose.Types.ObjectId.isValid(prodIdStr) && /^[0-9a-fA-F]{24}$/.test(prodIdStr);
+
+        let foundSku = item.productSku || null;
+        let foundSlug: string | null = null;
+
+        // 1. Supabase restock
+        try {
+          let supaQ = supabase.from("products").select("id, stock, sku, slug");
+          if (isUuid) {
+            supaQ = supaQ.eq("id", prodIdStr);
+          } else if (foundSku) {
+            supaQ = supaQ.eq("sku", foundSku);
           }
+          const { data: supaP } = await supaQ.maybeSingle();
+          if (supaP) {
+            foundSku = supaP.sku || foundSku;
+            foundSlug = supaP.slug;
+            const newStock = (supaP.stock || 0) + item.quantity;
+            await supabase.from("products").update({ stock: newStock }).eq("id", supaP.id);
+          }
+        } catch (err) {
+          console.error("Error restocking product in Supabase:", err);
+        }
+
+        // 2. MongoDB restock
+        try {
+          let mongoFilter: any = null;
+          if (isObjectId) {
+            mongoFilter = { _id: prodIdStr };
+          } else if (foundSku) {
+            mongoFilter = { sku: foundSku };
+          } else if (foundSlug) {
+            mongoFilter = { slug: foundSlug };
+          }
+          if (mongoFilter) {
+            await Product.findOneAndUpdate(mongoFilter, { $inc: { stock: item.quantity } });
+          }
+        } catch (err) {
+          console.error("Error restocking product in MongoDB:", err);
         }
       }
+    };
+
+    // 1. Stock restoration if moving to CANCELLED (and wasn't already cancelled)
+    if (targetStatus === "CANCELLED" && !isAlreadyCancelled) {
+      await restockOrderProducts();
     }
 
     // 2. Stock restoration if moving to RETURNED (restock inventory)
     if (targetStatus === "RETURNED" && (data.restockInventory !== false)) {
-      const orderItems = await OrderItem.find({ order: order._id });
-      for (const item of orderItems) {
-        if (item.product) {
-          const prod = await Product.findById(item.product);
-          if (prod) {
-            prod.stock += item.quantity;
-            await prod.save();
-          }
-        }
-      }
+      await restockOrderProducts();
     }
 
     // 3. Status-specific updates

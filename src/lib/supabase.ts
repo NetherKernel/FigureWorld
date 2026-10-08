@@ -28,6 +28,7 @@ export function mapSupabaseCategory(c: any) {
     name: c.name,
     slug: c.slug,
     description: c.description || "",
+    image: c.image || null,
     parentCategory: c.parent_category_id || null,
     displayOrder: c.display_order ?? 0,
     isActive: c.is_active ?? true,

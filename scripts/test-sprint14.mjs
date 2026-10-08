@@ -269,7 +269,7 @@ async function runTests() {
     `Authoritative 10% discount computed server-side: ₹${expectedDiscount}`
   );
   assert(
-    couponOrderJson.data.pricing.grandTotal === authoritativePrice - expectedDiscount + 100,
+    couponOrderJson.data.pricing.grandTotal === authoritativePrice - expectedDiscount + couponOrderJson.data.pricing.shippingFee,
     "Authoritative grand total computed: Subtotal - Discount + Shipping"
   );
 

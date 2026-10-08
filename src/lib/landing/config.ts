@@ -286,28 +286,10 @@ export const DEFAULT_LANDING_CONFIG: LandingConfig = {
       seeAllHref: "/products",
       items: [
         {
-          id: "cat-bobblehead",
-          name: "BOBBLEHEAD",
-          image: "/images/categories/bobblehead.jpg",
-          href: "/products?category=collectibles",
-        },
-        {
-          id: "cat-action-figure",
-          name: "ACTION FIGURE",
+          id: "cat-action-figures",
+          name: "ACTION FIGURES",
           image: "/images/categories/action-figure.jpg",
           href: "/products?category=action-figures",
-        },
-        {
-          id: "cat-3d-keychain",
-          name: "3D KEYCHAIN",
-          image: "/images/categories/3d-keychain.jpg",
-          href: "/products?category=accessories",
-        },
-        {
-          id: "cat-keychains",
-          name: "KEYCHAINS",
-          image: "/images/categories/keychains.jpg",
-          href: "/products?category=accessories",
         },
         {
           id: "cat-katanas",
@@ -316,10 +298,40 @@ export const DEFAULT_LANDING_CONFIG: LandingConfig = {
           href: "/products?category=katanas-replicas",
         },
         {
+          id: "cat-collectibles",
+          name: "COLLECTIBLES",
+          image: "/images/figures/madara-uchiha-susanoo-kurama-resin-statue.jpg",
+          href: "/products?category=collectibles",
+        },
+        {
+          id: "cat-keychains",
+          name: "KEYCHAINS",
+          image: "/images/categories/keychains.jpg",
+          href: "/products?category=keychains",
+        },
+        {
+          id: "cat-bobblehead",
+          name: "BOBBLEHEADS",
+          image: "/images/categories/bobblehead.jpg",
+          href: "/products?category=collectibles&subcategory=bobbleheads",
+        },
+        {
+          id: "cat-3d-keychain",
+          name: "3D KEYCHAINS",
+          image: "/images/categories/3d-keychain.jpg",
+          href: "/products?category=keychains&subcategory=3d-keychains",
+        },
+        {
           id: "cat-resin-statue",
           name: "RESIN STATUES",
           image: "/images/figures/madara-uchiha-susanoo-kurama-resin-statue.jpg",
           href: "/products?category=collectibles&subcategory=resin-statues",
+        },
+        {
+          id: "cat-posters",
+          name: "POSTERS & ART",
+          image: "/images/figures/vegito-weekly-color-32cm-figure.jpg",
+          href: "/products?category=posters",
         },
       ],
     },
@@ -433,12 +445,14 @@ export function createSection(type: SectionType): LandingSection {
         seeAllLabel: "VIEW ALL",
         seeAllHref: "/products",
         items: [
-          { id: newId("cat"), name: "BOBBLEHEAD", image: "/images/categories/bobblehead.jpg", href: "/products?category=collectibles" },
-          { id: newId("cat"), name: "ACTION FIGURE", image: "/images/categories/action-figure.jpg", href: "/products?category=action-figures" },
-          { id: newId("cat"), name: "3D KEYCHAIN", image: "/images/categories/3d-keychain.jpg", href: "/products?category=accessories" },
-          { id: newId("cat"), name: "KEYCHAINS", image: "/images/categories/keychains.jpg", href: "/products?category=accessories" },
+          { id: newId("cat"), name: "ACTION FIGURES", image: "/images/categories/action-figure.jpg", href: "/products?category=action-figures" },
           { id: newId("cat"), name: "KATANAS & REPLICAS", image: "/images/katanas/oni-katana-fs111wt.jpg", href: "/products?category=katanas-replicas" },
+          { id: newId("cat"), name: "COLLECTIBLES", image: "/images/figures/madara-uchiha-susanoo-kurama-resin-statue.jpg", href: "/products?category=collectibles" },
+          { id: newId("cat"), name: "KEYCHAINS", image: "/images/categories/keychains.jpg", href: "/products?category=keychains" },
+          { id: newId("cat"), name: "BOBBLEHEADS", image: "/images/categories/bobblehead.jpg", href: "/products?category=collectibles&subcategory=bobbleheads" },
+          { id: newId("cat"), name: "3D KEYCHAINS", image: "/images/categories/3d-keychain.jpg", href: "/products?category=keychains&subcategory=3d-keychains" },
           { id: newId("cat"), name: "RESIN STATUES", image: "/images/figures/madara-uchiha-susanoo-kurama-resin-statue.jpg", href: "/products?category=collectibles&subcategory=resin-statues" },
+          { id: newId("cat"), name: "POSTERS & ART", image: "/images/figures/vegito-weekly-color-32cm-figure.jpg", href: "/products?category=posters" },
         ],
       };
     case "announcement":
