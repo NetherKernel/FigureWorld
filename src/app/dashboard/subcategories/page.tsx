@@ -182,15 +182,19 @@ export default function SubcategoriesDashboardPage() {
     if (!confirm(`Are you sure you want to delete subcategory "${catName}"?`)) return;
 
     try {
+      setFeedback(null);
       const res = await fetch(`/api/categories/${id}`, { method: "DELETE" });
-      if (res.ok) {
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success !== false) {
         setCategories((prev) => prev.filter((c) => c._id !== id));
         setFeedback({ type: "success", text: `Deleted subcategory "${catName}".` });
       } else {
-        alert("Could not delete subcategory.");
+        const errorMsg = json?.error?.message || json?.message || "Could not delete subcategory.";
+        setFeedback({ type: "error", text: errorMsg });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setFeedback({ type: "error", text: err.message || "Network error deleting subcategory" });
     }
   };
 

@@ -446,11 +446,11 @@ export default function EditProductPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <label className="block font-semibold text-fg-2">
-                Regular Price ($) *
+                Regular Price (₹) *
               </label>
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 min="0"
                 required
                 value={price}
@@ -461,11 +461,11 @@ export default function EditProductPage() {
 
             <div>
               <label className="block font-semibold text-fg-2">
-                Discount Price ($) <span className="font-normal text-muted">(Optional)</span>
+                Discount Price (₹) <span className="font-normal text-muted">(Optional)</span>
               </label>
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 min="0"
                 value={discountPrice}
                 onChange={(e) => setDiscountPrice(e.target.value)}

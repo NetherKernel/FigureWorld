@@ -30,6 +30,7 @@ import { IconButton } from "./fields";
 
 export const SECTION_ICONS: Record<SectionType, LucideIcon> = {
   hero: Images,
+  topCategories: LayoutGrid,
   announcement: Megaphone,
   cardRow: LayoutGrid,
   dealsShelf: BadgePercent,
@@ -44,6 +45,7 @@ export const SECTION_ICONS: Record<SectionType, LucideIcon> = {
 export function sectionTitle(s: LandingSection): string {
   if (s.label) return s.label;
   switch (s.type) {
+    case "topCategories":
     case "dealsShelf":
     case "productShelf":
     case "promoBanner":
@@ -57,6 +59,8 @@ function sectionSummary(s: LandingSection): string {
   switch (s.type) {
     case "hero":
       return `${s.slides.length} slide${s.slides.length === 1 ? "" : "s"}`;
+    case "topCategories":
+      return `${s.items.length} categories`;
     case "cardRow":
       return `${s.cards.length} card${s.cards.length === 1 ? "" : "s"}`;
     case "productShelf":

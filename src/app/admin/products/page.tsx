@@ -207,13 +207,13 @@ export default function AdminProductsPage() {
         method: "DELETE",
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setSuccessMessage(`Successfully deleted "${deleteProductTarget.name}".`);
         setProducts((prev) => prev.filter((p) => p._id !== deleteProductTarget._id));
         setDeleteProductTarget(null);
         setTimeout(() => setSuccessMessage(null), 3500);
       } else {
-        setError(data.message || "Failed to delete product");
+        setError(data.error?.message || data.message || "Failed to delete product");
       }
     } catch (err: any) {
       setError(err.message || "Network error deleting product");
@@ -433,11 +433,11 @@ export default function AdminProductsPage() {
                       <td className="px-4 py-3">
                         <div>
                           <span className="font-bold text-fg">
-                            ${p.price.toFixed(2)}
+                            ₹{p.price.toLocaleString("en-IN")}
                           </span>
                           {p.discountPrice && (
                             <span className="ml-1.5 text-[11px] text-emerald-600 font-semibold line-through opacity-75">
-                              ${p.discountPrice.toFixed(2)}
+                              ₹{p.discountPrice.toLocaleString("en-IN")}
                             </span>
                           )}
                         </div>
@@ -561,13 +561,13 @@ export default function AdminProductsPage() {
             <form onSubmit={handleSaveQuickEdit} className="mt-5 space-y-4 text-xs">
               <div>
                 <label className="block font-semibold text-fg-2">
-                  Regular Price ($) *
+                  Regular Price (₹) *
                 </label>
                 <div className="relative mt-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted font-bold">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted font-bold">₹</span>
                   <input
                     type="number"
-                    step="0.01"
+                    step="1"
                     min="0"
                     required
                     value={editPrice}
@@ -579,13 +579,13 @@ export default function AdminProductsPage() {
 
               <div>
                 <label className="block font-semibold text-fg-2">
-                  Discount Price ($) <span className="font-normal text-muted">(Optional)</span>
+                  Discount Price (₹) <span className="font-normal text-muted">(Optional)</span>
                 </label>
                 <div className="relative mt-1">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted font-bold">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted font-bold">₹</span>
                   <input
                     type="number"
-                    step="0.01"
+                    step="1"
                     min="0"
                     value={editDiscountPrice}
                     onChange={(e) => setEditDiscountPrice(e.target.value)}

@@ -182,15 +182,19 @@ export default function DashboardCategoriesPage() {
     if (!confirm(`Are you sure you want to delete category "${catName}"?`)) return;
 
     try {
+      setFeedback(null);
       const res = await fetch(`/api/categories/${id}`, { method: "DELETE" });
-      if (res.ok) {
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success !== false) {
         setCategories((prev) => prev.filter((c) => c._id !== id));
         setFeedback({ type: "success", text: `Deleted "${catName}".` });
       } else {
-        alert("Could not delete category.");
+        const errorMsg = json?.error?.message || json?.message || "Could not delete category.";
+        setFeedback({ type: "error", text: errorMsg });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setFeedback({ type: "error", text: err.message || "Network error deleting category" });
     }
   };
 

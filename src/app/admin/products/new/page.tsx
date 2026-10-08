@@ -461,31 +461,31 @@ export default function NewProductPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <label className="block font-semibold text-fg-2">
-                Regular Price ($) *
+                Regular Price (₹) *
               </label>
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 min="0"
                 required
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                placeholder="149.99"
+                placeholder="2499"
                 className="mt-1 w-full rounded-xl border border-line bg-bg py-2 px-3 font-semibold text-fg focus:border-brand focus:bg-surface focus:outline-none"
               />
             </div>
 
             <div>
               <label className="block font-semibold text-fg-2">
-                Discount Price ($) <span className="font-normal text-muted">(Optional)</span>
+                Discount Price (₹) <span className="font-normal text-muted">(Optional)</span>
               </label>
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 min="0"
                 value={discountPrice}
                 onChange={(e) => setDiscountPrice(e.target.value)}
-                placeholder="129.99"
+                placeholder="1999"
                 className="mt-1 w-full rounded-xl border border-line bg-bg py-2 px-3 font-semibold text-fg focus:border-brand focus:bg-surface focus:outline-none"
               />
             </div>

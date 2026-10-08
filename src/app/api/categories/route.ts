@@ -179,23 +179,77 @@ export async function POST(req: Request) {
       throw new ConflictError("A category with this slug already exists.");
     }
 
-    // Validate parent category if provided
+    // Resolve parent category for both databases if provided
     let parentCategoryId: mongoose.Types.ObjectId | undefined = undefined;
+    let parentSupaId: string | null = null;
+
     if (data.parentCategory && data.parentCategory.trim()) {
       const cleanParent = data.parentCategory.trim();
-      let parentDoc = null;
-      if (mongoose.Types.ObjectId.isValid(cleanParent)) {
-        parentDoc = await Category.findById(cleanParent);
+      const isParentUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanParent);
+      const isParentObjectId = mongoose.Types.ObjectId.isValid(cleanParent) && /^[0-9a-fA-F]{24}$/.test(cleanParent);
+
+      let parentSlug: string | null = null;
+
+      if (isParentUuid) {
+        parentSupaId = cleanParent;
+        const { data: supaP } = await supabase.from("categories").select("id, slug").eq("id", cleanParent).maybeSingle();
+        if (supaP) {
+          parentSlug = supaP.slug;
+        }
+      } else if (isParentObjectId) {
+        const pDoc = await Category.findById(cleanParent);
+        if (pDoc) {
+          parentCategoryId = pDoc._id as mongoose.Types.ObjectId;
+          parentSlug = pDoc.slug;
+        }
       } else {
-        parentDoc = await Category.findOne({ slug: cleanParent.toLowerCase() });
+        parentSlug = cleanParent.toLowerCase();
       }
 
-      if (!parentDoc) {
-        throw new NotFoundError(`Parent category "${cleanParent}" not found.`);
+      if (parentSlug) {
+        if (!parentCategoryId) {
+          const mongoP = await Category.findOne({ slug: parentSlug });
+          if (mongoP) {
+            parentCategoryId = mongoP._id as mongoose.Types.ObjectId;
+          }
+        }
+        if (!parentSupaId) {
+          const { data: supaP } = await supabase.from("categories").select("id").eq("slug", parentSlug).maybeSingle();
+          if (supaP) {
+            parentSupaId = supaP.id;
+          }
+        }
       }
-      parentCategoryId = parentDoc._id as mongoose.Types.ObjectId;
     }
 
+    // 1. Create in Supabase
+    let supaCreatedCategory: any = null;
+    try {
+      const { data: supaCat, error: supaErr } = await supabase
+        .from("categories")
+        .insert({
+          name: data.name,
+          slug: data.slug,
+          description: data.description || "",
+          parent_category_id: parentSupaId || null,
+          display_order: data.displayOrder ?? 0,
+          is_active: data.isActive ?? true,
+          is_restricted: Boolean(data.isRestricted),
+          compliance_requirements: data.complianceRequirements || null,
+        })
+        .select()
+        .maybeSingle();
+
+      if (!supaErr && supaCat) {
+        supaCreatedCategory = mapSupabaseCategory(supaCat);
+      } else if (supaErr) {
+        console.error("Error creating category in Supabase:", supaErr);
+      }
+    } catch (supaErr) {
+      console.error("Error saving category to Supabase:", supaErr);
+    }
+
+    // 2. Create in MongoDB
     const { parentCategory: _ignored, ...categoryData } = data;
     const newCategory: any = await Category.create({
       ...categoryData,
@@ -206,8 +260,11 @@ export async function POST(req: Request) {
       .populate("parentCategory", "name slug")
       .lean();
 
-    return apiSuccess({ category: populated }, "Category created successfully", 201);
+    const result = supaCreatedCategory || populated;
+
+    return apiSuccess({ category: result }, "Category created successfully", 201);
   } catch (error) {
     return handleApiError(error);
   }
 }
+

@@ -2,6 +2,7 @@ import { connectToDatabase } from "@/lib/db";
 import { Category } from "@/models/Category";
 import { requireRole } from "@/lib/auth";
 import { apiSuccess, handleApiError } from "@/lib/api-response";
+import { supabase } from "@/lib/supabase";
 
 const SUBCATEGORY_TREE = [
   {
@@ -96,9 +97,42 @@ export async function POST(req: Request) {
     let createdSubs = 0;
 
     for (const item of SUBCATEGORY_TREE) {
-      let parent = await Category.findOne({ slug: item.parent.slug });
-      if (!parent) {
-        parent = await Category.create({
+      // 1. Ensure Parent exists in Supabase
+      let supaParentId: string | null = null;
+      try {
+        const { data: supaParent } = await supabase
+          .from("categories")
+          .select("id, slug")
+          .eq("slug", item.parent.slug)
+          .maybeSingle();
+
+        if (supaParent) {
+          supaParentId = supaParent.id;
+        } else {
+          const { data: createdSupaP } = await supabase
+            .from("categories")
+            .insert({
+              name: item.parent.name,
+              slug: item.parent.slug,
+              description: item.parent.description,
+              display_order: item.parent.displayOrder,
+              is_active: true,
+              is_restricted: Boolean((item.parent as any).isRestricted),
+            })
+            .select("id")
+            .single();
+          if (createdSupaP) {
+            supaParentId = createdSupaP.id;
+          }
+        }
+      } catch (err) {
+        console.error(`Error ensuring parent ${item.parent.slug} in Supabase:`, err);
+      }
+
+      // 2. Ensure Parent exists in MongoDB
+      let mongoParent = await Category.findOne({ slug: item.parent.slug });
+      if (!mongoParent) {
+        mongoParent = await Category.create({
           name: item.parent.name,
           slug: item.parent.slug,
           description: item.parent.description,
@@ -110,23 +144,54 @@ export async function POST(req: Request) {
         createdParents++;
       }
 
+      // 3. Ensure Subcategories exist in Supabase and MongoDB
       for (let i = 0; i < item.subcategories.length; i++) {
         const sub = item.subcategories[i];
-        let subDoc = await Category.findOne({ slug: sub.slug });
-        if (!subDoc) {
+
+        // Supabase Subcategory
+        try {
+          const { data: supaSub } = await supabase
+            .from("categories")
+            .select("id, slug, parent_category_id")
+            .eq("slug", sub.slug)
+            .maybeSingle();
+
+          if (!supaSub) {
+            await supabase.from("categories").insert({
+              name: sub.name,
+              slug: sub.slug,
+              description: sub.description,
+              parent_category_id: supaParentId,
+              display_order: i + 1,
+              is_active: true,
+              is_restricted: Boolean((item.parent as any).isRestricted),
+            });
+          } else if (supaParentId && supaSub.parent_category_id !== supaParentId) {
+            await supabase
+              .from("categories")
+              .update({ parent_category_id: supaParentId })
+              .eq("id", supaSub.id);
+          }
+        } catch (err) {
+          console.error(`Error ensuring subcategory ${sub.slug} in Supabase:`, err);
+        }
+
+        // MongoDB Subcategory
+        let mongoSubDoc = await Category.findOne({ slug: sub.slug });
+        if (!mongoSubDoc) {
           await Category.create({
             name: sub.name,
             slug: sub.slug,
             description: sub.description,
-            parentCategory: parent._id,
+            parentCategory: mongoParent._id,
             displayOrder: i + 1,
             isActive: true,
-            isRestricted: Boolean(parent.isRestricted),
+            isRestricted: Boolean((item.parent as any).isRestricted),
           });
           createdSubs++;
-        } else if (!subDoc.parentCategory) {
-          subDoc.parentCategory = parent._id;
-          await subDoc.save();
+        } else if (!mongoSubDoc.parentCategory) {
+          mongoSubDoc.parentCategory = mongoParent._id;
+          await mongoSubDoc.save();
         }
       }
     }

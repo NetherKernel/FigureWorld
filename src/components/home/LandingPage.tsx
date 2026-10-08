@@ -214,6 +214,8 @@ function SectionView({ section, catalog }: { section: LandingSection; catalog: C
   switch (section.type) {
     case "hero":
       return <HeroCarousel slides={section.slides.map(toHeroSlide)} />;
+    case "topCategories":
+      return <TopCategoriesSection section={section} />;
     case "announcement":
       return <Announcement section={section} />;
     case "cardRow":
@@ -261,6 +263,54 @@ const TONE_CLASS = {
   neutral: "border border-line bg-surface text-fg",
   success: "bg-success-soft text-success",
 } as const;
+
+function TopCategoriesSection({ section }: { section: SectionOf<"topCategories"> }) {
+  return (
+    <section className="w-full">
+      {/* Header matching client screenshot: Bold uppercase title, underline with brand accent, orange VIEW ALL button */}
+      <div className="relative mb-3 flex items-center justify-between border-b border-line pb-2.5 sm:mb-5 sm:pb-3">
+        <div className="relative">
+          <h2 className="text-base font-black tracking-wider uppercase text-fg sm:text-lg md:text-xl lg:text-2xl">
+            {section.title}
+          </h2>
+          <span className="absolute -bottom-[11px] left-0 h-[3px] w-full rounded-full bg-brand sm:-bottom-[13px]" />
+        </div>
+        {section.seeAllHref && section.seeAllLabel && (
+          <Link
+            href={section.seeAllHref}
+            className="inline-flex items-center justify-center rounded-md bg-[#ea580c] px-3.5 py-1 text-xs font-black uppercase tracking-wider text-white shadow-sm transition-all hover:bg-[#c2410c] hover:shadow active:scale-95 sm:px-4 sm:py-1.5 sm:text-xs"
+          >
+            {section.seeAllLabel}
+          </Link>
+        )}
+      </div>
+
+      {/* Grid: 2 columns on mobile (exact match with client reference screenshot), 3 on tablet, 6 on desktop */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-6 lg:gap-5">
+        {section.items.map((item) => (
+          <Link
+            key={item.id}
+            href={item.href}
+            className="group flex flex-col items-center rounded-2xl border border-line/70 bg-surface p-2 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-brand/40 hover:shadow-md sm:p-2.5"
+          >
+            <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-surface-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={item.image}
+                alt={item.name}
+                loading="lazy"
+                className="h-full w-full object-cover object-center transition-transform duration-300 ease-out group-hover:scale-105"
+              />
+            </div>
+            <span className="mt-2.5 text-center text-xs font-extrabold uppercase tracking-wide text-fg transition-colors group-hover:text-brand sm:mt-3 sm:text-sm">
+              {item.name}
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function Announcement({ section: s }: { section: SectionOf<"announcement"> }) {
   return (

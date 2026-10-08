@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { z } from "zod";
 import { connectToDatabase } from "@/lib/db";
 import { Product } from "@/models/Product";
@@ -346,46 +347,180 @@ export async function POST(req: Request) {
 
     await connectToDatabase();
 
-    // Check SKU uniqueness
+    // Check SKU uniqueness in MongoDB
     const existingSku = await Product.findOne({ sku: data.sku });
     if (existingSku) {
       throw new ConflictError(`A product with SKU "${data.sku}" already exists.`);
     }
 
-    // Check Slug uniqueness
+    // Check Slug uniqueness in MongoDB
     const existingSlug = await Product.findOne({ slug: data.slug });
     if (existingSlug) {
       throw new ConflictError(`A product with slug "${data.slug}" already exists.`);
     }
 
-    // Inherit compliance from Category if category is restricted
-    const categoryDoc = await Category.findById(data.category);
-    let isRestricted = data.isRestricted;
-    let ageRequirement = data.ageRequirement;
-    let shippingRestrictions = data.shippingRestrictions || [];
+    // Resolve category across Supabase and MongoDB
+    let supaCategoryId: string | null = null;
+    let mongoCategoryId: mongoose.Types.ObjectId | null = null;
+    let categorySlug: string | null = null;
+    let catIsRestricted = false;
+    let catMinAge = 0;
+    let catRegions: string[] = [];
 
-    if (categoryDoc && categoryDoc.isRestricted) {
-      isRestricted = true;
-      if (!ageRequirement && categoryDoc.complianceRequirements?.minAge) {
-        ageRequirement = categoryDoc.complianceRequirements.minAge;
+    const cleanCat = data.category.trim();
+    const isCatUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanCat);
+    const isCatObjectId = mongoose.Types.ObjectId.isValid(cleanCat) && /^[0-9a-fA-F]{24}$/.test(cleanCat);
+
+    if (isCatUuid) {
+      supaCategoryId = cleanCat;
+      const { data: supaC } = await supabase.from("categories").select("*").eq("id", cleanCat).maybeSingle();
+      if (supaC) {
+        categorySlug = supaC.slug;
+        catIsRestricted = Boolean(supaC.is_restricted);
+        catMinAge = supaC.compliance_requirements?.minAge || 0;
+        catRegions = supaC.compliance_requirements?.restrictedRegions || [];
       }
-      if (
-        shippingRestrictions.length === 0 &&
-        categoryDoc.complianceRequirements?.restrictedRegions?.length
-      ) {
-        shippingRestrictions = categoryDoc.complianceRequirements.restrictedRegions;
+    } else if (isCatObjectId) {
+      const mongoC = await Category.findById(cleanCat);
+      if (mongoC) {
+        mongoCategoryId = mongoC._id as mongoose.Types.ObjectId;
+        categorySlug = mongoC.slug;
+        catIsRestricted = Boolean(mongoC.isRestricted);
+        catMinAge = mongoC.complianceRequirements?.minAge || 0;
+        catRegions = mongoC.complianceRequirements?.restrictedRegions || [];
+      }
+    } else {
+      categorySlug = cleanCat.toLowerCase();
+    }
+
+    if (categorySlug) {
+      if (!mongoCategoryId) {
+        let mongoC = await Category.findOne({ slug: categorySlug });
+        if (!mongoC) {
+          // If not in MongoDB, create stub category in MongoDB
+          mongoC = await Category.create({
+            name: categorySlug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+            slug: categorySlug,
+            isRestricted: catIsRestricted,
+          });
+        }
+        mongoCategoryId = mongoC._id as mongoose.Types.ObjectId;
+      }
+      if (!supaCategoryId) {
+        const { data: supaC } = await supabase.from("categories").select("id, is_restricted, compliance_requirements").eq("slug", categorySlug).maybeSingle();
+        if (supaC) {
+          supaCategoryId = supaC.id;
+          if (supaC.is_restricted) catIsRestricted = true;
+          if (supaC.compliance_requirements?.minAge) catMinAge = supaC.compliance_requirements.minAge;
+          if (supaC.compliance_requirements?.restrictedRegions) catRegions = supaC.compliance_requirements.restrictedRegions;
+        }
       }
     }
 
-    const newProduct = await Product.create({
-      ...data,
-      isRestricted,
-      ageRequirement,
-      shippingRestrictions,
-    });
+    // Resolve subcategory if provided
+    let mongoSubId: mongoose.Types.ObjectId | undefined = undefined;
+    if (data.subcategory && data.subcategory.trim()) {
+      const cleanSub = data.subcategory.trim();
+      const isSubUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanSub);
+      const isSubObjectId = mongoose.Types.ObjectId.isValid(cleanSub) && /^[0-9a-fA-F]{24}$/.test(cleanSub);
 
-    return apiSuccess({ product: newProduct }, "Product added successfully", 201);
+      let subSlug: string | null = null;
+      if (isSubUuid) {
+        const { data: supaS } = await supabase.from("categories").select("slug").eq("id", cleanSub).maybeSingle();
+        if (supaS) subSlug = supaS.slug;
+      } else if (isSubObjectId) {
+        const mSub = await Category.findById(cleanSub);
+        if (mSub) {
+          mongoSubId = mSub._id as mongoose.Types.ObjectId;
+          subSlug = mSub.slug;
+        }
+      } else {
+        subSlug = cleanSub.toLowerCase();
+      }
+
+      if (subSlug && !mongoSubId) {
+        const mSub = await Category.findOne({ slug: subSlug });
+        if (mSub) {
+          mongoSubId = mSub._id as mongoose.Types.ObjectId;
+        }
+      }
+    }
+
+    // Inherit compliance from Category if restricted
+    let isRestricted = Boolean(data.isRestricted || catIsRestricted);
+    let ageRequirement = data.ageRequirement || catMinAge;
+    let shippingRestrictions = data.shippingRestrictions?.length ? data.shippingRestrictions : catRegions;
+
+    // 1. Create in Supabase
+    let createdProductResult: any = null;
+    try {
+      const supaPayload: Record<string, any> = {
+        name: data.name,
+        slug: data.slug,
+        description: data.description,
+        price: Number(data.price),
+        discount_price: data.discountPrice !== undefined && data.discountPrice !== null ? Number(data.discountPrice) : null,
+        stock: Number(data.stock ?? 0),
+        low_stock_threshold: 5,
+        brand: data.brand || "",
+        sku: data.sku,
+        weight: Number(data.weight ?? 500),
+        dimensions: data.dimensions || { length: 15, width: 15, height: 25, unit: "cm" },
+        images: data.images || [],
+        tags: [],
+        status: data.status || "active",
+        is_featured: Boolean(data.isFeatured),
+        is_restricted: Boolean(isRestricted),
+        age_requirement: Number(ageRequirement || 0),
+        shipping_restrictions: shippingRestrictions || [],
+        category_id: supaCategoryId || null,
+        rating_average: 5.0,
+        reviews_count: 0,
+        specifications: {},
+      };
+
+      const { data: supaCreated, error: supaErr } = await supabase
+        .from("products")
+        .insert(supaPayload)
+        .select("*, categories(*)")
+        .maybeSingle();
+
+      if (!supaErr && supaCreated) {
+        createdProductResult = mapSupabaseProduct(supaCreated, supaCreated.categories);
+      } else if (supaErr) {
+        console.error("Error creating product in Supabase:", supaErr);
+      }
+    } catch (supaErr) {
+      console.error("Error saving product to Supabase:", supaErr);
+    }
+
+    // 2. Create in MongoDB
+    try {
+      if (mongoCategoryId) {
+        const mongoCreated = await Product.create({
+          ...data,
+          category: mongoCategoryId,
+          ...(mongoSubId ? { subcategory: mongoSubId } : { subcategory: undefined }),
+          isRestricted,
+          ageRequirement,
+          shippingRestrictions,
+        });
+
+        if (!createdProductResult) {
+          createdProductResult = mongoCreated;
+        }
+      }
+    } catch (mongoErr) {
+      console.error("Error creating product in MongoDB:", mongoErr);
+    }
+
+    if (!createdProductResult) {
+      throw new Error("Failed to save product to database");
+    }
+
+    return apiSuccess({ product: createdProductResult }, "Product added successfully", 201);
   } catch (error) {
     return handleApiError(error);
   }
 }
+

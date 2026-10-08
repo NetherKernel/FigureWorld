@@ -72,6 +72,8 @@ function TypeEditor({ section, onChange, errors }: Props) {
   switch (section.type) {
     case "hero":
       return <HeroEditor section={section} onChange={onChange} errors={errors} />;
+    case "topCategories":
+      return <TopCategoriesEditor section={section} onChange={onChange} errors={errors} />;
     case "announcement":
       return <AnnouncementEditor section={section} onChange={onChange} errors={errors} />;
     case "cardRow":
@@ -123,6 +125,34 @@ function HeroEditor({ section: s, onChange, errors }: Props<SectionOf<"hero">>) 
         </>
       )}
     />
+  );
+}
+
+function TopCategoriesEditor({ section: s, onChange, errors }: Props<SectionOf<"topCategories">>) {
+  return (
+    <div className="space-y-4">
+      <TextField label="Title" value={s.title} maxLength={60} onChange={(title) => onChange({ ...s, title })} error={errors.title} />
+      <TextField label="“View all” button text" value={s.seeAllLabel} maxLength={40} onChange={(seeAllLabel) => onChange({ ...s, seeAllLabel })} />
+      <LinkField label="“View all” link" value={s.seeAllHref} onChange={(seeAllHref) => onChange({ ...s, seeAllHref })} error={errors.seeAllHref} />
+      <ListEditor
+        title="Category cards"
+        items={s.items}
+        onChange={(items) => onChange({ ...s, items })}
+        createItem={() => ({ id: newId("cat"), name: "New Category", image: "/images/categories/bobblehead.jpg", href: "/products" })}
+        addLabel="Add category"
+        min={1}
+        max={20}
+        itemTitle={(it) => it.name}
+        errorFor={(i) => hasErrorUnder(errors, `items.${i}`)}
+        renderItem={(it, update, i) => (
+          <>
+            <TextField label="Category name" value={it.name} maxLength={60} onChange={(name) => update({ name })} error={errors[`items.${i}.name`]} />
+            <ImageField label="Card image" value={it.image} onChange={(image) => update({ image })} error={errors[`items.${i}.image`]} />
+            <LinkField label="Destination link" value={it.href} onChange={(href) => update({ href })} error={errors[`items.${i}.href`]} />
+          </>
+        )}
+      />
+    </div>
   );
 }
 

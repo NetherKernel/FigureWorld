@@ -95,6 +95,7 @@ const heroSlide = z.object({
 });
 
 const tile = z.object({ id, label: text(40).min(1), image, href: link });
+const categoryItem = z.object({ id, name: text(60).min(1), image, href: link });
 const iconName = z.enum(ICON_NAMES);
 
 const card = z.discriminatedUnion("kind", [
@@ -128,6 +129,14 @@ const card = z.discriminatedUnion("kind", [
 
 const section = z.discriminatedUnion("type", [
   z.object({ ...base, type: z.literal("hero"), slides: z.array(heroSlide).min(1, "Add at least one slide").max(8) }),
+  z.object({
+    ...base,
+    type: z.literal("topCategories"),
+    title: text(60).min(1),
+    seeAllLabel: text(40),
+    seeAllHref: link,
+    items: z.array(categoryItem).min(1).max(20),
+  }),
   z.object({
     ...base,
     type: z.literal("announcement"),
@@ -267,82 +276,50 @@ export const DEFAULT_LANDING_CONFIG: LandingConfig = {
       ],
     },
     {
-      id: "cards-top",
-      type: "cardRow",
+      id: "top-categories",
+      type: "topCategories",
       enabled: true,
       audience: "all",
-      label: "Top cards",
-      cards: [
+      label: "Top categories",
+      title: "TOP CATEGORIES",
+      seeAllLabel: "VIEW ALL",
+      seeAllHref: "/products",
+      items: [
         {
-          id: "card-categories",
-          kind: "tiles",
-          title: "Shop by category",
-          linkLabel: "See all departments",
-          href: "/products",
-          tiles: [
-            { id: "t1", label: "Scale figures", image: "/images/figures/vegito-weekly-color-32cm-figure.jpg", href: "/products?category=action-figures" },
-            { id: "t2", label: "Resin statues", image: "/images/figures/madara-uchiha-susanoo-kurama-resin-statue.jpg", href: "/products?category=resin-statues" },
-            { id: "t3", label: "Chibi & keychains", image: IMG.chibi, href: "/products?category=keychains" },
-            { id: "t4", label: "Posters & scrolls", image: IMG.posters, href: "/products?category=posters" },
-          ],
+          id: "cat-bobblehead",
+          name: "BOBBLEHEAD",
+          image: "/images/categories/bobblehead.jpg",
+          href: "/products?category=collectibles",
         },
-        { id: "card-deal", kind: "dealOfDay", title: "Deal of the day", linkLabel: "See all deals", href: "/products?onSale=true" },
         {
-          id: "card-katanas",
-          kind: "tiles",
-          title: "Katanas & replicas",
-          badge: "18+",
-          linkLabel: "Explore replicas",
-          href: "/products?category=katanas-replicas",
-          tiles: [
-            { id: "t5", label: "Oni Katana FS-111WT", image: "/images/katanas/oni-katana-fs111wt.jpg", href: "/products/fs-111wt-oni-katana-sword" },
-            { id: "t6", label: "Nidai Kitetsu", image: "/images/katanas/nidai-kitetsu-katana.jpg", href: "/products/nidai-kitetsu-katana-replica" },
-            { id: "t7", label: "Zaraki Nozarashi", image: "/images/katanas/kenpachi-zaraki-zanpakuto.jpg", href: "/products/kenpachi-zaraki-zanpakuto-nozarashi" },
-            { id: "t8", label: "Nichirin blade", image: "/images/katanas/tanjiro-nichirin-katana.jpg", href: "/products/demon-slayer-nichirin-katana-replica" },
-          ],
+          id: "cat-action-figure",
+          name: "ACTION FIGURE",
+          image: "/images/categories/action-figure.jpg",
+          href: "/products?category=action-figures",
         },
-        { id: "card-account", kind: "account", offerLabel: "First order offer", offerTitle: "10% off with code", offerCode: "WELCOME10" },
-      ],
-    },
-    {
-      id: "deals",
-      type: "dealsShelf",
-      enabled: true,
-      audience: "all",
-      title: "Today's Deals",
-      seeAllLabel: "See all deals",
-      seeAllHref: "/products?onSale=true",
-      showCountdown: true,
-    },
-    {
-      id: "cards-second",
-      type: "cardRow",
-      enabled: true,
-      audience: "all",
-      label: "Second card row",
-      cards: [
         {
-          id: "card-budget",
-          kind: "budgetPicks",
-          title: "Under ₹2,000 picks",
-          maxPrice: 2000,
-          linkLabel: "Shop budget picks",
-          href: "/products?maxPrice=2000&sort=price-asc",
-        },
-        { id: "card-new", kind: "image", title: "New arrivals are here", image: IMG.posters, linkLabel: "Shop new arrivals", href: "/products?sort=newest" },
-        { id: "card-top", kind: "image", title: "Top-rated by collectors", image: IMG.statues, linkLabel: "See best sellers", href: "/products?sort=rating" },
-        {
-          id: "card-display",
-          kind: "tiles",
-          title: "Complete your display",
-          linkLabel: "Shop accessories",
+          id: "cat-3d-keychain",
+          name: "3D KEYCHAIN",
+          image: "/images/categories/3d-keychain.jpg",
           href: "/products?category=accessories",
-          tiles: [
-            { id: "t9", label: "Display cases", image: IMG.figures, href: "/products?category=accessories" },
-            { id: "t10", label: "Manga & artbooks", image: IMG.posters, href: "/products?category=manga" },
-            { id: "t11", label: "Keychains", image: IMG.chibi, href: "/products?category=keychains" },
-            { id: "t12", label: "Wall art", image: IMG.statues, href: "/products?category=posters" },
-          ],
+        },
+        {
+          id: "cat-keychains",
+          name: "KEYCHAINS",
+          image: "/images/categories/keychains.jpg",
+          href: "/products?category=accessories",
+        },
+        {
+          id: "cat-katanas",
+          name: "KATANAS & REPLICAS",
+          image: "/images/katanas/oni-katana-fs111wt.jpg",
+          href: "/products?category=katanas-replicas",
+        },
+        {
+          id: "cat-resin-statue",
+          name: "RESIN STATUES",
+          image: "/images/figures/madara-uchiha-susanoo-kurama-resin-statue.jpg",
+          href: "/products?category=collectibles&subcategory=resin-statues",
         },
       ],
     },
@@ -423,6 +400,7 @@ export const DEFAULT_LANDING_CONFIG: LandingConfig = {
 
 export const SECTION_META: Record<SectionType, { name: string; description: string }> = {
   hero: { name: "Hero carousel", description: "Large rotating promo slides with a button." },
+  topCategories: { name: "Top categories", description: "Grid of product categories with images and links." },
   announcement: { name: "Announcement bar", description: "One-line message, e.g. a sale or shipping notice." },
   cardRow: { name: "Card row", description: "Up to 4 cards: category tiles, images, deal of the day, budget picks, account." },
   dealsShelf: { name: "Deals shelf", description: "Scrolling row of discounted products with a countdown." },
@@ -447,6 +425,22 @@ export function createSection(type: SectionType): LandingSection {
   switch (type) {
     case "hero":
       return { ...common, type, slides: [createSlide()] };
+    case "topCategories":
+      return {
+        ...common,
+        type,
+        title: "TOP CATEGORIES",
+        seeAllLabel: "VIEW ALL",
+        seeAllHref: "/products",
+        items: [
+          { id: newId("cat"), name: "BOBBLEHEAD", image: "/images/categories/bobblehead.jpg", href: "/products?category=collectibles" },
+          { id: newId("cat"), name: "ACTION FIGURE", image: "/images/categories/action-figure.jpg", href: "/products?category=action-figures" },
+          { id: newId("cat"), name: "3D KEYCHAIN", image: "/images/categories/3d-keychain.jpg", href: "/products?category=accessories" },
+          { id: newId("cat"), name: "KEYCHAINS", image: "/images/categories/keychains.jpg", href: "/products?category=accessories" },
+          { id: newId("cat"), name: "KATANAS & REPLICAS", image: "/images/katanas/oni-katana-fs111wt.jpg", href: "/products?category=katanas-replicas" },
+          { id: newId("cat"), name: "RESIN STATUES", image: "/images/figures/madara-uchiha-susanoo-kurama-resin-statue.jpg", href: "/products?category=collectibles&subcategory=resin-statues" },
+        ],
+      };
     case "announcement":
       return { ...common, type, text: "Free gift wrapping on all orders this week", linkLabel: "Shop now", href: "/products", tone: "brand" };
     case "cardRow":
